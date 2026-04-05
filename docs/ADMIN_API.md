@@ -154,10 +154,7 @@
   "schema_name": "coffee-main",
   "schema_version": "v1",
   "sensitivity": "secret",
-  "secret_paths": [
-    "$.wifi.password",
-    "$.third_party.api_key"
-  ]
+  "secret_paths": ["$.wifi.password", "$.third_party.api_key"]
 }
 ```
 
