@@ -1,24 +1,138 @@
+use std::{
+    fmt,
+    path::{Path, PathBuf},
+};
+
+const DEFAULT_HTTP_ADDR: &str = "0.0.0.0:8080";
+const DEFAULT_DATABASE_URL: &str = "postgres://mini_conf:secret@127.0.0.1:5432/mini_conf";
+const DEFAULT_STATIC_DIR: &str = "apps/web/dist";
+const DEFAULT_OPENAPI_EXPORT_PATH: &str = "docs/openapi/openapi.json";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AppEnv {
+    Dev,
+    Test,
+    Prod,
+}
+
+impl AppEnv {
+    fn parse(raw: &str) -> Result<Self, ConfigError> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "dev" | "development" => Ok(Self::Dev),
+            "test" | "testing" => Ok(Self::Test),
+            "prod" | "production" => Ok(Self::Prod),
+            value => Err(ConfigError::invalid_env(value)),
+        }
+    }
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Dev => "dev",
+            Self::Test => "test",
+            Self::Prod => "prod",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ServerConfig {
+pub struct AppConfig {
+    pub app_env: AppEnv,
     pub http_addr: String,
+    pub database_url: String,
+    pub static_dir: PathBuf,
+    pub openapi_export_path: PathBuf,
 }
 
-impl ServerConfig {
-    pub fn from_env() -> Self {
-        Self::from_http_addr_env(std::env::var("HTTP_ADDR").ok())
-    }
-
-    pub fn from_http_addr_env(http_addr: Option<String>) -> Self {
-        let http_addr = http_addr.unwrap_or_else(|| "0.0.0.0:8080".to_owned());
-
-        Self { http_addr }
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            app_env: AppEnv::Dev,
+            http_addr: DEFAULT_HTTP_ADDR.to_owned(),
+            database_url: DEFAULT_DATABASE_URL.to_owned(),
+            static_dir: PathBuf::from(DEFAULT_STATIC_DIR),
+            openapi_export_path: PathBuf::from(DEFAULT_OPENAPI_EXPORT_PATH),
+        }
     }
 }
+
+impl AppConfig {
+    pub fn from_env() -> Result<Self, ConfigError> {
+        Self::from_lookup(|key| std::env::var(key).ok())
+    }
+
+    pub fn from_lookup<F>(mut lookup: F) -> Result<Self, ConfigError>
+    where
+        F: FnMut(&str) -> Option<String>,
+    {
+        let mut config = Self::default();
+
+        if let Some(value) = lookup("APP_ENV") {
+            config.app_env = AppEnv::parse(&value)?;
+        }
+
+        if let Some(value) = lookup("HTTP_ADDR") {
+            config.http_addr = value;
+        }
+
+        if let Some(value) = lookup("DATABASE_URL") {
+            config.database_url = value;
+        }
+
+        if let Some(value) = lookup("STATIC_DIR") {
+            config.static_dir = PathBuf::from(value);
+        }
+
+        if let Some(value) = lookup("OPENAPI_EXPORT_PATH") {
+            config.openapi_export_path = PathBuf::from(value);
+        }
+
+        Ok(config)
+    }
+
+    pub fn static_dir(&self) -> &Path {
+        &self.static_dir
+    }
+
+    pub fn openapi_export_path(&self) -> &Path {
+        &self.openapi_export_path
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfigError {
+    field: &'static str,
+    message: String,
+}
+
+impl ConfigError {
+    fn invalid_env(value: &str) -> Self {
+        Self {
+            field: "APP_ENV",
+            message: format!("unsupported APP_ENV value: {value}"),
+        }
+    }
+
+    pub const fn field(&self) -> &'static str {
+        self.field
+    }
+}
+
+impl fmt::Display for ConfigError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}: {}", self.field, self.message)
+    }
+}
+
+impl std::error::Error for ConfigError {}
 
 #[cfg(test)]
 mod tests {
-    use super::ServerConfig;
-    use std::sync::{Mutex, OnceLock};
+    use super::{AppConfig, AppEnv};
+    use std::{
+        collections::HashMap,
+        path::PathBuf,
+        sync::{Mutex, OnceLock},
+    };
 
     fn env_lock() -> &'static Mutex<()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -26,63 +140,137 @@ mod tests {
         LOCK.get_or_init(|| Mutex::new(()))
     }
 
+    fn map_lookup(values: &[(&str, &str)]) -> HashMap<String, String> {
+        values
+            .iter()
+            .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+            .collect()
+    }
+
     #[test]
-    fn uses_default_http_addr_when_env_is_missing() {
+    fn defaults_match_bootstrap_document() {
         assert_eq!(
-            ServerConfig::from_http_addr_env(None),
-            ServerConfig {
+            AppConfig::default(),
+            AppConfig {
+                app_env: AppEnv::Dev,
                 http_addr: "0.0.0.0:8080".to_owned(),
+                database_url: "postgres://mini_conf:secret@127.0.0.1:5432/mini_conf".to_owned(),
+                static_dir: PathBuf::from("apps/web/dist"),
+                openapi_export_path: PathBuf::from("docs/openapi/openapi.json"),
             }
         );
     }
 
     #[test]
-    fn uses_http_addr_from_explicit_value() {
+    fn from_lookup_uses_defaults_when_env_is_missing() {
         assert_eq!(
-            ServerConfig::from_http_addr_env(Some("127.0.0.1:9090".to_owned())),
-            ServerConfig {
+            AppConfig::from_lookup(|_| None).expect("config should load"),
+            AppConfig::default()
+        );
+    }
+
+    #[test]
+    fn from_lookup_reads_all_supported_overrides() {
+        let values = map_lookup(&[
+            ("APP_ENV", "prod"),
+            ("HTTP_ADDR", "127.0.0.1:9090"),
+            ("DATABASE_URL", "postgres://db.example/mini_conf"),
+            ("STATIC_DIR", "var/web"),
+            ("OPENAPI_EXPORT_PATH", "var/openapi.json"),
+        ]);
+
+        let config =
+            AppConfig::from_lookup(|key| values.get(key).cloned()).expect("config should load");
+
+        assert_eq!(
+            config,
+            AppConfig {
+                app_env: AppEnv::Prod,
                 http_addr: "127.0.0.1:9090".to_owned(),
+                database_url: "postgres://db.example/mini_conf".to_owned(),
+                static_dir: PathBuf::from("var/web"),
+                openapi_export_path: PathBuf::from("var/openapi.json"),
             }
         );
     }
 
     #[test]
-    fn from_env_reads_http_addr_override() {
+    fn from_lookup_accepts_common_app_env_aliases() {
+        let config = AppConfig::from_lookup(|key| match key {
+            "APP_ENV" => Some("development".to_owned()),
+            _ => None,
+        })
+        .expect("config should load");
+
+        assert_eq!(config.app_env, AppEnv::Dev);
+    }
+
+    #[test]
+    fn from_lookup_rejects_unknown_app_env() {
+        let error = AppConfig::from_lookup(|key| match key {
+            "APP_ENV" => Some("staging".to_owned()),
+            _ => None,
+        })
+        .expect_err("config should reject unknown app env");
+
+        assert_eq!(error.field(), "APP_ENV");
+        assert_eq!(
+            error.to_string(),
+            "APP_ENV: unsupported APP_ENV value: staging"
+        );
+    }
+
+    #[test]
+    fn path_accessors_expose_configured_paths() {
+        let config = AppConfig::from_lookup(|key| match key {
+            "STATIC_DIR" => Some("runtime/static".to_owned()),
+            "OPENAPI_EXPORT_PATH" => Some("runtime/openapi.json".to_owned()),
+            _ => None,
+        })
+        .expect("config should load");
+
+        assert_eq!(
+            config.static_dir(),
+            PathBuf::from("runtime/static").as_path()
+        );
+        assert_eq!(
+            config.openapi_export_path(),
+            PathBuf::from("runtime/openapi.json").as_path()
+        );
+    }
+
+    #[test]
+    fn from_env_reads_real_environment() {
         let _guard = env_lock().lock().expect("env lock should not be poisoned");
 
         // SAFETY: tests serialize access to process env with a mutex.
         unsafe {
+            std::env::set_var("APP_ENV", "test");
             std::env::set_var("HTTP_ADDR", "127.0.0.1:7001");
+            std::env::set_var("DATABASE_URL", "postgres://override/mini_conf");
+            std::env::set_var("STATIC_DIR", "tmp/static");
+            std::env::set_var("OPENAPI_EXPORT_PATH", "tmp/openapi.json");
         }
 
-        let config = ServerConfig::from_env();
+        let config = AppConfig::from_env().expect("config should load");
 
         // SAFETY: tests serialize access to process env with a mutex.
         unsafe {
+            std::env::remove_var("APP_ENV");
             std::env::remove_var("HTTP_ADDR");
+            std::env::remove_var("DATABASE_URL");
+            std::env::remove_var("STATIC_DIR");
+            std::env::remove_var("OPENAPI_EXPORT_PATH");
         }
 
         assert_eq!(
             config,
-            ServerConfig {
+            AppConfig {
+                app_env: AppEnv::Test,
                 http_addr: "127.0.0.1:7001".to_owned(),
-            }
-        );
-    }
-
-    #[test]
-    fn from_env_uses_default_when_http_addr_is_unset() {
-        let _guard = env_lock().lock().expect("env lock should not be poisoned");
-
-        // SAFETY: tests serialize access to process env with a mutex.
-        unsafe {
-            std::env::remove_var("HTTP_ADDR");
-        }
-
-        assert_eq!(
-            ServerConfig::from_env(),
-            ServerConfig {
-                http_addr: "0.0.0.0:8080".to_owned(),
+                database_url: "postgres://override/mini_conf".to_owned(),
+                static_dir: PathBuf::from("tmp/static"),
+                openapi_export_path: PathBuf::from("tmp/openapi.json"),
             }
         );
     }

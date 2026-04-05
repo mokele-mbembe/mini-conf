@@ -13,7 +13,7 @@ pub fn app(state: AppState) -> Router {
 
 #[cfg(test)]
 mod tests {
-    use crate::{error::ErrorResponse, state::AppState};
+    use crate::{config::AppConfig, error::ErrorResponse, state::AppState};
     use axum::{
         body::{Body, to_bytes},
         http::{Method, Request, StatusCode, header},
@@ -23,10 +23,10 @@ mod tests {
     use tower::util::ServiceExt;
 
     fn test_app() -> axum::Router {
-        super::app(AppState::new(AppIdentity::new(
-            "mini-conf-server",
-            "test-version",
-        )))
+        super::app(AppState::new(
+            AppIdentity::new("mini-conf-server", "test-version"),
+            AppConfig::default(),
+        ))
     }
 
     #[tokio::test]

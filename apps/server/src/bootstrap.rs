@@ -1,4 +1,4 @@
-use crate::{app, config::ServerConfig, state::AppState};
+use crate::{app, config::AppConfig, state::AppState};
 use infra::AppIdentity;
 use tokio::net::TcpListener;
 use tracing_subscriber::{EnvFilter, fmt};
@@ -9,14 +9,18 @@ pub fn init_tracing() {
     fmt().with_env_filter(filter).with_target(false).init();
 }
 
-pub async fn run(config: ServerConfig) -> std::io::Result<()> {
+pub async fn run(config: AppConfig) -> std::io::Result<()> {
     let listener = TcpListener::bind(&config.http_addr).await?;
-    let state = AppState::new(AppIdentity::new(
-        "mini-conf-server",
-        env!("CARGO_PKG_VERSION"),
-    ));
+    let state = AppState::new(
+        AppIdentity::new("mini-conf-server", env!("CARGO_PKG_VERSION")),
+        config,
+    );
 
-    tracing::info!(address = %config.http_addr, "starting mini-conf server");
+    tracing::info!(
+        address = %state.config().http_addr,
+        env = state.config().app_env.as_str(),
+        "starting mini-conf server"
+    );
 
     axum::serve(listener, app(state)).await
 }
@@ -24,14 +28,16 @@ pub async fn run(config: ServerConfig) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::run;
-    use crate::config::ServerConfig;
+    use crate::config::AppConfig;
 
     #[tokio::test]
     async fn run_returns_error_when_http_addr_is_invalid() {
-        let result = run(ServerConfig {
+        let config = AppConfig {
             http_addr: "invalid-address".to_owned(),
-        })
-        .await;
+            ..AppConfig::default()
+        };
+
+        let result = run(config).await;
 
         assert!(
             result.is_err(),

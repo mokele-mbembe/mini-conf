@@ -4,15 +4,16 @@ use axum::{
 };
 use infra::AppIdentity;
 use schema::health::HealthzResponse;
+use server::config::AppConfig;
 use server::state::AppState;
 use tower::util::ServiceExt;
 
 #[tokio::test]
 async fn healthz_endpoint_returns_json_payload() {
-    let app = server::app(AppState::new(AppIdentity::new(
-        "mini-conf-server",
-        "integration-test",
-    )));
+    let app = server::app(AppState::new(
+        AppIdentity::new("mini-conf-server", "integration-test"),
+        AppConfig::default(),
+    ));
 
     let response = app
         .oneshot(
@@ -48,10 +49,10 @@ async fn healthz_endpoint_returns_json_payload() {
 
 #[tokio::test]
 async fn unknown_api_route_returns_json_not_found_payload() {
-    let app = server::app(AppState::new(AppIdentity::new(
-        "mini-conf-server",
-        "integration-test",
-    )));
+    let app = server::app(AppState::new(
+        AppIdentity::new("mini-conf-server", "integration-test"),
+        AppConfig::default(),
+    ));
 
     let response = app
         .oneshot(

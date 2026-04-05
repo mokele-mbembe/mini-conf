@@ -1,8 +1,12 @@
-use server::{bootstrap, config::ServerConfig};
+use server::{bootstrap, config::AppConfig};
 
 #[tokio::main]
-async fn main() -> std::io::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     bootstrap::init_tracing();
 
-    bootstrap::run(ServerConfig::from_env()).await
+    let config = AppConfig::from_env()?;
+
+    bootstrap::run(config).await?;
+
+    Ok(())
 }
