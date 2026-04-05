@@ -69,4 +69,21 @@ mod tests {
             }
         );
     }
+
+    #[test]
+    fn from_env_uses_default_when_http_addr_is_unset() {
+        let _guard = env_lock().lock().expect("env lock should not be poisoned");
+
+        // SAFETY: tests serialize access to process env with a mutex.
+        unsafe {
+            std::env::remove_var("HTTP_ADDR");
+        }
+
+        assert_eq!(
+            ServerConfig::from_env(),
+            ServerConfig {
+                http_addr: "0.0.0.0:8080".to_owned(),
+            }
+        );
+    }
 }
