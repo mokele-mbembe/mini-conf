@@ -67,6 +67,7 @@ argon2 = "0.5"
 - `deployment_access`
 - `deployment_sync`
 - `audit`
+- `openapi`
 
 ## 4. 环境变量建议
 
@@ -81,6 +82,7 @@ INIT_ADMIN_PASSWORD=admin123456
 STATIC_DIR=apps/web/dist
 ADMIN_AUTH_MODE=session
 JWT_ENABLED=false
+OPENAPI_EXPORT_PATH=docs/openapi/openapi.json
 ```
 
 ## 5. 首批 API 路由
@@ -136,6 +138,10 @@ JWT_ENABLED=false
 - `just lint`
 - `just test`
 - `just perf-smoke`
+- `just sqlx-check`
+- `just openapi-check`
+- `just db-migrate-up`
+- `just db-migrate-down`
 - `just test-e2e`
 - `just ci-local`
 - `just db-reset-dev`
@@ -149,6 +155,7 @@ JWT_ENABLED=false
 - `cargo nextest run --workspace`
 - `cargo llvm-cov --workspace --lcov --output-path target/lcov.info`
 - `cargo sqlx prepare --check`
+- `just openapi-check`
 - `just perf-smoke`
 
 前端检查命令：
@@ -165,6 +172,7 @@ JWT_ENABLED=false
 
 - Rust 服务可以启动
 - PostgreSQL 可以完成迁移与 seed
+- PostgreSQL 回滚命令约定清晰且可执行
 - Vue 页面可以访问
 - `/api/healthz` 正常
 - 静态资源可由后端托管
@@ -174,5 +182,6 @@ JWT_ENABLED=false
 - 可以创建一个部署实例
 - 可以从模板克隆一个部署实例
 - 可以保存一份 Draft
+- Draft 乐观锁冲突可以返回 `409`
 - 可以通过 HTTP 拉取一份已发布配置
 - 可以通过 HTTP 拉取一份整部署实例配置包

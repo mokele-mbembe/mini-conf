@@ -197,6 +197,7 @@ STATIC_DIR=apps/web/dist
 - `cargo nextest run --workspace`
 - `cargo llvm-cov --workspace`
 - `cargo sqlx prepare --check`
+- `just openapi-check`
 
 前端：
 
@@ -236,6 +237,8 @@ STATIC_DIR=apps/web/dist
 最小 CI 任务建议：
 
 - `lint-backend`
+- `sqlx-check`
+- `openapi-check`
 - `test-backend`
 - `lint-frontend`
 - `test-frontend`
@@ -244,8 +247,8 @@ STATIC_DIR=apps/web/dist
 后续可补：
 
 - 覆盖率上传
-- OpenAPI 变更检查
 - SQL migration 校验
+- 性能趋势对比
 
 ## 13. 部署方向
 

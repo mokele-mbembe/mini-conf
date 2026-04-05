@@ -46,6 +46,7 @@
 - 支持部署实例模板克隆
 - 支持 Draft / Release / Diff / 审计
 - 支持 schema 校验和发布前检查
+- 支持敏感配置的最小安全语义，包括脱敏展示与日志脱敏
 - 支持私有部署和开源演进
 - 保持对 Linux / WSL2 开发和运行环境友好
 
@@ -60,6 +61,7 @@
 - 部署实例管理
 - 模板克隆
 - Draft 编辑
+- Draft 并发冲突检测
 - Release 发布
 - 版本历史与 Diff
 - 消费端查询当前版本
@@ -96,11 +98,17 @@ MVP 不让用户先理解复杂的 Scope 或 labels。我们使用 `DeploymentIn
 
 配置编辑发生在 Draft 阶段。真正提供给消费端的永远是已发布的不可变 Release。
 
-### 4. SDK optional
+### 4. Secret-aware
+
+MVP 先支持敏感配置的最小安全语义：配置文件可以声明敏感属性，管理端默认脱敏展示，日志和审计详情不记录明文。
+
+字段级加密存储会放到后续版本，不阻塞首版交付。
+
+### 5. SDK optional
 
 后续可以提供官方轻量客户端，但平台设计不会要求使用者必须引入重量 SDK。
 
-### 5. Model-extensible
+### 6. Model-extensible
 
 MVP 默认采用 `DeploymentInstance` 作为配置组织模型，因为它最贴合当前业务。
 

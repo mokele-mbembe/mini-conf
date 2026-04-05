@@ -22,6 +22,7 @@
 - Deployment First，MVP 通过“部署实例”建模一整套配置，而不是让用户先理解复杂 Scope 规则
 - Model Extensible，后续版本支持在创建项目时选择配置组织模型
 - Schema Guarded，配置内容支持 schema 校验与发布前检查
+- Secret Aware，MVP 支持敏感配置脱敏展示和日志脱敏
 - Self-host Friendly，默认私有部署、低依赖、易初始化
 - Linux First，所有实际开发、测试、CI、部署均以 Linux / WSL2 为准
 
@@ -90,6 +91,7 @@ mini-conf/
 - Deployment Instance 管理
 - 从模板克隆部署实例
 - Draft 编辑
+- Draft 并发冲突检测
 - Release 发布
 - 版本历史
 - Diff 查看
@@ -98,6 +100,7 @@ mini-conf/
 - 消费端拉取整部署实例配置包
 - 消费端上报拉取 / 应用结果
 - PostgreSQL 迁移与基础 seed
+- PostgreSQL 迁移回滚命令与约定
 - 默认管理员初始化
 - 提供 `curl` / HTTP 示例，证明无需重量 SDK 也能接入
 
@@ -133,8 +136,10 @@ mini-conf/
 - 一个 Project 下可以有多个 DeploymentInstance
 - 一个 DeploymentInstance 属于一个明确的 Environment
 - 一个 DeploymentInstance 持有该 Project 下多份 ConfigFile 在本实例上的配置版本
+- 一个 ConfigFile 可以声明敏感配置元数据，用于脱敏展示和日志裁剪
 - Release 不可变
 - Draft 可反复保存
+- Draft 保存采用乐观锁，避免多人编辑时静默覆盖
 - 消费端只认发布后的 Release
 - 一个实例可以被标记为模板，并被其他实例克隆
 - 一个实例可供多个进程使用同一份实例级凭证访问平台
@@ -212,6 +217,7 @@ mini-conf/
 - 语法高亮
 - 格式化
 - schema 校验提示
+- 敏感配置默认脱敏展示
 - 发布前 Diff 展示
 - 版本切换查看
 - 部署实例克隆
@@ -235,13 +241,14 @@ mini-conf/
 - 配置加载
 - 健康检查接口
 - 静态资源托管
-- OpenAPI 文档
+- OpenAPI 文档与导出检查
 
 数据库：
 
 - 接入 PostgreSQL
 - SQLx 连接池
 - migrations
+- migration rollback 约定
 - 启动时检测数据库连通性
 - 在显式开启引导参数时可自动创建数据库
 - 自动执行建表迁移
@@ -311,6 +318,7 @@ mini-conf/
 - `deployment_instances.is_template`
 - `deployment_instances.template_source_id`
 - `drafts.content`
+- `drafts.version`
 - `releases.revision`
 - `releases.content_hash`
 - `deployment_credentials.token_hash`
@@ -329,6 +337,7 @@ mini-conf/
 - 生成与上一版的 Diff
 - DeploymentInstance 当前版本指向新 Release
 - 即使 Draft 内容与上一版相同，重复发布也生成新 revision
+- Draft 保存必须带上当前版本号或等价条件，版本冲突返回 `409 Conflict`
 
 消费端同步规则：
 
@@ -373,6 +382,7 @@ mini-conf/
 - 发布操作留痕
 - 开放接口限流
 - token 仅存 hash，不回存明文
+- 敏感配置默认脱敏展示，日志与审计详情不得记录明文
 
 ## 14. 自动化质量与 TDD 工作流
 
@@ -386,6 +396,7 @@ mini-conf/
 - `cargo nextest run`
 - `cargo llvm-cov`
 - `sqlx prepare --check`
+- `just openapi-check`
 - `just perf-smoke`
 
 前端质量工具：
@@ -401,6 +412,8 @@ mini-conf/
 - 使用 `justfile` 统一本地命令入口
 - 使用 `lefthook` 或 `pre-commit` 执行提交前检查
 - 使用 GitHub Actions 执行 lint、test、coverage、build
+- 使用可回滚 migration 约定，并在本地保留回滚命令
+- 使用 OpenAPI 导出检查前后端契约是否漂移
 - 使用性能 smoke scaffold 为后续性能测试留出入口
 
 TDD 约束：
@@ -408,6 +421,7 @@ TDD 约束：
 - 新增领域逻辑先写失败测试，再补实现
 - 发布流程、部署实例克隆、版本解析必须有集成测试
 - 开放接口至少覆盖契约测试和 `curl` 级别的最小接入示例
+- Draft 并发冲突必须有回归测试
 - 修 bug 先补回归测试，再修复
 
 ## 15. 开发环境策略
@@ -455,6 +469,7 @@ Day 2:
 - 跑通 health check
 - 跑通静态资源托管
 - 建立 migrations 机制
+- 预留 migration rollback 命令
 - 接入 lint / test 基础命令
 
 Day 3:
@@ -491,6 +506,7 @@ Day 5:
 - 可以查看版本历史和 Diff
 - 可以通过简单 HTTP 请求按部署实例拉取当前配置
 - 质量检查命令可以在本地和 CI 中稳定执行
+- OpenAPI 契约检查和 migration rollback 命令已经纳入工程基线
 
 ## 19. 立即执行清单
 

@@ -143,9 +143,32 @@
 
 ### `POST /api/config-files`
 
+请求体建议：
+
+```json
+{
+  "project_id": 1,
+  "code": "main",
+  "name": "Main Config",
+  "format": "yaml",
+  "schema_name": "coffee-main",
+  "schema_version": "v1",
+  "sensitivity": "secret",
+  "secret_paths": [
+    "$.wifi.password",
+    "$.third_party.api_key"
+  ]
+}
+```
+
 ### `GET /api/config-files/:id`
 
 ### `PUT /api/config-files/:id`
+
+说明：
+
+- `sensitivity` 首版可支持 `normal` 和 `secret`
+- `secret_paths` 用于前端脱敏展示和日志裁剪
 
 ## 10. Deployment Instance API
 
@@ -205,14 +228,38 @@
 
 ### `GET /api/drafts/:deploymentId/:configFileId`
 
+成功响应建议包含：
+
+```json
+{
+  "deployment_instance_id": 8,
+  "config_file_id": 3,
+  "format": "yaml",
+  "content": "poll_interval_ms: 5000",
+  "version": 4,
+  "updated_at": "2026-04-05T12:00:00Z"
+}
+```
+
 ### `PUT /api/drafts/:deploymentId/:configFileId`
+
+请求体建议：
+
+```json
+{
+  "content": "poll_interval_ms: 8000",
+  "format": "yaml",
+  "base_version": 4
+}
+```
 
 行为约定：
 
 - 如果 Draft 不存在，则创建
-- 如果 Draft 已存在，则覆盖保存
+- 如果 Draft 已存在，则按乐观锁更新
 - 保存时立即做格式和 schema 校验
 - 校验失败返回 `422`
+- `base_version` 与服务端当前版本不一致时返回 `409`
 
 ## 12. Release API
 
@@ -296,6 +343,7 @@
 - `config_file_code_conflict`
 - `deployment_instance_conflict`
 - `draft_validation_failed`
+- `draft_version_conflict`
 - `draft_not_found`
 - `release_publish_failed`
 - `release_not_found`
@@ -305,6 +353,7 @@
 ## 17. 实现建议
 
 - 后端直接基于这些结构生成 OpenAPI
+- 在 CI 中检查导出的 OpenAPI 产物是否与仓库内版本一致
 - 前端尽量不要自行拼装接口语义
 - 为登录、部署实例克隆、Draft 保存、Release 发布、Diff 查询补集成测试
 - 为列表接口固定分页结构，避免后续前端大改

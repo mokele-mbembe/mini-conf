@@ -59,6 +59,7 @@
 - 配置 `DATABASE_URL`
 - 配置 `DATABASE_ADMIN_URL`
 - 创建第一批 migrations
+- 明确 `migrate up` / `migrate down` 约定
 - 建立 seed 逻辑
 
 参考文档：
@@ -100,6 +101,8 @@
 - `just lint`
 - `just test`
 - `just perf-smoke`
+- `just sqlx-check`
+- `just openapi-check`
 - `lefthook install`
 
 参考文档：
@@ -118,9 +121,10 @@
 - Rust workspace 已建立
 - 前端 workspace 已建立
 - PostgreSQL 迁移可执行
+- PostgreSQL 回滚命令可执行
 - 管理端最小登录可跑
 - 开放消费端最小协议可跑
-- `just lint`、`just test`、`just perf-smoke` 可执行
+- `just lint`、`just test`、`just perf-smoke`、`just openapi-check` 可执行
 - GitHub Actions 可触发
 
 ## 4. 不要过早做的事

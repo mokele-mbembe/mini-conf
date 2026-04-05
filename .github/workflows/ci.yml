@@ -50,6 +50,12 @@ jobs:
       - name: Lint
         run: just lint
 
+      - name: SQLx check
+        run: just sqlx-check
+
+      - name: OpenAPI check
+        run: just openapi-check
+
       - name: Test
         run: just test
 

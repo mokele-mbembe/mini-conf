@@ -69,11 +69,19 @@
 - `format` varchar(16) not null
 - `schema_name` varchar(128) null
 - `schema_version` varchar(64) null
+- `sensitivity` varchar(16) not null default 'normal'
+- `secret_paths` jsonb null
 - `description` text null
 - `status` varchar(32) not null default 'active'
 - `created_at` timestamptz not null default now()
 - `updated_at` timestamptz not null default now()
 - unique (`project_id`, `code`)
+
+说明：
+
+- `sensitivity` 首版可取 `normal` 或 `secret`
+- `secret_paths` 用于记录需要脱敏显示的字段路径
+- MVP 先做脱敏展示和日志裁剪，不强制要求字段级加密存储
 
 ### deployment_instances
 
@@ -106,6 +114,7 @@
 - `content_hash` char(64) not null
 - `format` varchar(16) not null
 - `schema_version` varchar(64) null
+- `version` bigint not null default 1
 - `editor_user_id` bigint not null
 - `updated_at` timestamptz not null default now()
 - unique (`config_file_id`, `deployment_instance_id`)
@@ -113,6 +122,8 @@
 说明：
 
 - 一个部署实例下，每个配置文件只有一个当前 Draft
+- `version` 用于乐观锁控制
+- 保存 Draft 时必须带上当前版本号，服务端比对失败返回 `409 Conflict`
 
 ### releases
 
@@ -185,6 +196,11 @@
 - `resource_id` varchar(64) not null
 - `detail` jsonb null
 - `created_at` timestamptz not null default now()
+
+说明：
+
+- `detail` 中不得写入敏感配置明文
+- 如需记录差异，应该记录脱敏后的摘要
 
 ## 4. 外键建议
 
@@ -269,7 +285,16 @@
 - 可以在 `DeploymentInstance` 之上扩展 `Scope` 和 `labels`
 - 用于支持动态分群、灰度和自动匹配
 
-## 10. 第一批迁移顺序
+## 10. 敏感配置最小安全方案
+
+MVP 先采用轻量方案：
+
+1. 允许 `ConfigFile` 声明 `sensitivity`
+2. 对敏感配置默认脱敏展示
+3. `audit_logs`、请求日志、错误日志禁止记录敏感明文
+4. Draft / Release 仍按文本存储，字段级加密存储放到后续版本
+
+## 11. 第一批迁移顺序
 
 1. `users`
 2. `projects`

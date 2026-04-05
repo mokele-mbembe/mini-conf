@@ -59,6 +59,33 @@ coverage:
 sqlx-check:
   @if [ -f Cargo.toml ]; then cargo sqlx prepare --check; else echo "Skipping sqlx prepare check: Cargo.toml not found"; fi
 
+openapi-check:
+  @if [ -f scripts/export-openapi.sh ]; then \
+    bash scripts/export-openapi.sh; \
+    if [ -f docs/openapi/openapi.json ]; then \
+      status="$$(git status --short -- docs/openapi/openapi.json || true)"; \
+      if [ -n "$$status" ]; then \
+        echo "OpenAPI spec changed:"; \
+        echo "$$status"; \
+        exit 1; \
+      fi; \
+    else \
+      echo "Skipping OpenAPI diff check: docs/openapi/openapi.json not found after export"; \
+    fi \
+  ; else echo "Skipping OpenAPI check: scripts/export-openapi.sh not found"; fi
+
+db-migrate-up:
+  @if [ -d migrations ]; then \
+    if command -v sqlx >/dev/null 2>&1; then sqlx migrate run; \
+    else echo "Skipping db migrate up: sqlx CLI not installed"; fi \
+  ; else echo "Skipping db migrate up: migrations directory not found"; fi
+
+db-migrate-down:
+  @if [ -d migrations ]; then \
+    if command -v sqlx >/dev/null 2>&1; then sqlx migrate revert; \
+    else echo "Skipping db migrate down: sqlx CLI not installed"; fi \
+  ; else echo "Skipping db migrate down: migrations directory not found"; fi
+
 perf-smoke:
   @bash scripts/perf-smoke.sh
 
@@ -67,6 +94,8 @@ perf-ci:
 
 ci-local:
   @just lint
+  @just sqlx-check
+  @just openapi-check
   @just test
   @just perf-smoke
 
