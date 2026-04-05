@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install just
+        uses: extractions/setup-just@v3
+
+      - name: Set up Rust
+        if: ${{ hashFiles('Cargo.toml') != '' }}
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust
+        if: ${{ hashFiles('Cargo.toml') != '' }}
+        uses: Swatinem/rust-cache@v2
+
+      - name: Set up Node
+        if: ${{ hashFiles('package.json', 'pnpm-workspace.yaml', 'apps/web/package.json') != '' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Set up pnpm
+        if: ${{ hashFiles('package.json', 'pnpm-workspace.yaml', 'apps/web/package.json') != '' }}
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install frontend dependencies
+        if: ${{ hashFiles('pnpm-lock.yaml') != '' }}
+        run: pnpm install --frozen-lockfile
+
+      - name: Install apps/web dependencies
+        if: ${{ hashFiles('pnpm-lock.yaml') == '' && hashFiles('apps/web/package.json') != '' }}
+        run: pnpm --dir apps/web install --no-frozen-lockfile
+
+      - name: Lint
+        run: just lint
+
+      - name: Test
+        run: just test
+
+      - name: Performance smoke
+        run: just perf-smoke
+
+      - name: Upload perf smoke artifact
+        if: ${{ always() && hashFiles('target/perf/smoke.json') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-smoke
+          path: target/perf/smoke.json

@@ -1,0 +1,19 @@
+{
+  "name": "mini-conf",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Deployment-first lightweight online config platform",
+  "packageManager": "pnpm@9.12.3",
+  "scripts": {
+    "dev": "bash -lc 'if [ -f apps/web/package.json ]; then pnpm --dir apps/web dev; else echo \"apps/web not initialized yet\"; fi'",
+    "lint": "bash -lc 'if [ -f apps/web/package.json ]; then pnpm --dir apps/web lint; else echo \"apps/web not initialized yet\"; fi'",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "bash -lc 'if [ -f apps/web/package.json ]; then pnpm --dir apps/web typecheck; else echo \"apps/web not initialized yet\"; fi'",
+    "test": "bash -lc 'if [ -f apps/web/package.json ]; then pnpm --dir apps/web test; else echo \"apps/web not initialized yet\"; fi'",
+    "test:e2e": "bash -lc 'if [ -f apps/web/package.json ]; then pnpm --dir apps/web test:e2e; else echo \"apps/web not initialized yet\"; fi'"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3"
+  }
+}

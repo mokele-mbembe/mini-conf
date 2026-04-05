@@ -1,0 +1,26 @@
+name: Perf
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * 1'
+
+jobs:
+  perf-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install just
+        uses: extractions/setup-just@v3
+
+      - name: Run perf scaffold
+        run: just perf-ci
+
+      - name: Upload perf report
+        if: ${{ always() && hashFiles('target/perf/smoke.json') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-smoke-report
+          path: target/perf/smoke.json
