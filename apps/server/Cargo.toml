@@ -1,0 +1,19 @@
+[package]
+name = "server"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+axum.workspace = true
+infra = { path = "../../crates/infra" }
+schema = { path = "../../crates/schema" }
+tokio.workspace = true
+tower-http.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+tower.workspace = true

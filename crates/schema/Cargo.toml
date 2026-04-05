@@ -1,0 +1,11 @@
+[package]
+name = "schema"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+domain = { path = "../domain" }
+infra = { path = "../infra" }
+serde.workspace = true
