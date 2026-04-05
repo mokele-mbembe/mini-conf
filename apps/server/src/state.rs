@@ -1,15 +1,21 @@
 use crate::config::AppConfig;
 use infra::AppIdentity;
+use sqlx::PgPool;
 
 #[derive(Debug, Clone)]
 pub struct AppState {
     identity: AppIdentity,
     config: AppConfig,
+    db_pool: Option<PgPool>,
 }
 
 impl AppState {
-    pub fn new(identity: AppIdentity, config: AppConfig) -> Self {
-        Self { identity, config }
+    pub fn new(identity: AppIdentity, config: AppConfig, db_pool: Option<PgPool>) -> Self {
+        Self {
+            identity,
+            config,
+            db_pool,
+        }
     }
 
     pub const fn identity(&self) -> AppIdentity {
@@ -18,6 +24,10 @@ impl AppState {
 
     pub const fn config(&self) -> &AppConfig {
         &self.config
+    }
+
+    pub fn db_pool(&self) -> Option<&PgPool> {
+        self.db_pool.as_ref()
     }
 }
 
@@ -33,6 +43,7 @@ mod tests {
         let state = AppState::new(
             AppIdentity::new("mini-conf-server", "0.1.0"),
             AppConfig::default(),
+            None,
         );
 
         assert_eq!(
@@ -46,6 +57,7 @@ mod tests {
         let state = AppState::new(
             AppIdentity::new("mini-conf-server", "0.1.0"),
             AppConfig::default(),
+            None,
         );
 
         assert_eq!(
@@ -54,9 +66,21 @@ mod tests {
                 app_env: AppEnv::Dev,
                 http_addr: "0.0.0.0:8080".to_owned(),
                 database_url: "postgres://mini_conf:secret@127.0.0.1:5432/mini_conf".to_owned(),
+                init_db_on_boot: false,
                 static_dir: PathBuf::from("apps/web/dist"),
                 openapi_export_path: PathBuf::from("docs/openapi/openapi.json"),
             }
         );
+    }
+
+    #[test]
+    fn exposes_absent_database_pool_before_bootstrap_connects() {
+        let state = AppState::new(
+            AppIdentity::new("mini-conf-server", "0.1.0"),
+            AppConfig::default(),
+            None,
+        );
+
+        assert!(state.db_pool().is_none());
     }
 }

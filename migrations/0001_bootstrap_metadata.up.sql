@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS bootstrap_metadata (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

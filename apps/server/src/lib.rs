@@ -26,6 +26,7 @@ mod tests {
         super::app(AppState::new(
             AppIdentity::new("mini-conf-server", "test-version"),
             AppConfig::default(),
+            None,
         ))
     }
 

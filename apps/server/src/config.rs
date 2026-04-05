@@ -7,6 +7,7 @@ const DEFAULT_HTTP_ADDR: &str = "0.0.0.0:8080";
 const DEFAULT_DATABASE_URL: &str = "postgres://mini_conf:secret@127.0.0.1:5432/mini_conf";
 const DEFAULT_STATIC_DIR: &str = "apps/web/dist";
 const DEFAULT_OPENAPI_EXPORT_PATH: &str = "docs/openapi/openapi.json";
+const DEFAULT_INIT_DB_ON_BOOT: bool = false;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppEnv {
@@ -39,6 +40,7 @@ pub struct AppConfig {
     pub app_env: AppEnv,
     pub http_addr: String,
     pub database_url: String,
+    pub init_db_on_boot: bool,
     pub static_dir: PathBuf,
     pub openapi_export_path: PathBuf,
 }
@@ -49,6 +51,7 @@ impl Default for AppConfig {
             app_env: AppEnv::Dev,
             http_addr: DEFAULT_HTTP_ADDR.to_owned(),
             database_url: DEFAULT_DATABASE_URL.to_owned(),
+            init_db_on_boot: DEFAULT_INIT_DB_ON_BOOT,
             static_dir: PathBuf::from(DEFAULT_STATIC_DIR),
             openapi_export_path: PathBuf::from(DEFAULT_OPENAPI_EXPORT_PATH),
         }
@@ -76,6 +79,10 @@ impl AppConfig {
 
         if let Some(value) = lookup("DATABASE_URL") {
             config.database_url = value;
+        }
+
+        if let Some(value) = lookup("INIT_DB_ON_BOOT") {
+            config.init_db_on_boot = parse_bool("INIT_DB_ON_BOOT", &value)?;
         }
 
         if let Some(value) = lookup("STATIC_DIR") {
@@ -112,6 +119,13 @@ impl ConfigError {
         }
     }
 
+    fn invalid_bool(field: &'static str, value: &str) -> Self {
+        Self {
+            field,
+            message: format!("unsupported {field} value: {value}"),
+        }
+    }
+
     pub const fn field(&self) -> &'static str {
         self.field
     }
@@ -124,6 +138,14 @@ impl fmt::Display for ConfigError {
 }
 
 impl std::error::Error for ConfigError {}
+
+fn parse_bool(field: &'static str, raw: &str) -> Result<bool, ConfigError> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" => Ok(true),
+        "0" | "false" | "no" | "off" => Ok(false),
+        value => Err(ConfigError::invalid_bool(field, value)),
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -155,6 +177,7 @@ mod tests {
                 app_env: AppEnv::Dev,
                 http_addr: "0.0.0.0:8080".to_owned(),
                 database_url: "postgres://mini_conf:secret@127.0.0.1:5432/mini_conf".to_owned(),
+                init_db_on_boot: false,
                 static_dir: PathBuf::from("apps/web/dist"),
                 openapi_export_path: PathBuf::from("docs/openapi/openapi.json"),
             }
@@ -175,6 +198,7 @@ mod tests {
             ("APP_ENV", "prod"),
             ("HTTP_ADDR", "127.0.0.1:9090"),
             ("DATABASE_URL", "postgres://db.example/mini_conf"),
+            ("INIT_DB_ON_BOOT", "true"),
             ("STATIC_DIR", "var/web"),
             ("OPENAPI_EXPORT_PATH", "var/openapi.json"),
         ]);
@@ -188,6 +212,7 @@ mod tests {
                 app_env: AppEnv::Prod,
                 http_addr: "127.0.0.1:9090".to_owned(),
                 database_url: "postgres://db.example/mini_conf".to_owned(),
+                init_db_on_boot: true,
                 static_dir: PathBuf::from("var/web"),
                 openapi_export_path: PathBuf::from("var/openapi.json"),
             }
@@ -196,13 +221,22 @@ mod tests {
 
     #[test]
     fn from_lookup_accepts_common_app_env_aliases() {
-        let config = AppConfig::from_lookup(|key| match key {
-            "APP_ENV" => Some("development".to_owned()),
-            _ => None,
-        })
-        .expect("config should load");
+        for (raw, expected) in [
+            ("dev", AppEnv::Dev),
+            ("development", AppEnv::Dev),
+            ("test", AppEnv::Test),
+            ("testing", AppEnv::Test),
+            ("prod", AppEnv::Prod),
+            ("production", AppEnv::Prod),
+        ] {
+            let config = AppConfig::from_lookup(|key| match key {
+                "APP_ENV" => Some(raw.to_owned()),
+                _ => None,
+            })
+            .expect("config should load");
 
-        assert_eq!(config.app_env, AppEnv::Dev);
+            assert_eq!(config.app_env, expected, "APP_ENV={raw} should parse");
+        }
     }
 
     #[test]
@@ -217,6 +251,53 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "APP_ENV: unsupported APP_ENV value: staging"
+        );
+    }
+
+    #[test]
+    fn from_lookup_parses_boolean_db_boot_flag() {
+        for raw in ["1", "true", "yes", "on"] {
+            let config = AppConfig::from_lookup(|key| match key {
+                "INIT_DB_ON_BOOT" => Some(raw.to_owned()),
+                _ => None,
+            })
+            .expect("config should load");
+
+            assert!(
+                config.init_db_on_boot,
+                "INIT_DB_ON_BOOT={raw} should enable DB boot"
+            );
+        }
+    }
+
+    #[test]
+    fn from_lookup_parses_disabled_boolean_db_boot_flag() {
+        for raw in ["0", "false", "no", "off"] {
+            let config = AppConfig::from_lookup(|key| match key {
+                "INIT_DB_ON_BOOT" => Some(raw.to_owned()),
+                _ => None,
+            })
+            .expect("config should load");
+
+            assert!(
+                !config.init_db_on_boot,
+                "INIT_DB_ON_BOOT={raw} should disable DB boot"
+            );
+        }
+    }
+
+    #[test]
+    fn from_lookup_rejects_unknown_boolean_flag() {
+        let error = AppConfig::from_lookup(|key| match key {
+            "INIT_DB_ON_BOOT" => Some("sometimes".to_owned()),
+            _ => None,
+        })
+        .expect_err("config should reject unknown boolean flag");
+
+        assert_eq!(error.field(), "INIT_DB_ON_BOOT");
+        assert_eq!(
+            error.to_string(),
+            "INIT_DB_ON_BOOT: unsupported INIT_DB_ON_BOOT value: sometimes"
         );
     }
 
@@ -248,6 +329,7 @@ mod tests {
             std::env::set_var("APP_ENV", "test");
             std::env::set_var("HTTP_ADDR", "127.0.0.1:7001");
             std::env::set_var("DATABASE_URL", "postgres://override/mini_conf");
+            std::env::set_var("INIT_DB_ON_BOOT", "1");
             std::env::set_var("STATIC_DIR", "tmp/static");
             std::env::set_var("OPENAPI_EXPORT_PATH", "tmp/openapi.json");
         }
@@ -259,6 +341,7 @@ mod tests {
             std::env::remove_var("APP_ENV");
             std::env::remove_var("HTTP_ADDR");
             std::env::remove_var("DATABASE_URL");
+            std::env::remove_var("INIT_DB_ON_BOOT");
             std::env::remove_var("STATIC_DIR");
             std::env::remove_var("OPENAPI_EXPORT_PATH");
         }
@@ -269,6 +352,7 @@ mod tests {
                 app_env: AppEnv::Test,
                 http_addr: "127.0.0.1:7001".to_owned(),
                 database_url: "postgres://override/mini_conf".to_owned(),
+                init_db_on_boot: true,
                 static_dir: PathBuf::from("tmp/static"),
                 openapi_export_path: PathBuf::from("tmp/openapi.json"),
             }
