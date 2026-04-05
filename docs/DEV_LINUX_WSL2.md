@@ -177,6 +177,7 @@ STATIC_DIR=apps/web/dist
 - `just dev-web`
 - `just lint`
 - `just test`
+- `just test-backend-db`
 - `just test-e2e`
 - `just ci-local`
 - `just db-reset-dev`
@@ -187,6 +188,15 @@ STATIC_DIR=apps/web/dist
 - `lint` 跑前后端静态检查
 - `test` 跑前后端单测和集成测试
 - `ci-local` 尽量模拟 CI 的完整检查过程
+
+补充说明：
+
+- `just dev-server`
+- `just db-migrate-up`
+- `just db-migrate-down`
+- `just test-backend-db`
+
+在未显式设置 `DATABASE_URL` / `TEST_DATABASE_URL` 时，会尝试从本机 `secret-tool` 读取 `mini_conf` 开发库密码，并自动做 URL 编码。
 
 ## 10. 代码质量基线
 

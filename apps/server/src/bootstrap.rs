@@ -1,19 +1,92 @@
-use crate::{app, config::AppConfig, state::AppState};
+use crate::{
+    app,
+    config::{AppConfig, ConfigError},
+    state::AppState,
+};
 use infra::AppIdentity;
-use sqlx::PgPool;
+use sqlx::{PgPool, migrate::Migrator};
+use std::fmt;
 use tokio::net::TcpListener;
-use tracing_subscriber::{EnvFilter, fmt};
+use tracing_subscriber::{EnvFilter, fmt as tracing_fmt};
+
+static MIGRATOR: Migrator = sqlx::migrate!("../../migrations");
+
+#[derive(Debug)]
+pub enum StartupError {
+    Config(ConfigError),
+    Database(sqlx::Error),
+    Migrate(sqlx::migrate::MigrateError),
+    Io(std::io::Error),
+}
+
+impl fmt::Display for StartupError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Config(error) => write!(f, "configuration error: {error}"),
+            Self::Database(error) => write!(f, "database connection error: {error}"),
+            Self::Migrate(error) => write!(f, "database migration error: {error}"),
+            Self::Io(error) => write!(f, "server io error: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for StartupError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Config(error) => Some(error),
+            Self::Database(error) => Some(error),
+            Self::Migrate(error) => Some(error),
+            Self::Io(error) => Some(error),
+        }
+    }
+}
+
+impl From<ConfigError> for StartupError {
+    fn from(value: ConfigError) -> Self {
+        Self::Config(value)
+    }
+}
+
+impl From<sqlx::Error> for StartupError {
+    fn from(value: sqlx::Error) -> Self {
+        Self::Database(value)
+    }
+}
+
+impl From<sqlx::migrate::MigrateError> for StartupError {
+    fn from(value: sqlx::migrate::MigrateError) -> Self {
+        Self::Migrate(value)
+    }
+}
+
+impl From<std::io::Error> for StartupError {
+    fn from(value: std::io::Error) -> Self {
+        Self::Io(value)
+    }
+}
 
 pub fn init_tracing() {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
-    fmt().with_env_filter(filter).with_target(false).init();
+    tracing_fmt()
+        .with_env_filter(filter)
+        .with_target(false)
+        .init();
 }
 
-pub async fn build_state(config: AppConfig) -> Result<AppState, sqlx::Error> {
+pub async fn build_state(config: AppConfig) -> Result<AppState, StartupError> {
     let db_pool: Option<PgPool> = if config.init_db_on_boot {
-        Some(infra::db::connect(&config.database_url).await?)
+        tracing::info!("database bootstrap enabled; connecting to postgres");
+
+        let pool = infra::db::connect(&config.database_url).await?;
+
+        tracing::info!("database connected; applying migrations");
+        MIGRATOR.run(&pool).await?;
+        tracing::info!("database migrations applied");
+
+        Some(pool)
     } else {
+        tracing::info!("database bootstrap disabled; skipping postgres connect and migrations");
         None
     };
 
@@ -24,23 +97,41 @@ pub async fn build_state(config: AppConfig) -> Result<AppState, sqlx::Error> {
     ))
 }
 
-pub async fn run(state: AppState) -> std::io::Result<()> {
+pub async fn run(state: AppState) -> Result<(), StartupError> {
     let listener = TcpListener::bind(&state.config().http_addr).await?;
 
     tracing::info!(
         address = %state.config().http_addr,
         env = state.config().app_env.as_str(),
+        db_boot_enabled = state.config().init_db_on_boot,
         db_connected = state.db_pool().is_some(),
         "starting mini-conf server"
     );
 
-    axum::serve(listener, app(state)).await
+    axum::serve(listener, app(state)).await?;
+
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{build_state, run};
+    use super::{StartupError, build_state, run};
     use crate::config::AppConfig;
+
+    #[test]
+    fn startup_error_wraps_configuration_failures() {
+        let error = AppConfig::from_lookup(|key| match key {
+            "APP_ENV" => Some("staging".to_owned()),
+            _ => None,
+        })
+        .map_err(StartupError::from)
+        .expect_err("config should fail");
+
+        assert_eq!(
+            error.to_string(),
+            "configuration error: APP_ENV: unsupported APP_ENV value: staging"
+        );
+    }
 
     #[tokio::test]
     async fn build_state_skips_database_connection_when_flag_is_disabled() {
@@ -64,6 +155,10 @@ mod tests {
         assert!(
             result.is_err(),
             "state build should fail when db boot is enabled and url is invalid"
+        );
+        assert!(
+            matches!(result, Err(StartupError::Database(_))),
+            "invalid url should surface as a database startup error"
         );
     }
 

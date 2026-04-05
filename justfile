@@ -43,6 +43,9 @@ test:
 test-backend:
   @if [ -f Cargo.toml ]; then cargo nextest run --workspace; else echo "Skipping backend tests: Cargo.toml not found"; fi
 
+test-backend-db:
+  @if [ -f Cargo.toml ]; then source scripts/dev-db-env.sh && cargo nextest run --workspace; else echo "Skipping backend db tests: Cargo.toml not found"; fi
+
 test-frontend:
   @if [ -f apps/web/package.json ]; then pnpm --dir apps/web test; \
   elif [ -f package.json ] || [ -f pnpm-workspace.yaml ]; then pnpm test; \
@@ -76,13 +79,13 @@ openapi-check:
 
 db-migrate-up:
   @if [ -d migrations ]; then \
-    if command -v sqlx >/dev/null 2>&1; then sqlx migrate run; \
+    if command -v sqlx >/dev/null 2>&1; then source scripts/dev-db-env.sh && sqlx migrate run; \
     else echo "Skipping db migrate up: sqlx CLI not installed"; fi \
   ; else echo "Skipping db migrate up: migrations directory not found"; fi
 
 db-migrate-down:
   @if [ -d migrations ]; then \
-    if command -v sqlx >/dev/null 2>&1; then sqlx migrate revert; \
+    if command -v sqlx >/dev/null 2>&1; then source scripts/dev-db-env.sh && sqlx migrate revert; \
     else echo "Skipping db migrate down: sqlx CLI not installed"; fi \
   ; else echo "Skipping db migrate down: migrations directory not found"; fi
 
@@ -100,7 +103,7 @@ ci-local:
   @just perf-smoke
 
 dev-server:
-  @if [ -f Cargo.toml ]; then cargo run --bin server; else echo "Skipping dev-server: Cargo workspace not initialized"; fi
+  @if [ -f Cargo.toml ]; then source scripts/dev-db-env.sh && cargo run --bin server; else echo "Skipping dev-server: Cargo workspace not initialized"; fi
 
 dev-web:
   @if [ -f apps/web/package.json ]; then pnpm --dir apps/web dev; \

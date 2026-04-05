@@ -145,4 +145,97 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
     }
+
+    #[tokio::test]
+    async fn open_resolve_requires_required_query_parameters() {
+        let app = test_app();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/open/configs/resolve?project=coffee-legacy&environment=prod&deployment_key=store-001")
+                    .body(Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should be readable");
+        let payload: ErrorResponse =
+            serde_json::from_slice(&body).expect("payload should be valid json");
+
+        assert_eq!(
+            payload,
+            ErrorResponse {
+                code: "invalid_request".to_owned(),
+                message: "missing required query parameter: config".to_owned(),
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn open_resolve_requires_database_bootstrap() {
+        let app = test_app();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/open/configs/resolve?project=coffee-legacy&environment=prod&deployment_key=store-001&config=main")
+                    .body(Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should be readable");
+        let payload: ErrorResponse =
+            serde_json::from_slice(&body).expect("payload should be valid json");
+
+        assert_eq!(
+            payload,
+            ErrorResponse {
+                code: "database_unavailable".to_owned(),
+                message: "Database bootstrap is disabled".to_owned(),
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn open_release_requires_database_bootstrap() {
+        let app = test_app();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/open/releases/20260405.0001")
+                    .body(Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should be readable");
+        let payload: ErrorResponse =
+            serde_json::from_slice(&body).expect("payload should be valid json");
+
+        assert_eq!(
+            payload,
+            ErrorResponse {
+                code: "database_unavailable".to_owned(),
+                message: "Database bootstrap is disabled".to_owned(),
+            }
+        );
+    }
 }

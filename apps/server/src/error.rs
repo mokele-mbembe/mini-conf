@@ -19,20 +19,36 @@ pub struct ApiError {
 }
 
 impl ApiError {
-    pub const fn not_found() -> Self {
+    const fn new(status: StatusCode, code: &'static str, message: &'static str) -> Self {
         Self {
-            status: StatusCode::NOT_FOUND,
-            code: "route_not_found",
-            message: "Route not found",
+            status,
+            code,
+            message,
         }
     }
 
+    pub const fn bad_request(code: &'static str, message: &'static str) -> Self {
+        Self::new(StatusCode::BAD_REQUEST, code, message)
+    }
+
+    pub const fn not_found() -> Self {
+        Self::new(StatusCode::NOT_FOUND, "route_not_found", "Route not found")
+    }
+
+    pub const fn not_found_with(code: &'static str, message: &'static str) -> Self {
+        Self::new(StatusCode::NOT_FOUND, code, message)
+    }
+
+    pub const fn service_unavailable(code: &'static str, message: &'static str) -> Self {
+        Self::new(StatusCode::SERVICE_UNAVAILABLE, code, message)
+    }
+
     pub const fn internal() -> Self {
-        Self {
-            status: StatusCode::INTERNAL_SERVER_ERROR,
-            code: "internal_server_error",
-            message: "Internal server error",
-        }
+        Self::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "internal_server_error",
+            "Internal server error",
+        )
     }
 
     pub fn into_body(self) -> ErrorResponse {
@@ -92,6 +108,18 @@ mod tests {
             ErrorResponse {
                 code: "internal_server_error".to_owned(),
                 message: "Internal server error".to_owned(),
+            }
+        );
+    }
+
+    #[test]
+    fn bad_request_error_builds_expected_body() {
+        assert_eq!(
+            ApiError::bad_request("invalid_request", "missing required query parameter")
+                .into_body(),
+            ErrorResponse {
+                code: "invalid_request".to_owned(),
+                message: "missing required query parameter".to_owned(),
             }
         );
     }

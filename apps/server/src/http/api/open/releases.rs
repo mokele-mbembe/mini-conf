@@ -1,0 +1,167 @@
+use crate::{error::ApiError, state::AppState};
+use axum::{
+    Json, Router,
+    extract::{Path, State},
+    http::{HeaderMap, HeaderValue, StatusCode, header},
+    response::{IntoResponse, Response},
+    routing::get,
+};
+use schema::open::{
+    ReleaseConfig, ReleaseContentResponse, ReleaseDeployment, ReleaseMetadata, ResolveRelease,
+};
+use sqlx::Row;
+
+#[derive(Debug)]
+struct ReleaseLookup {
+    project: String,
+    environment: String,
+    deployment_key: String,
+    config_name: String,
+    revision: String,
+    content_hash: String,
+    format: String,
+    published_at: String,
+    apply_mode: String,
+    content: String,
+    schema_version: Option<String>,
+    change_summary: Option<String>,
+}
+
+pub fn router() -> Router<AppState> {
+    Router::new().route("/open/releases/{revision}", get(get_release))
+}
+
+async fn get_release(
+    State(state): State<AppState>,
+    Path(revision): Path<String>,
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    if revision.trim().is_empty() {
+        return Err(ApiError::bad_request(
+            "invalid_request",
+            "missing required path parameter: revision",
+        ));
+    }
+
+    let Some(pool) = state.db_pool() else {
+        return Err(ApiError::service_unavailable(
+            "database_unavailable",
+            "Database bootstrap is disabled",
+        ));
+    };
+
+    let release = find_release(pool, &revision)
+        .await?
+        .ok_or_else(|| ApiError::not_found_with("release_not_found", "release not found"))?;
+
+    if release_is_not_modified(&headers, &release) {
+        return Ok(not_modified_response(&release.content_hash));
+    }
+
+    Ok(release_response(release))
+}
+
+async fn find_release(
+    pool: &sqlx::PgPool,
+    revision: &str,
+) -> Result<Option<ReleaseLookup>, ApiError> {
+    let row = sqlx::query(
+        r#"
+        SELECT
+            p.code AS project,
+            d.environment,
+            d.deployment_key,
+            cf.code AS config_name,
+            r.revision,
+            btrim(r.content_hash) AS content_hash,
+            r.format,
+            to_char(r.published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS published_at,
+            r.apply_mode,
+            r.content,
+            cf.schema_version,
+            r.change_summary
+        FROM releases r
+        JOIN projects p ON p.id = r.project_id
+        JOIN config_files cf ON cf.id = r.config_file_id
+        JOIN deployment_instances d ON d.id = r.deployment_instance_id
+        WHERE r.revision = $1
+        ORDER BY r.id DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(revision)
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| ApiError::internal())?;
+
+    Ok(row.map(|row| ReleaseLookup {
+        project: row.get("project"),
+        environment: row.get("environment"),
+        deployment_key: row.get("deployment_key"),
+        config_name: row.get("config_name"),
+        revision: row.get("revision"),
+        content_hash: row.get("content_hash"),
+        format: row.get("format"),
+        published_at: row.get("published_at"),
+        apply_mode: row.get("apply_mode"),
+        content: row.get("content"),
+        schema_version: row.get("schema_version"),
+        change_summary: row.get("change_summary"),
+    }))
+}
+
+fn release_is_not_modified(headers: &HeaderMap, release: &ReleaseLookup) -> bool {
+    headers
+        .get(header::IF_NONE_MATCH)
+        .and_then(|value| value.to_str().ok())
+        .map(normalize_etag)
+        .is_some_and(|etag| etag == release.content_hash)
+}
+
+fn normalize_etag(value: &str) -> &str {
+    value.trim().trim_matches('"')
+}
+
+fn etag_header(content_hash: &str) -> HeaderValue {
+    HeaderValue::from_str(&format!("\"{content_hash}\""))
+        .expect("content hashes should always produce valid ETag headers")
+}
+
+fn not_modified_response(content_hash: &str) -> Response {
+    let mut response = StatusCode::NOT_MODIFIED.into_response();
+    let headers = response.headers_mut();
+    headers.insert(header::ETAG, etag_header(content_hash));
+    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+    response
+}
+
+fn release_response(release: ReleaseLookup) -> Response {
+    let mut response = Json(ReleaseContentResponse {
+        release: ResolveRelease {
+            revision: release.revision.clone(),
+            content_hash: release.content_hash.clone(),
+            format: release.format,
+            published_at: release.published_at,
+            apply_mode: release.apply_mode,
+        },
+        deployment: ReleaseDeployment {
+            project: release.project,
+            environment: release.environment,
+            deployment_key: release.deployment_key,
+        },
+        config: ReleaseConfig {
+            name: release.config_name,
+        },
+        content: release.content,
+        metadata: ReleaseMetadata {
+            schema_version: release.schema_version,
+            change_summary: release.change_summary,
+        },
+    })
+    .into_response();
+
+    let headers = response.headers_mut();
+    headers.insert(header::ETAG, etag_header(&release.content_hash));
+    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+    response
+}

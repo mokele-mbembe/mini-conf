@@ -38,7 +38,7 @@ async fn connect_establishes_pool_when_database_is_available() {
         .await
         .expect("pool should connect");
 
-    let value: i64 = query_scalar("SELECT 1")
+    let value: i32 = query_scalar("SELECT 1")
         .fetch_one(&pool)
         .await
         .expect("query should succeed");

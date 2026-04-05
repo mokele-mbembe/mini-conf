@@ -137,6 +137,7 @@ OPENAPI_EXPORT_PATH=docs/openapi/openapi.json
 - `just dev-web`
 - `just lint`
 - `just test`
+- `just test-backend-db`
 - `just perf-smoke`
 - `just sqlx-check`
 - `just openapi-check`
@@ -145,6 +146,16 @@ OPENAPI_EXPORT_PATH=docs/openapi/openapi.json
 - `just test-e2e`
 - `just ci-local`
 - `just db-reset-dev`
+
+当前仓库约定：
+
+- `just dev-server`
+- `just db-migrate-up`
+- `just db-migrate-down`
+- `just test-backend-db`
+
+会优先使用已设置的 `DATABASE_URL` / `TEST_DATABASE_URL`。
+如果未设置，则尝试从 `secret-tool lookup service mini-conf env dev role app-db user mini_conf` 读取开发库密码，并自动做 URL 编码后再连接本地 PostgreSQL。
 
 ## 8. 代码质量与 TDD 基线
 
