@@ -25,7 +25,7 @@ mkdir -p "$HOME/.config/mini-conf" "$HOME/.local/share/pnpm"
 写激活脚本：
 
 ```bash
-cat > "$HOME/.config/mini-conf/activate-fedora43.sh" <<'EOF'
+cat > "${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/dev-env.sh" <<'EOF'
 export CODEX_SHARED_CACHE_ROOT=/var/cache/codex/shared
 export MINI_CONF_BUILD_ROOT=/var/cache/codex/build/mini-conf
 export CARGO_HOME="$CODEX_SHARED_CACHE_ROOT/cargo-home"
@@ -41,7 +41,7 @@ export RUSTC_WRAPPER=sccache
 export PNPM_HOME="$HOME/.local/share/pnpm"
 export PATH="$CARGO_HOME/bin:$HOME/.local/bin:$PNPM_HOME:$PATH"
 EOF
-source "$HOME/.config/mini-conf/activate-fedora43.sh"
+source "${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/dev-env.sh"
 ```
 
 安装系统依赖：
@@ -69,7 +69,7 @@ cargo install --locked sqlx-cli --no-default-features --features postgres,rustls
 初始化 pnpm：
 
 ```bash
-source "$HOME/.config/mini-conf/activate-fedora43.sh"
+source "${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/dev-env.sh"
 corepack enable
 corepack prepare pnpm@9.12.3 --activate
 ```
@@ -78,7 +78,7 @@ corepack prepare pnpm@9.12.3 --activate
 
 ```bash
 npm install -g corepack --prefix "$HOME/.local"
-source "$HOME/.config/mini-conf/activate-fedora43.sh"
+source "${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/dev-env.sh"
 corepack --version
 corepack enable
 corepack prepare pnpm@9.12.3 --activate
@@ -115,7 +115,7 @@ sudo -u postgres psql -c "CREATE DATABASE mini_conf OWNER mini_conf;"
 
 ```bash
 cd /home/zjj/Projects/mini-conf
-source "$HOME/.config/mini-conf/activate-fedora43.sh"
+source "${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/dev-env.sh"
 pnpm install
 pnpm dlx lefthook install
 ```
@@ -226,7 +226,7 @@ mkdir -p "$HOME/.local/share/pnpm"
 再写一个只给 `mini-conf` 使用的环境激活脚本：
 
 ```bash
-cat > "$HOME/.config/mini-conf/activate-fedora43.sh" <<'EOF'
+cat > "${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/dev-env.sh" <<'EOF'
 export CODEX_SHARED_CACHE_ROOT=/var/cache/codex/shared
 export MINI_CONF_BUILD_ROOT=/var/cache/codex/build/mini-conf
 export CARGO_HOME="$CODEX_SHARED_CACHE_ROOT/cargo-home"
@@ -247,7 +247,7 @@ EOF
 加载它：
 
 ```bash
-source "$HOME/.config/mini-conf/activate-fedora43.sh"
+source "${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/dev-env.sh"
 env | grep -E 'CODEX_SHARED_CACHE_ROOT|MINI_CONF_BUILD_ROOT|CARGO_HOME|RUSTUP_HOME|CARGO_TARGET_DIR|XDG_CACHE_HOME|COREPACK_HOME|NPM_CONFIG_CACHE|PNPM_STORE_DIR|PLAYWRIGHT_BROWSERS_PATH|SCCACHE_DIR|RUSTC_WRAPPER|PNPM_HOME'
 ```
 
@@ -330,7 +330,7 @@ cargo clippy --version
 安装项目规划里已经点名的工具：
 
 ```bash
-source "$HOME/.config/mini-conf/activate-fedora43.sh"
+source "${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/dev-env.sh"
 cargo install --locked cargo-nextest
 cargo install --locked cargo-llvm-cov
 cargo install --locked sqlx-cli --no-default-features --features postgres,rustls
@@ -363,7 +363,7 @@ pnpm@9.12.3
 执行：
 
 ```bash
-source "$HOME/.config/mini-conf/activate-fedora43.sh"
+source "${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/dev-env.sh"
 corepack enable
 corepack prepare pnpm@9.12.3 --activate
 pnpm --version
@@ -387,7 +387,7 @@ npm --version
 
 ```bash
 npm install -g corepack --prefix "$HOME/.local"
-source "$HOME/.config/mini-conf/activate-fedora43.sh"
+source "${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/dev-env.sh"
 corepack --version
 corepack enable
 corepack prepare pnpm@9.12.3 --activate
@@ -407,7 +407,7 @@ pnpm --version
 先确认当前 shell 已经加载激活脚本：
 
 ```bash
-source "$HOME/.config/mini-conf/activate-fedora43.sh"
+source "${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/dev-env.sh"
 echo "$RUSTC_WRAPPER"
 echo "$SCCACHE_DIR"
 ```
@@ -548,7 +548,7 @@ docker compose version || docker-compose version
 
 ```bash
 cd /home/zjj/Projects/mini-conf
-source "$HOME/.config/mini-conf/activate-fedora43.sh"
+source "${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/dev-env.sh"
 ```
 
 安装根级 Node 依赖：
@@ -602,10 +602,16 @@ OPENAPI_EXPORT_PATH=docs/openapi/openapi.json
 
 ```bash
 cd /home/zjj/Projects/mini-conf
-source "$HOME/.config/mini-conf/activate-fedora43.sh"
+source "${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/dev-env.sh"
 ```
 
 再从这个 shell 启动你的 IDE、终端会话或本地 agent。
+
+仓库内的 Git hooks 会先执行 [scripts/load-dev-env.sh](/home/zjj/Projects/mini-conf/scripts/load-dev-env.sh)，它会按这个顺序寻找本地环境脚本：
+
+- `MINI_CONF_DEV_ENV_FILE` 指向的文件
+- `${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/dev-env.sh`
+- 旧文件名 `${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/activate-fedora43.sh`
 
 ## 16. 本地 agent 行为约定
 

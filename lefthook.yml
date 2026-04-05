@@ -2,19 +2,19 @@ pre-commit:
   parallel: true
   commands:
     fmt-backend:
-      run: just fmt-backend
+      run: bash -lc 'source scripts/load-dev-env.sh; just fmt-backend'
       stage_fixed: true
     fmt-frontend:
-      run: just fmt-frontend
+      run: bash -lc 'source scripts/load-dev-env.sh; just fmt-frontend'
       stage_fixed: true
     lint-backend:
-      run: just lint-backend
+      run: bash -lc 'source scripts/load-dev-env.sh; just lint-backend'
     lint-frontend:
-      run: just lint-frontend
+      run: bash -lc 'source scripts/load-dev-env.sh; just lint-frontend'
 
 pre-push:
   commands:
     test:
-      run: just test
+      run: bash -lc 'source scripts/load-dev-env.sh; just test'
     perf-smoke:
-      run: just perf-smoke
+      run: bash -lc 'source scripts/load-dev-env.sh; just perf-smoke'
