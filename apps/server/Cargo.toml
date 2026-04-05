@@ -9,6 +9,7 @@ version.workspace = true
 axum.workspace = true
 infra = { path = "../../crates/infra" }
 serde.workspace = true
+serde_json.workspace = true
 schema = { path = "../../crates/schema" }
 sqlx.workspace = true
 tokio.workspace = true

@@ -57,11 +57,34 @@ pub struct ReleaseMetadata {
     pub change_summary: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConfigBundleResponse {
+    pub project: String,
+    pub environment: String,
+    pub deployment: ResolveDeployment,
+    pub configs: Vec<ConfigBundleItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConfigBundleItem {
+    pub config: String,
+    pub revision: String,
+    pub content_hash: String,
+    pub format: String,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeploymentSyncResponse {
+    pub ok: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        ReleaseConfig, ReleaseContentResponse, ReleaseDeployment, ReleaseMetadata,
-        ResolveConfigResponse, ResolveDeployment, ResolveFetch, ResolveRelease,
+        ConfigBundleItem, ConfigBundleResponse, DeploymentSyncResponse, ReleaseConfig,
+        ReleaseContentResponse, ReleaseDeployment, ReleaseMetadata, ResolveConfigResponse,
+        ResolveDeployment, ResolveFetch, ResolveRelease,
     };
 
     #[test]
@@ -164,5 +187,71 @@ mod tests {
                 }
             })
         );
+    }
+
+    #[test]
+    fn config_bundle_response_serializes_expected_shape() {
+        let response = ConfigBundleResponse {
+            project: "coffee-legacy".to_owned(),
+            environment: "prod".to_owned(),
+            deployment: ResolveDeployment {
+                key: "store-001".to_owned(),
+                name: "Store 001".to_owned(),
+            },
+            configs: vec![
+                ConfigBundleItem {
+                    config: "main".to_owned(),
+                    revision: "20260405.0001".to_owned(),
+                    content_hash: "aaa".to_owned(),
+                    format: "yaml".to_owned(),
+                    content: "log_level: info\n".to_owned(),
+                },
+                ConfigBundleItem {
+                    config: "vision".to_owned(),
+                    revision: "20260405.0002".to_owned(),
+                    content_hash: "bbb".to_owned(),
+                    format: "yaml".to_owned(),
+                    content: "camera_enabled: true\n".to_owned(),
+                },
+            ],
+        };
+
+        let value = serde_json::to_value(&response).expect("response should serialize");
+
+        assert_eq!(
+            value,
+            serde_json::json!({
+                "project": "coffee-legacy",
+                "environment": "prod",
+                "deployment": {
+                    "key": "store-001",
+                    "name": "Store 001"
+                },
+                "configs": [
+                    {
+                        "config": "main",
+                        "revision": "20260405.0001",
+                        "content_hash": "aaa",
+                        "format": "yaml",
+                        "content": "log_level: info\n"
+                    },
+                    {
+                        "config": "vision",
+                        "revision": "20260405.0002",
+                        "content_hash": "bbb",
+                        "format": "yaml",
+                        "content": "camera_enabled: true\n"
+                    }
+                ]
+            })
+        );
+    }
+
+    #[test]
+    fn deployment_sync_response_serializes_expected_shape() {
+        let value = serde_json::to_value(DeploymentSyncResponse { ok: true })
+            .expect("response should serialize");
+
+        assert_eq!(value, serde_json::json!({ "ok": true }));
     }
 }

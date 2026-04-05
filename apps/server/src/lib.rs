@@ -238,4 +238,136 @@ mod tests {
             }
         );
     }
+
+    #[tokio::test]
+    async fn open_config_bundle_requires_required_query_parameters() {
+        let app = test_app();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/open/deployments/store-001/config-bundle?project=coffee-legacy")
+                    .body(Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should be readable");
+        let payload: ErrorResponse =
+            serde_json::from_slice(&body).expect("payload should be valid json");
+
+        assert_eq!(
+            payload,
+            ErrorResponse {
+                code: "invalid_request".to_owned(),
+                message: "missing required query parameter: environment".to_owned(),
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn open_config_bundle_requires_database_bootstrap() {
+        let app = test_app();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/open/deployments/store-001/config-bundle?project=coffee-legacy&environment=prod")
+                    .body(Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should be readable");
+        let payload: ErrorResponse =
+            serde_json::from_slice(&body).expect("payload should be valid json");
+
+        assert_eq!(
+            payload,
+            ErrorResponse {
+                code: "database_unavailable".to_owned(),
+                message: "Database bootstrap is disabled".to_owned(),
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn open_sync_record_requires_required_body_fields() {
+        let app = test_app();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/open/deployment-sync-records")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        r#"{"project":"coffee-legacy","environment":"prod","deployment_key":"store-001","config":"main","status":"success"}"#,
+                    ))
+                    .expect("request should build"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should be readable");
+        let payload: ErrorResponse =
+            serde_json::from_slice(&body).expect("payload should be valid json");
+
+        assert_eq!(
+            payload,
+            ErrorResponse {
+                code: "invalid_request".to_owned(),
+                message: "missing required body field: action".to_owned(),
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn open_sync_record_requires_database_bootstrap() {
+        let app = test_app();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/open/deployment-sync-records")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        r#"{"project":"coffee-legacy","environment":"prod","deployment_key":"store-001","config":"main","action":"apply","status":"success"}"#,
+                    ))
+                    .expect("request should build"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should be readable");
+        let payload: ErrorResponse =
+            serde_json::from_slice(&body).expect("payload should be valid json");
+
+        assert_eq!(
+            payload,
+            ErrorResponse {
+                code: "database_unavailable".to_owned(),
+                message: "Database bootstrap is disabled".to_owned(),
+            }
+        );
+    }
 }
