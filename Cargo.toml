@@ -22,6 +22,6 @@ sha2 = "0.10"
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "migrate"] }
 tokio = { version = "1", features = ["macros", "net", "rt-multi-thread"] }
 tower = { version = "0.5", features = ["util"] }
-tower-http = { version = "0.6", features = ["trace"] }
+tower-http = { version = "0.6", features = ["fs", "trace"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }

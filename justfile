@@ -60,7 +60,7 @@ coverage:
   @if [ -f Cargo.toml ]; then cargo llvm-cov --workspace --lcov --output-path target/lcov.info; else echo "Skipping backend coverage: Cargo.toml not found"; fi
 
 sqlx-check:
-  @if [ -f Cargo.toml ]; then cargo sqlx prepare --check; else echo "Skipping sqlx prepare check: Cargo.toml not found"; fi
+  @if [ -f Cargo.toml ]; then cargo sqlx prepare --check --workspace; else echo "Skipping sqlx prepare check: Cargo.toml not found"; fi
 
 openapi-check:
   @if [ -f scripts/export-openapi.sh ]; then \
