@@ -31,7 +31,33 @@ pub fn router() -> Router<AppState> {
     Router::new().route("/open/releases/{revision}", get(get_release))
 }
 
-async fn get_release(
+#[utoipa::path(
+    get,
+    path = "/api/open/releases/{revision}",
+    tag = "open",
+    params(
+        ("revision" = String, Path, description = "Release revision to fetch")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    responses(
+        (status = 200, description = "Release content payload", body = ReleaseContentResponse, headers(
+            ("etag" = String, description = "Entity tag for release content hash"),
+            ("cache-control" = String, description = "Cache policy")
+        )),
+        (status = 304, description = "Release not modified", headers(
+            ("etag" = String, description = "Entity tag for release content hash"),
+            ("cache-control" = String, description = "Cache policy")
+        )),
+        (status = 400, description = "Invalid revision path parameter", body = crate::error::ErrorResponse),
+        (status = 401, description = "Missing or invalid bearer token", body = crate::error::ErrorResponse),
+        (status = 404, description = "Release not found", body = crate::error::ErrorResponse),
+        (status = 503, description = "Database bootstrap disabled", body = crate::error::ErrorResponse),
+        (status = 500, description = "Internal server error", body = crate::error::ErrorResponse),
+    )
+)]
+pub(crate) async fn get_release(
     State(state): State<AppState>,
     Path(revision): Path<String>,
     headers: HeaderMap,

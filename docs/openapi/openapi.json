@@ -1,0 +1,1032 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "mini-conf API",
+    "description": "HTTP-first deployment configuration APIs for mini-conf",
+    "license": {
+      "name": "MIT OR Apache-2.0",
+      "identifier": "MIT OR Apache-2.0"
+    },
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/healthz": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "operationId": "get_healthz",
+        "responses": {
+          "200": {
+            "description": "Service health check",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthzResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/open/configs/resolve": {
+      "get": {
+        "tags": [
+          "open"
+        ],
+        "operationId": "resolve_config",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "deployment_key",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "config",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "process_key",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "current_revision",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resolve latest release for one config",
+            "headers": {
+              "etag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Entity tag for release content hash"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolveConfigResponse"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Client already has the latest release",
+            "headers": {
+              "etag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Entity tag for release content hash"
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Bearer token does not match target deployment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Deployment, config file, or release not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database bootstrap disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/open/deployment-sync-records": {
+      "post": {
+        "tags": [
+          "open"
+        ],
+        "operationId": "create_sync_record",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeploymentSyncRecordRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Sync record accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentSyncResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Bearer token does not match target deployment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Deployment, config file, or release not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database bootstrap disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/open/deployments/{deployment_key}/config-bundle": {
+      "get": {
+        "tags": [
+          "open"
+        ],
+        "operationId": "get_config_bundle",
+        "parameters": [
+          {
+            "name": "deployment_key",
+            "in": "path",
+            "description": "Deployment instance key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current config bundle for a deployment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigBundleResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid path or query parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Bearer token does not match target deployment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Deployment not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database bootstrap disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/open/heartbeats": {
+      "post": {
+        "tags": [
+          "open"
+        ],
+        "operationId": "report_heartbeat",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HeartbeatRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Heartbeat accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentSyncResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Bearer token does not match target deployment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Deployment not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database bootstrap disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/open/releases/{revision}": {
+      "get": {
+        "tags": [
+          "open"
+        ],
+        "operationId": "get_release",
+        "parameters": [
+          {
+            "name": "revision",
+            "in": "path",
+            "description": "Release revision to fetch",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Release content payload",
+            "headers": {
+              "cache-control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Cache policy"
+              },
+              "etag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Entity tag for release content hash"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseContentResponse"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Release not modified",
+            "headers": {
+              "cache-control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Cache policy"
+              },
+              "etag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Entity tag for release content hash"
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid revision path parameter",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Release not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database bootstrap disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ConfigBundleItem": {
+        "type": "object",
+        "required": [
+          "config",
+          "revision",
+          "content_hash",
+          "format",
+          "content"
+        ],
+        "properties": {
+          "config": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "content_hash": {
+            "type": "string"
+          },
+          "format": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        }
+      },
+      "ConfigBundleParams": {
+        "type": "object",
+        "required": [
+          "project",
+          "environment"
+        ],
+        "properties": {
+          "environment": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          }
+        }
+      },
+      "ConfigBundleResponse": {
+        "type": "object",
+        "required": [
+          "project",
+          "environment",
+          "deployment",
+          "configs"
+        ],
+        "properties": {
+          "configs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConfigBundleItem"
+            }
+          },
+          "deployment": {
+            "$ref": "#/components/schemas/ResolveDeployment"
+          },
+          "environment": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          }
+        }
+      },
+      "DeploymentSyncRecordRequestBody": {
+        "type": "object",
+        "required": [
+          "project",
+          "environment",
+          "deployment_key",
+          "config",
+          "action",
+          "status",
+          "detail"
+        ],
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "config": {
+            "type": "string"
+          },
+          "deployment_key": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "environment": {
+            "type": "string"
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "process_key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "project": {
+            "type": "string"
+          },
+          "reported_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "DeploymentSyncResponse": {
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "HealthzResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "service",
+          "version"
+        ],
+        "properties": {
+          "service": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "HeartbeatRequestBody": {
+        "type": "object",
+        "required": [
+          "project",
+          "environment",
+          "deployment_key",
+          "process_key",
+          "metadata"
+        ],
+        "properties": {
+          "deployment_key": {
+            "type": "string"
+          },
+          "environment": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "process_key": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "reported_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ReleaseConfig": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "ReleaseContentResponse": {
+        "type": "object",
+        "required": [
+          "release",
+          "deployment",
+          "config",
+          "content",
+          "metadata"
+        ],
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/ReleaseConfig"
+          },
+          "content": {
+            "type": "string"
+          },
+          "deployment": {
+            "$ref": "#/components/schemas/ReleaseDeployment"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ReleaseMetadata"
+          },
+          "release": {
+            "$ref": "#/components/schemas/ResolveRelease"
+          }
+        }
+      },
+      "ReleaseDeployment": {
+        "type": "object",
+        "required": [
+          "project",
+          "environment",
+          "deployment_key"
+        ],
+        "properties": {
+          "deployment_key": {
+            "type": "string"
+          },
+          "environment": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          }
+        }
+      },
+      "ReleaseMetadata": {
+        "type": "object",
+        "properties": {
+          "change_summary": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "schema_version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ResolveConfigParams": {
+        "type": "object",
+        "required": [
+          "project",
+          "environment",
+          "deployment_key",
+          "config"
+        ],
+        "properties": {
+          "config": {
+            "type": "string"
+          },
+          "current_revision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "deployment_key": {
+            "type": "string"
+          },
+          "environment": {
+            "type": "string"
+          },
+          "process_key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "project": {
+            "type": "string"
+          }
+        }
+      },
+      "ResolveConfigResponse": {
+        "type": "object",
+        "required": [
+          "project",
+          "environment",
+          "deployment",
+          "config",
+          "release",
+          "fetch"
+        ],
+        "properties": {
+          "config": {
+            "type": "string"
+          },
+          "deployment": {
+            "$ref": "#/components/schemas/ResolveDeployment"
+          },
+          "environment": {
+            "type": "string"
+          },
+          "fetch": {
+            "$ref": "#/components/schemas/ResolveFetch"
+          },
+          "project": {
+            "type": "string"
+          },
+          "release": {
+            "$ref": "#/components/schemas/ResolveRelease"
+          }
+        }
+      },
+      "ResolveDeployment": {
+        "type": "object",
+        "required": [
+          "key",
+          "name"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "ResolveFetch": {
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "properties": {
+          "url": {
+            "type": "string"
+          }
+        }
+      },
+      "ResolveRelease": {
+        "type": "object",
+        "required": [
+          "revision",
+          "content_hash",
+          "format",
+          "published_at",
+          "apply_mode"
+        ],
+        "properties": {
+          "apply_mode": {
+            "type": "string"
+          },
+          "content_hash": {
+            "type": "string"
+          },
+          "format": {
+            "type": "string"
+          },
+          "published_at": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "bearer_auth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "opaque"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "system",
+      "description": "System and health endpoints"
+    },
+    {
+      "name": "open",
+      "description": "Deployment instance access APIs"
+    }
+  ]
+}

@@ -3,6 +3,7 @@ pub mod bootstrap;
 pub mod config;
 pub mod error;
 mod http;
+pub mod openapi;
 pub mod state;
 
 use axum::Router;

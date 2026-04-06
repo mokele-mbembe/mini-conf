@@ -14,7 +14,7 @@ use serde::Deserialize;
 use sqlx::{Row, types::Json as SqlxJson};
 
 #[derive(Debug, Deserialize)]
-struct DeploymentSyncRecordRequest {
+pub(crate) struct DeploymentSyncRecordRequest {
     project: Option<String>,
     environment: Option<String>,
     deployment_key: Option<String>,
@@ -53,7 +53,25 @@ pub fn router() -> Router<AppState> {
     Router::new().route("/open/deployment-sync-records", post(create_sync_record))
 }
 
-async fn create_sync_record(
+#[utoipa::path(
+    post,
+    path = "/api/open/deployment-sync-records",
+    tag = "open",
+    request_body = crate::openapi::DeploymentSyncRecordRequestBody,
+    security(
+        ("bearer_auth" = [])
+    ),
+    responses(
+        (status = 200, description = "Sync record accepted", body = DeploymentSyncResponse),
+        (status = 400, description = "Invalid request body", body = crate::error::ErrorResponse),
+        (status = 401, description = "Missing or invalid bearer token", body = crate::error::ErrorResponse),
+        (status = 403, description = "Bearer token does not match target deployment", body = crate::error::ErrorResponse),
+        (status = 404, description = "Deployment, config file, or release not found", body = crate::error::ErrorResponse),
+        (status = 503, description = "Database bootstrap disabled", body = crate::error::ErrorResponse),
+        (status = 500, description = "Internal server error", body = crate::error::ErrorResponse),
+    )
+)]
+pub(crate) async fn create_sync_record(
     State(state): State<AppState>,
     headers: HeaderMap,
     payload: Result<Json<DeploymentSyncRecordRequest>, JsonRejection>,

@@ -14,7 +14,7 @@ use serde::Deserialize;
 use sqlx::{Row, types::Json as SqlxJson};
 
 #[derive(Debug, Deserialize)]
-struct HeartbeatRequest {
+pub(crate) struct HeartbeatRequest {
     project: Option<String>,
     environment: Option<String>,
     deployment_key: Option<String>,
@@ -43,7 +43,25 @@ pub fn router() -> Router<AppState> {
     Router::new().route("/open/heartbeats", post(report_heartbeat))
 }
 
-async fn report_heartbeat(
+#[utoipa::path(
+    post,
+    path = "/api/open/heartbeats",
+    tag = "open",
+    request_body = crate::openapi::HeartbeatRequestBody,
+    security(
+        ("bearer_auth" = [])
+    ),
+    responses(
+        (status = 200, description = "Heartbeat accepted", body = DeploymentSyncResponse),
+        (status = 400, description = "Invalid request body", body = crate::error::ErrorResponse),
+        (status = 401, description = "Missing or invalid bearer token", body = crate::error::ErrorResponse),
+        (status = 403, description = "Bearer token does not match target deployment", body = crate::error::ErrorResponse),
+        (status = 404, description = "Deployment not found", body = crate::error::ErrorResponse),
+        (status = 503, description = "Database bootstrap disabled", body = crate::error::ErrorResponse),
+        (status = 500, description = "Internal server error", body = crate::error::ErrorResponse),
+    )
+)]
+pub(crate) async fn report_heartbeat(
     State(state): State<AppState>,
     headers: HeaderMap,
     payload: Result<Json<HeartbeatRequest>, JsonRejection>,

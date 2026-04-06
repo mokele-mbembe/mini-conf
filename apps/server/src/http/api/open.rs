@@ -1,8 +1,8 @@
-mod configs;
-mod deployments;
-mod heartbeats;
-mod releases;
-mod sync_records;
+pub(crate) mod configs;
+pub(crate) mod deployments;
+pub(crate) mod heartbeats;
+pub(crate) mod releases;
+pub(crate) mod sync_records;
 
 use axum::Router;
 

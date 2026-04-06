@@ -1,8 +1,9 @@
 use domain::health::HealthStatus;
 use infra::AppIdentity;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct HealthzResponse {
     pub status: String,
     pub service: String,

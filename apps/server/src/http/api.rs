@@ -1,5 +1,5 @@
-mod health;
-mod open;
+pub(crate) mod health;
+pub(crate) mod open;
 
 use axum::Router;
 

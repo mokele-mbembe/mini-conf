@@ -15,7 +15,7 @@ use serde::Deserialize;
 use sqlx::Row;
 
 #[derive(Debug, Deserialize)]
-struct ResolveConfigQuery {
+pub(crate) struct ResolveConfigQuery {
     project: Option<String>,
     environment: Option<String>,
     deployment_key: Option<String>,
@@ -54,7 +54,26 @@ pub fn router() -> Router<AppState> {
     Router::new().route("/open/configs/resolve", get(resolve_config))
 }
 
-async fn resolve_config(
+#[utoipa::path(
+    get,
+    path = "/api/open/configs/resolve",
+    tag = "open",
+    params(crate::openapi::ResolveConfigParams),
+    security(
+        ("bearer_auth" = [])
+    ),
+    responses(
+        (status = 200, description = "Resolve latest release for one config", body = ResolveConfigResponse, headers(("etag" = String, description = "Entity tag for release content hash"))),
+        (status = 304, description = "Client already has the latest release", headers(("etag" = String, description = "Entity tag for release content hash"))),
+        (status = 400, description = "Invalid query parameters", body = crate::error::ErrorResponse),
+        (status = 401, description = "Missing or invalid bearer token", body = crate::error::ErrorResponse),
+        (status = 403, description = "Bearer token does not match target deployment", body = crate::error::ErrorResponse),
+        (status = 404, description = "Deployment, config file, or release not found", body = crate::error::ErrorResponse),
+        (status = 503, description = "Database bootstrap disabled", body = crate::error::ErrorResponse),
+        (status = 500, description = "Internal server error", body = crate::error::ErrorResponse),
+    )
+)]
+pub(crate) async fn resolve_config(
     State(state): State<AppState>,
     Query(query): Query<ResolveConfigQuery>,
     headers: HeaderMap,

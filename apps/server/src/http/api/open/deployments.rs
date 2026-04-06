@@ -15,7 +15,7 @@ use serde::Deserialize;
 use sqlx::Row;
 
 #[derive(Debug, Deserialize)]
-struct ConfigBundleQuery {
+pub(crate) struct ConfigBundleQuery {
     project: Option<String>,
     environment: Option<String>,
 }
@@ -39,7 +39,28 @@ pub fn router() -> Router<AppState> {
     )
 }
 
-async fn get_config_bundle(
+#[utoipa::path(
+    get,
+    path = "/api/open/deployments/{deployment_key}/config-bundle",
+    tag = "open",
+    params(
+        ("deployment_key" = String, Path, description = "Deployment instance key"),
+        crate::openapi::ConfigBundleParams
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    responses(
+        (status = 200, description = "Current config bundle for a deployment", body = ConfigBundleResponse),
+        (status = 400, description = "Invalid path or query parameters", body = crate::error::ErrorResponse),
+        (status = 401, description = "Missing or invalid bearer token", body = crate::error::ErrorResponse),
+        (status = 403, description = "Bearer token does not match target deployment", body = crate::error::ErrorResponse),
+        (status = 404, description = "Deployment not found", body = crate::error::ErrorResponse),
+        (status = 503, description = "Database bootstrap disabled", body = crate::error::ErrorResponse),
+        (status = 500, description = "Internal server error", body = crate::error::ErrorResponse),
+    )
+)]
+pub(crate) async fn get_config_bundle(
     State(state): State<AppState>,
     Path(deployment_key): Path<String>,
     Query(query): Query<ConfigBundleQuery>,

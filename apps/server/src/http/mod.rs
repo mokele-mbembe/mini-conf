@@ -1,4 +1,4 @@
-mod api;
+pub(crate) mod api;
 
 use crate::{error::ApiError, state::AppState};
 use axum::{Router, routing::get_service};
@@ -11,6 +11,7 @@ pub fn router(state: AppState) -> Router {
     let static_dir = state.config().static_dir().to_path_buf();
 
     let router = Router::new()
+        .merge(crate::openapi::router())
         .nest("/api", api::router())
         .with_state(state)
         .layer(TraceLayer::new_for_http());

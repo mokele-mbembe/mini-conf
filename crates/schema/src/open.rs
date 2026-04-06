@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct ResolveConfigResponse {
     pub project: String,
     pub environment: String,
@@ -10,13 +11,13 @@ pub struct ResolveConfigResponse {
     pub fetch: ResolveFetch,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct ResolveDeployment {
     pub key: String,
     pub name: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct ResolveRelease {
     pub revision: String,
     pub content_hash: String,
@@ -25,12 +26,12 @@ pub struct ResolveRelease {
     pub apply_mode: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct ResolveFetch {
     pub url: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct ReleaseContentResponse {
     pub release: ResolveRelease,
     pub deployment: ReleaseDeployment,
@@ -39,25 +40,25 @@ pub struct ReleaseContentResponse {
     pub metadata: ReleaseMetadata,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct ReleaseDeployment {
     pub project: String,
     pub environment: String,
     pub deployment_key: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct ReleaseConfig {
     pub name: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct ReleaseMetadata {
     pub schema_version: Option<String>,
     pub change_summary: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct ConfigBundleResponse {
     pub project: String,
     pub environment: String,
@@ -65,7 +66,7 @@ pub struct ConfigBundleResponse {
     pub configs: Vec<ConfigBundleItem>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct ConfigBundleItem {
     pub config: String,
     pub revision: String,
@@ -74,7 +75,7 @@ pub struct ConfigBundleItem {
     pub content: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct DeploymentSyncResponse {
     pub ok: bool,
 }
