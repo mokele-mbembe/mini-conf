@@ -40,6 +40,10 @@ impl ApiError {
         Self::new(StatusCode::FORBIDDEN, code, message)
     }
 
+    pub const fn unprocessable_entity(code: &'static str, message: &'static str) -> Self {
+        Self::new(StatusCode::UNPROCESSABLE_ENTITY, code, message)
+    }
+
     pub const fn conflict(code: &'static str, message: &'static str) -> Self {
         Self::new(StatusCode::CONFLICT, code, message)
     }

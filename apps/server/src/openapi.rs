@@ -3,11 +3,14 @@ use axum::Router;
 use schema::{
     auth::{AuthSessionResponse, AuthUser},
     config_file::{ConfigFileListResponse, ConfigFileSummary},
+    deployment_instance::{DeploymentInstanceListResponse, DeploymentInstanceSummary},
+    draft::DraftResponse,
     health::HealthzResponse,
     open::{
         ConfigBundleResponse, DeploymentSyncResponse, ReleaseContentResponse, ResolveConfigResponse,
     },
     project::{ProjectListResponse, ProjectSummary},
+    release::ReleaseSummary,
 };
 use std::{fs, path::Path, sync::OnceLock};
 use utoipa::{
@@ -37,10 +40,17 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
         crate::http::api::config_files::create_config_file,
         crate::http::api::config_files::get_config_file,
         crate::http::api::config_files::update_config_file,
+        crate::http::api::deployment_instances::list_deployment_instances,
+        crate::http::api::deployment_instances::create_deployment_instance,
+        crate::http::api::deployment_instances::get_deployment_instance,
+        crate::http::api::deployment_instances::update_deployment_instance,
+        crate::http::api::drafts::get_draft,
+        crate::http::api::drafts::put_draft,
         crate::http::api::projects::list_projects,
         crate::http::api::projects::create_project,
         crate::http::api::projects::get_project,
         crate::http::api::projects::update_project,
+        crate::http::api::releases::publish_release,
         crate::http::api::open::configs::resolve_config,
         crate::http::api::open::releases::get_release,
         crate::http::api::open::deployments::get_config_bundle,
@@ -54,19 +64,28 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
             AuthUser,
             ConfigFileSummary,
             ConfigFileListResponse,
+            DraftResponse,
+            DeploymentInstanceSummary,
+            DeploymentInstanceListResponse,
             HealthzResponse,
             ResolveConfigResponse,
             ReleaseContentResponse,
+            ReleaseSummary,
             ConfigBundleResponse,
             DeploymentSyncResponse,
             ProjectSummary,
             ProjectListResponse,
             LoginRequestBody,
             CreateConfigFileRequestBody,
+            CreateDeploymentInstanceRequestBody,
+            UpdateDraftRequestBody,
+            UpdateDeploymentInstanceRequestBody,
             UpdateConfigFileRequestBody,
             CreateProjectRequestBody,
             UpdateProjectRequestBody,
+            PublishReleaseRequestBody,
             ListConfigFilesParams,
+            ListDeploymentInstancesParams,
             ResolveConfigParams,
             ConfigBundleParams,
             DeploymentSyncRecordRequestBody,
@@ -125,6 +144,34 @@ pub struct CreateConfigFileRequestBody {
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
+pub struct CreateDeploymentInstanceRequestBody {
+    pub project_id: i64,
+    pub environment: String,
+    pub deployment_key: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub is_template: Option<bool>,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
+pub struct UpdateDeploymentInstanceRequestBody {
+    pub project_id: i64,
+    pub environment: String,
+    pub deployment_key: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub is_template: Option<bool>,
+    pub status: String,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
+pub struct UpdateDraftRequestBody {
+    pub content: String,
+    pub format: String,
+    pub base_version: Option<i64>,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
 pub struct UpdateConfigFileRequestBody {
     pub project_id: i64,
     pub code: String,
@@ -153,10 +200,26 @@ pub struct UpdateProjectRequestBody {
     pub status: String,
 }
 
+#[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
+pub struct PublishReleaseRequestBody {
+    pub project_id: i64,
+    pub deployment_instance_id: i64,
+    pub config_file_id: i64,
+    pub change_summary: Option<String>,
+}
+
 #[derive(Debug, IntoParams, ToSchema)]
 #[into_params(parameter_in = Query)]
 pub struct ListConfigFilesParams {
     pub project_id: Option<i64>,
+}
+
+#[derive(Debug, IntoParams, ToSchema)]
+#[into_params(parameter_in = Query)]
+pub struct ListDeploymentInstancesParams {
+    pub project_id: Option<i64>,
+    pub environment: Option<String>,
+    pub status: Option<String>,
 }
 
 #[derive(Debug, IntoParams, ToSchema)]
@@ -241,8 +304,12 @@ mod tests {
         assert!(paths.contains_key("/api/auth/me"));
         assert!(paths.contains_key("/api/config-files"));
         assert!(paths.contains_key("/api/config-files/{id}"));
+        assert!(paths.contains_key("/api/deployment-instances"));
+        assert!(paths.contains_key("/api/deployment-instances/{id}"));
+        assert!(paths.contains_key("/api/drafts/{deployment_id}/{config_file_id}"));
         assert!(paths.contains_key("/api/projects"));
         assert!(paths.contains_key("/api/projects/{id}"));
+        assert!(paths.contains_key("/api/releases/publish"));
         assert!(paths.contains_key("/api/open/configs/resolve"));
         assert!(paths.contains_key("/api/open/releases/{revision}"));
         assert!(paths.contains_key("/api/open/deployments/{deployment_key}/config-bundle"));
