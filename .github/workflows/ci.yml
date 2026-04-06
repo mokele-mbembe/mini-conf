@@ -30,6 +30,10 @@ jobs:
         if: ${{ hashFiles('Cargo.toml') != '' }}
         run: cargo install sqlx-cli --no-default-features --features rustls,postgres
 
+      - name: Install cargo-nextest
+        if: ${{ hashFiles('Cargo.toml') != '' }}
+        run: cargo install cargo-nextest
+
       - name: Set up pnpm
         if: ${{ hashFiles('package.json', 'pnpm-workspace.yaml', 'apps/web/package.json') != '' }}
         uses: pnpm/action-setup@v4
