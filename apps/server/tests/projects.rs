@@ -319,3 +319,177 @@ async fn get_project_returns_not_found_for_unknown_project() -> TestResult {
 
     teardown(&database_url, &schema, pool).await
 }
+
+#[tokio::test]
+async fn update_project_updates_existing_project() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    let row = sqlx::query(
+        "INSERT INTO projects (code, name, description, status) VALUES ('coffee-legacy', 'Coffee Legacy', 'Retail edge rollout', 'active') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await?;
+    let project_id: i64 = row.get("id");
+
+    let cookie = login(&app).await?;
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/api/projects/{project_id}"))
+                .header(header::COOKIE, cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"code":"coffee-retail","name":"Coffee Retail","description":"Updated rollout","status":"archived"}"#,
+                ))?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: ProjectSummary = read_json(response).await?;
+    assert_eq!(payload.code, "coffee-retail");
+    assert_eq!(payload.status, "archived");
+
+    let row = sqlx::query("SELECT code, name, description, status FROM projects WHERE id = $1")
+        .bind(project_id)
+        .fetch_one(&pool)
+        .await?;
+    assert_eq!(row.get::<String, _>("code"), "coffee-retail");
+    assert_eq!(row.get::<String, _>("name"), "Coffee Retail");
+    assert_eq!(
+        row.get::<Option<String>, _>("description").as_deref(),
+        Some("Updated rollout")
+    );
+    assert_eq!(row.get::<String, _>("status"), "archived");
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn update_project_returns_not_found_for_unknown_project() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    let cookie = login(&app).await?;
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/projects/999999")
+                .header(header::COOKIE, cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"code":"coffee-legacy","name":"Coffee Legacy","status":"active"}"#,
+                ))?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let payload: ErrorResponse = read_json(response).await?;
+    assert_eq!(
+        payload,
+        ErrorResponse {
+            code: "project_not_found".to_owned(),
+            message: "project not found".to_owned(),
+        }
+    );
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn project_crud_flow_persists_changes_across_endpoints() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    let cookie = login(&app).await?;
+
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/projects")
+                .header(header::COOKIE, &cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"code":"coffee-legacy","name":"Coffee Legacy","description":"Retail edge rollout"}"#,
+                ))?,
+        )
+        .await?;
+    assert_eq!(create_response.status(), StatusCode::CREATED);
+    let created: ProjectSummary = read_json(create_response).await?;
+
+    let list_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/projects")
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(list_response.status(), StatusCode::OK);
+    let listed: ProjectListResponse = read_json(list_response).await?;
+    assert_eq!(listed.items.len(), 1);
+    assert_eq!(listed.items[0].id, created.id);
+
+    let detail_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/projects/{}", created.id))
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(detail_response.status(), StatusCode::OK);
+    let detail: ProjectSummary = read_json(detail_response).await?;
+    assert_eq!(detail.code, "coffee-legacy");
+
+    let update_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/api/projects/{}", created.id))
+                .header(header::COOKIE, &cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"code":"coffee-retail","name":"Coffee Retail","description":"Updated rollout","status":"archived"}"#,
+                ))?,
+        )
+        .await?;
+    assert_eq!(update_response.status(), StatusCode::OK);
+    let updated: ProjectSummary = read_json(update_response).await?;
+    assert_eq!(updated.code, "coffee-retail");
+    assert_eq!(updated.status, "archived");
+
+    let detail_after_update = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/projects/{}", created.id))
+                .header(header::COOKIE, cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(detail_after_update.status(), StatusCode::OK);
+    let detail_after_update: ProjectSummary = read_json(detail_after_update).await?;
+    assert_eq!(detail_after_update.code, "coffee-retail");
+    assert_eq!(detail_after_update.name, "Coffee Retail");
+    assert_eq!(detail_after_update.status, "archived");
+
+    let row = sqlx::query("SELECT code, status FROM projects WHERE id = $1")
+        .bind(created.id)
+        .fetch_one(&pool)
+        .await?;
+    assert_eq!(row.get::<String, _>("code"), "coffee-retail");
+    assert_eq!(row.get::<String, _>("status"), "archived");
+
+    teardown(&database_url, &schema, pool).await
+}

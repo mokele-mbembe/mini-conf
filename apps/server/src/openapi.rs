@@ -2,6 +2,7 @@ use crate::{error::ErrorResponse, state::AppState};
 use axum::Router;
 use schema::{
     auth::{AuthSessionResponse, AuthUser},
+    config_file::{ConfigFileListResponse, ConfigFileSummary},
     health::HealthzResponse,
     open::{
         ConfigBundleResponse, DeploymentSyncResponse, ReleaseContentResponse, ResolveConfigResponse,
@@ -32,9 +33,12 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
         crate::http::api::auth::login,
         crate::http::api::auth::logout,
         crate::http::api::auth::me,
+        crate::http::api::config_files::list_config_files,
+        crate::http::api::config_files::create_config_file,
         crate::http::api::projects::list_projects,
         crate::http::api::projects::create_project,
         crate::http::api::projects::get_project,
+        crate::http::api::projects::update_project,
         crate::http::api::open::configs::resolve_config,
         crate::http::api::open::releases::get_release,
         crate::http::api::open::deployments::get_config_bundle,
@@ -46,6 +50,8 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
             ErrorResponse,
             AuthSessionResponse,
             AuthUser,
+            ConfigFileSummary,
+            ConfigFileListResponse,
             HealthzResponse,
             ResolveConfigResponse,
             ReleaseContentResponse,
@@ -54,7 +60,10 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
             ProjectSummary,
             ProjectListResponse,
             LoginRequestBody,
+            CreateConfigFileRequestBody,
             CreateProjectRequestBody,
+            UpdateProjectRequestBody,
+            ListConfigFilesParams,
             ResolveConfigParams,
             ConfigBundleParams,
             DeploymentSyncRecordRequestBody,
@@ -100,10 +109,37 @@ pub struct LoginRequestBody {
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
+pub struct CreateConfigFileRequestBody {
+    pub project_id: i64,
+    pub code: String,
+    pub name: String,
+    pub format: String,
+    pub schema_name: Option<String>,
+    pub schema_version: Option<String>,
+    pub sensitivity: Option<String>,
+    pub secret_paths: Option<Vec<String>>,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
 pub struct CreateProjectRequestBody {
     pub code: String,
     pub name: String,
     pub description: Option<String>,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
+pub struct UpdateProjectRequestBody {
+    pub code: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub status: String,
+}
+
+#[derive(Debug, IntoParams, ToSchema)]
+#[into_params(parameter_in = Query)]
+pub struct ListConfigFilesParams {
+    pub project_id: Option<i64>,
 }
 
 #[derive(Debug, IntoParams, ToSchema)]
@@ -186,6 +222,7 @@ mod tests {
         assert!(paths.contains_key("/api/auth/login"));
         assert!(paths.contains_key("/api/auth/logout"));
         assert!(paths.contains_key("/api/auth/me"));
+        assert!(paths.contains_key("/api/config-files"));
         assert!(paths.contains_key("/api/projects"));
         assert!(paths.contains_key("/api/projects/{id}"));
         assert!(paths.contains_key("/api/open/configs/resolve"));
