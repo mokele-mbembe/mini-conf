@@ -370,4 +370,74 @@ mod tests {
             }
         );
     }
+
+    #[tokio::test]
+    async fn open_heartbeat_requires_required_body_fields() {
+        let app = test_app();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/open/heartbeats")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        r#"{"project":"coffee-legacy","environment":"prod","deployment_key":"store-001"}"#,
+                    ))
+                    .expect("request should build"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should be readable");
+        let payload: ErrorResponse =
+            serde_json::from_slice(&body).expect("payload should be valid json");
+
+        assert_eq!(
+            payload,
+            ErrorResponse {
+                code: "invalid_request".to_owned(),
+                message: "missing required body field: process_key".to_owned(),
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn open_heartbeat_requires_database_bootstrap() {
+        let app = test_app();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/open/heartbeats")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        r#"{"project":"coffee-legacy","environment":"prod","deployment_key":"store-001","process_key":"vision"}"#,
+                    ))
+                    .expect("request should build"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should be readable");
+        let payload: ErrorResponse =
+            serde_json::from_slice(&body).expect("payload should be valid json");
+
+        assert_eq!(
+            payload,
+            ErrorResponse {
+                code: "database_unavailable".to_owned(),
+                message: "Database bootstrap is disabled".to_owned(),
+            }
+        );
+    }
 }

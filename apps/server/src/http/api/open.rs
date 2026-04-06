@@ -1,5 +1,6 @@
 mod configs;
 mod deployments;
+mod heartbeats;
 mod releases;
 mod sync_records;
 
@@ -9,6 +10,7 @@ pub fn router() -> Router<crate::state::AppState> {
     Router::new()
         .merge(configs::router())
         .merge(deployments::router())
+        .merge(heartbeats::router())
         .merge(releases::router())
         .merge(sync_records::router())
 }
