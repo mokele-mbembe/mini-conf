@@ -2,9 +2,12 @@ use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode, header},
 };
-use schema::{auth::AuthSessionResponse, project::ProjectListResponse};
+use schema::{
+    auth::AuthSessionResponse,
+    project::{ProjectListResponse, ProjectSummary},
+};
 use server::{bootstrap, config::AppConfig, error::ErrorResponse};
-use sqlx::{Connection, Executor, PgConnection, PgPool};
+use sqlx::{Connection, Executor, PgConnection, PgPool, Row};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tower::util::ServiceExt;
 
@@ -173,6 +176,84 @@ async fn list_projects_returns_active_projects_for_authenticated_session() -> Te
     );
     assert_eq!(payload.items[1].code, "store-os");
     assert_eq!(payload.items[1].status, "active");
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn create_project_creates_active_project_for_authenticated_session() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    let cookie = login(&app).await?;
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/projects")
+                .header(header::COOKIE, cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"code":"store-os","name":"Store OS","description":"Ops control plane"}"#,
+                ))?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let payload: ProjectSummary = read_json(response).await?;
+    assert_eq!(payload.code, "store-os");
+    assert_eq!(payload.status, "active");
+
+    let row = sqlx::query("SELECT code, name, description, status FROM projects WHERE code = $1")
+        .bind("store-os")
+        .fetch_one(&pool)
+        .await?;
+    assert_eq!(row.get::<String, _>("code"), "store-os");
+    assert_eq!(row.get::<String, _>("name"), "Store OS");
+    assert_eq!(
+        row.get::<Option<String>, _>("description").as_deref(),
+        Some("Ops control plane")
+    );
+    assert_eq!(row.get::<String, _>("status"), "active");
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn create_project_rejects_duplicate_project_code() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    sqlx::query("INSERT INTO projects (code, name, status) VALUES ('coffee-legacy', 'Coffee Legacy', 'active')")
+        .execute(&pool)
+        .await?;
+
+    let cookie = login(&app).await?;
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/projects")
+                .header(header::COOKIE, cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"code":"coffee-legacy","name":"Coffee Legacy Duplicate"}"#,
+                ))?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let payload: ErrorResponse = read_json(response).await?;
+    assert_eq!(
+        payload,
+        ErrorResponse {
+            code: "project_code_conflict".to_owned(),
+            message: "project code already exists".to_owned(),
+        }
+    );
 
     teardown(&database_url, &schema, pool).await
 }

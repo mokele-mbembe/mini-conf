@@ -33,6 +33,7 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
         crate::http::api::auth::logout,
         crate::http::api::auth::me,
         crate::http::api::projects::list_projects,
+        crate::http::api::projects::create_project,
         crate::http::api::open::configs::resolve_config,
         crate::http::api::open::releases::get_release,
         crate::http::api::open::deployments::get_config_bundle,
@@ -52,6 +53,7 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
             ProjectSummary,
             ProjectListResponse,
             LoginRequestBody,
+            CreateProjectRequestBody,
             ResolveConfigParams,
             ConfigBundleParams,
             DeploymentSyncRecordRequestBody,
@@ -94,6 +96,13 @@ impl Modify for SecurityAddon {
 pub struct LoginRequestBody {
     pub username: String,
     pub password: String,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
+pub struct CreateProjectRequestBody {
+    pub code: String,
+    pub name: String,
+    pub description: Option<String>,
 }
 
 #[derive(Debug, IntoParams, ToSchema)]

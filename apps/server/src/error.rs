@@ -40,6 +40,10 @@ impl ApiError {
         Self::new(StatusCode::FORBIDDEN, code, message)
     }
 
+    pub const fn conflict(code: &'static str, message: &'static str) -> Self {
+        Self::new(StatusCode::CONFLICT, code, message)
+    }
+
     pub const fn not_found() -> Self {
         Self::new(StatusCode::NOT_FOUND, "route_not_found", "Route not found")
     }
