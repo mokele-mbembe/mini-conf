@@ -34,6 +34,7 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
         crate::http::api::auth::me,
         crate::http::api::projects::list_projects,
         crate::http::api::projects::create_project,
+        crate::http::api::projects::get_project,
         crate::http::api::open::configs::resolve_config,
         crate::http::api::open::releases::get_release,
         crate::http::api::open::deployments::get_config_bundle,
@@ -186,6 +187,7 @@ mod tests {
         assert!(paths.contains_key("/api/auth/logout"));
         assert!(paths.contains_key("/api/auth/me"));
         assert!(paths.contains_key("/api/projects"));
+        assert!(paths.contains_key("/api/projects/{id}"));
         assert!(paths.contains_key("/api/open/configs/resolve"));
         assert!(paths.contains_key("/api/open/releases/{revision}"));
         assert!(paths.contains_key("/api/open/deployments/{deployment_key}/config-bundle"));

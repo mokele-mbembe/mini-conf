@@ -1,7 +1,7 @@
 use crate::{auth::authenticate_admin_session, error::ApiError, state::AppState};
 use axum::{
     Json, Router,
-    extract::{State, rejection::JsonRejection},
+    extract::{Path, State, rejection::JsonRejection},
     http::StatusCode,
     http::{HeaderMap, header},
     routing::get,
@@ -25,7 +25,9 @@ struct ValidatedCreateProjectRequest {
 }
 
 pub fn router() -> Router<AppState> {
-    Router::new().route("/projects", get(list_projects).post(create_project))
+    Router::new()
+        .route("/projects", get(list_projects).post(create_project))
+        .route("/projects/{id}", get(get_project))
 }
 
 #[utoipa::path(
@@ -85,6 +87,67 @@ pub(crate) async fn list_projects(
         .collect();
 
     Ok(Json(ProjectListResponse { items }))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/projects/{id}",
+    tag = "admin",
+    params(
+        ("id" = i64, Path, description = "Project ID")
+    ),
+    security(
+        ("session_auth" = [])
+    ),
+    responses(
+        (status = 200, description = "Project detail", body = ProjectSummary),
+        (status = 401, description = "Missing or expired admin session", body = crate::error::ErrorResponse),
+        (status = 404, description = "Project not found", body = crate::error::ErrorResponse),
+        (status = 503, description = "Database bootstrap disabled", body = crate::error::ErrorResponse),
+        (status = 500, description = "Internal server error", body = crate::error::ErrorResponse),
+    )
+)]
+pub(crate) async fn get_project(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    headers: HeaderMap,
+) -> Result<Json<ProjectSummary>, ApiError> {
+    let Some(pool) = state.db_pool() else {
+        return Err(ApiError::service_unavailable(
+            "database_unavailable",
+            "Database bootstrap is disabled",
+        ));
+    };
+
+    authenticate_admin_session(
+        pool,
+        headers
+            .get(header::COOKIE)
+            .and_then(|value| value.to_str().ok()),
+    )
+    .await?;
+
+    let row = sqlx::query(
+        r#"
+        SELECT id, code, name, description, status
+        FROM projects
+        WHERE id = $1
+        LIMIT 1
+        "#,
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| ApiError::internal())?
+    .ok_or_else(|| ApiError::not_found_with("project_not_found", "project not found"))?;
+
+    Ok(Json(ProjectSummary {
+        id: row.get("id"),
+        code: row.get("code"),
+        name: row.get("name"),
+        description: row.get("description"),
+        status: row.get("status"),
+    }))
 }
 
 #[utoipa::path(

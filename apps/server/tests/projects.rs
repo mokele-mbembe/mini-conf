@@ -257,3 +257,65 @@ async fn create_project_rejects_duplicate_project_code() -> TestResult {
 
     teardown(&database_url, &schema, pool).await
 }
+
+#[tokio::test]
+async fn get_project_returns_project_detail_for_authenticated_session() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    let row = sqlx::query(
+        "INSERT INTO projects (code, name, description, status) VALUES ('coffee-legacy', 'Coffee Legacy', 'Retail edge rollout', 'active') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await?;
+    let project_id: i64 = row.get("id");
+
+    let cookie = login(&app).await?;
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/projects/{project_id}"))
+                .header(header::COOKIE, cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: ProjectSummary = read_json(response).await?;
+    assert_eq!(payload.id, project_id);
+    assert_eq!(payload.code, "coffee-legacy");
+    assert_eq!(payload.name, "Coffee Legacy");
+    assert_eq!(payload.description.as_deref(), Some("Retail edge rollout"));
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn get_project_returns_not_found_for_unknown_project() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    let cookie = login(&app).await?;
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/projects/999999")
+                .header(header::COOKIE, cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let payload: ErrorResponse = read_json(response).await?;
+    assert_eq!(
+        payload,
+        ErrorResponse {
+            code: "project_not_found".to_owned(),
+            message: "project not found".to_owned(),
+        }
+    );
+
+    teardown(&database_url, &schema, pool).await
+}
