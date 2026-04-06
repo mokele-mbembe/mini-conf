@@ -1,7 +1,7 @@
 use crate::{auth::authenticate_admin_session, error::ApiError, state::AppState};
 use axum::{
     Json, Router,
-    extract::{Query, State, rejection::JsonRejection},
+    extract::{Path, Query, State, rejection::JsonRejection},
     http::{HeaderMap, StatusCode, header},
     routing::get,
 };
@@ -40,11 +40,44 @@ struct ValidatedCreateConfigFileRequest {
     description: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct UpdateConfigFileRequest {
+    project_id: Option<i64>,
+    code: Option<String>,
+    name: Option<String>,
+    format: Option<String>,
+    schema_name: Option<String>,
+    schema_version: Option<String>,
+    sensitivity: Option<String>,
+    secret_paths: Option<Vec<String>>,
+    description: Option<String>,
+    status: Option<String>,
+}
+
+#[derive(Debug)]
+struct ValidatedUpdateConfigFileRequest {
+    project_id: i64,
+    code: String,
+    name: String,
+    format: String,
+    schema_name: Option<String>,
+    schema_version: Option<String>,
+    sensitivity: String,
+    secret_paths: Option<Vec<String>>,
+    description: Option<String>,
+    status: String,
+}
+
 pub fn router() -> Router<AppState> {
-    Router::new().route(
-        "/config-files",
-        get(list_config_files).post(create_config_file),
-    )
+    Router::new()
+        .route(
+            "/config-files",
+            get(list_config_files).post(create_config_file),
+        )
+        .route(
+            "/config-files/{id}",
+            get(get_config_file).put(update_config_file),
+        )
 }
 
 #[utoipa::path(
@@ -199,6 +232,167 @@ pub(crate) async fn create_config_file(
     Ok((StatusCode::CREATED, Json(map_config_file_row(row))))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/config-files/{id}",
+    tag = "admin",
+    params(
+        ("id" = i64, Path, description = "Config file ID")
+    ),
+    security(
+        ("session_auth" = [])
+    ),
+    responses(
+        (status = 200, description = "Config file detail", body = ConfigFileSummary),
+        (status = 401, description = "Missing or expired admin session", body = crate::error::ErrorResponse),
+        (status = 404, description = "Config file not found", body = crate::error::ErrorResponse),
+        (status = 503, description = "Database bootstrap disabled", body = crate::error::ErrorResponse),
+        (status = 500, description = "Internal server error", body = crate::error::ErrorResponse),
+    )
+)]
+pub(crate) async fn get_config_file(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    headers: HeaderMap,
+) -> Result<Json<ConfigFileSummary>, ApiError> {
+    let Some(pool) = state.db_pool() else {
+        return Err(ApiError::service_unavailable(
+            "database_unavailable",
+            "Database bootstrap is disabled",
+        ));
+    };
+
+    authenticate_admin_session(
+        pool,
+        headers
+            .get(header::COOKIE)
+            .and_then(|value| value.to_str().ok()),
+    )
+    .await?;
+
+    let row = sqlx::query(
+        r#"
+        SELECT
+            id,
+            project_id,
+            code,
+            name,
+            format,
+            schema_name,
+            schema_version,
+            sensitivity,
+            secret_paths,
+            description,
+            status
+        FROM config_files
+        WHERE id = $1
+        LIMIT 1
+        "#,
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| ApiError::internal())?
+    .ok_or_else(|| ApiError::not_found_with("config_file_not_found", "config file not found"))?;
+
+    Ok(Json(map_config_file_row(row)))
+}
+
+#[utoipa::path(
+    put,
+    path = "/api/config-files/{id}",
+    tag = "admin",
+    params(
+        ("id" = i64, Path, description = "Config file ID")
+    ),
+    request_body = crate::openapi::UpdateConfigFileRequestBody,
+    security(
+        ("session_auth" = [])
+    ),
+    responses(
+        (status = 200, description = "Config file updated", body = ConfigFileSummary),
+        (status = 400, description = "Invalid request body", body = crate::error::ErrorResponse),
+        (status = 401, description = "Missing or expired admin session", body = crate::error::ErrorResponse),
+        (status = 404, description = "Project or config file not found", body = crate::error::ErrorResponse),
+        (status = 409, description = "Config file code already exists within the project", body = crate::error::ErrorResponse),
+        (status = 503, description = "Database bootstrap disabled", body = crate::error::ErrorResponse),
+        (status = 500, description = "Internal server error", body = crate::error::ErrorResponse),
+    )
+)]
+pub(crate) async fn update_config_file(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    headers: HeaderMap,
+    payload: Result<Json<UpdateConfigFileRequest>, JsonRejection>,
+) -> Result<Json<ConfigFileSummary>, ApiError> {
+    let Json(payload) =
+        payload.map_err(|_| ApiError::bad_request("invalid_request", "invalid request body"))?;
+    let payload = payload.validate()?;
+
+    let Some(pool) = state.db_pool() else {
+        return Err(ApiError::service_unavailable(
+            "database_unavailable",
+            "Database bootstrap is disabled",
+        ));
+    };
+
+    authenticate_admin_session(
+        pool,
+        headers
+            .get(header::COOKIE)
+            .and_then(|value| value.to_str().ok()),
+    )
+    .await?;
+
+    let row = sqlx::query(
+        r#"
+        UPDATE config_files
+        SET
+            project_id = $2,
+            code = $3,
+            name = $4,
+            format = $5,
+            schema_name = $6,
+            schema_version = $7,
+            sensitivity = $8,
+            secret_paths = $9,
+            description = $10,
+            status = $11,
+            updated_at = NOW()
+        WHERE id = $1
+        RETURNING
+            id,
+            project_id,
+            code,
+            name,
+            format,
+            schema_name,
+            schema_version,
+            sensitivity,
+            secret_paths,
+            description,
+            status
+        "#,
+    )
+    .bind(id)
+    .bind(payload.project_id)
+    .bind(payload.code)
+    .bind(payload.name)
+    .bind(payload.format)
+    .bind(payload.schema_name)
+    .bind(payload.schema_version)
+    .bind(payload.sensitivity)
+    .bind(payload.secret_paths.map(SqlxJson))
+    .bind(payload.description)
+    .bind(payload.status)
+    .fetch_optional(pool)
+    .await
+    .map_err(map_config_file_write_error)?
+    .ok_or_else(|| ApiError::not_found_with("config_file_not_found", "config file not found"))?;
+
+    Ok(Json(map_config_file_row(row)))
+}
+
 impl CreateConfigFileRequest {
     fn validate(self) -> Result<ValidatedCreateConfigFileRequest, ApiError> {
         Ok(ValidatedCreateConfigFileRequest {
@@ -211,6 +405,23 @@ impl CreateConfigFileRequest {
             sensitivity: validate_sensitivity(self.sensitivity)?,
             secret_paths: normalize_secret_paths(self.secret_paths),
             description: normalize_optional(self.description),
+        })
+    }
+}
+
+impl UpdateConfigFileRequest {
+    fn validate(self) -> Result<ValidatedUpdateConfigFileRequest, ApiError> {
+        Ok(ValidatedUpdateConfigFileRequest {
+            project_id: required_i64(self.project_id, "project_id")?,
+            code: required(self.code, "code")?,
+            name: required(self.name, "name")?,
+            format: required(self.format, "format")?,
+            schema_name: normalize_optional(self.schema_name),
+            schema_version: normalize_optional(self.schema_version),
+            sensitivity: validate_sensitivity(self.sensitivity)?,
+            secret_paths: normalize_secret_paths(self.secret_paths),
+            description: normalize_optional(self.description),
+            status: validate_status(self.status)?,
         })
     }
 }
@@ -310,12 +521,30 @@ fn validate_sensitivity(value: Option<String>) -> Result<String, ApiError> {
     }
 }
 
+fn validate_status(value: Option<String>) -> Result<String, ApiError> {
+    let Some(value) = normalize_optional(value) else {
+        return Err(ApiError::bad_request(
+            "invalid_request",
+            invalid_body_message("status"),
+        ));
+    };
+
+    match value.as_str() {
+        "active" | "archived" => Ok(value),
+        _ => Err(ApiError::bad_request(
+            "invalid_request",
+            "invalid config file status",
+        )),
+    }
+}
+
 fn invalid_body_message(field: &'static str) -> &'static str {
     match field {
         "project_id" => "missing required body field: project_id",
         "code" => "missing required body field: code",
         "name" => "missing required body field: name",
         "format" => "missing required body field: format",
+        "status" => "missing required body field: status",
         _ => "missing required body field",
     }
 }

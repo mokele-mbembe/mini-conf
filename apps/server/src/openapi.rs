@@ -35,6 +35,8 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
         crate::http::api::auth::me,
         crate::http::api::config_files::list_config_files,
         crate::http::api::config_files::create_config_file,
+        crate::http::api::config_files::get_config_file,
+        crate::http::api::config_files::update_config_file,
         crate::http::api::projects::list_projects,
         crate::http::api::projects::create_project,
         crate::http::api::projects::get_project,
@@ -61,6 +63,7 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
             ProjectListResponse,
             LoginRequestBody,
             CreateConfigFileRequestBody,
+            UpdateConfigFileRequestBody,
             CreateProjectRequestBody,
             UpdateProjectRequestBody,
             ListConfigFilesParams,
@@ -119,6 +122,20 @@ pub struct CreateConfigFileRequestBody {
     pub sensitivity: Option<String>,
     pub secret_paths: Option<Vec<String>>,
     pub description: Option<String>,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
+pub struct UpdateConfigFileRequestBody {
+    pub project_id: i64,
+    pub code: String,
+    pub name: String,
+    pub format: String,
+    pub schema_name: Option<String>,
+    pub schema_version: Option<String>,
+    pub sensitivity: Option<String>,
+    pub secret_paths: Option<Vec<String>>,
+    pub description: Option<String>,
+    pub status: String,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
@@ -223,6 +240,7 @@ mod tests {
         assert!(paths.contains_key("/api/auth/logout"));
         assert!(paths.contains_key("/api/auth/me"));
         assert!(paths.contains_key("/api/config-files"));
+        assert!(paths.contains_key("/api/config-files/{id}"));
         assert!(paths.contains_key("/api/projects"));
         assert!(paths.contains_key("/api/projects/{id}"));
         assert!(paths.contains_key("/api/open/configs/resolve"));

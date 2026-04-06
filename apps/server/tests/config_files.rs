@@ -304,3 +304,195 @@ async fn create_config_file_returns_project_not_found_for_unknown_project() -> T
 
     teardown(&database_url, &schema, pool).await
 }
+
+#[tokio::test]
+async fn get_config_file_returns_detail_for_authenticated_session() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    let project_id: i64 = sqlx::query_scalar(
+        "INSERT INTO projects (code, name, status) VALUES ('coffee-legacy', 'Coffee Legacy', 'active') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await?;
+    let config_file_id: i64 = sqlx::query_scalar(
+        "INSERT INTO config_files (project_id, code, name, format, sensitivity, status) VALUES ($1, 'main', 'Main Config', 'yaml', 'normal', 'active') RETURNING id",
+    )
+    .bind(project_id)
+    .fetch_one(&pool)
+    .await?;
+
+    let cookie = login(&app).await?;
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/config-files/{config_file_id}"))
+                .header(header::COOKIE, cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: ConfigFileSummary = read_json(response).await?;
+    assert_eq!(payload.id, config_file_id);
+    assert_eq!(payload.project_id, project_id);
+    assert_eq!(payload.code, "main");
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn update_config_file_updates_existing_row() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    let project_id: i64 = sqlx::query_scalar(
+        "INSERT INTO projects (code, name, status) VALUES ('coffee-legacy', 'Coffee Legacy', 'active') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await?;
+    let config_file_id: i64 = sqlx::query_scalar(
+        "INSERT INTO config_files (project_id, code, name, format, sensitivity, status) VALUES ($1, 'main', 'Main Config', 'yaml', 'normal', 'active') RETURNING id",
+    )
+    .bind(project_id)
+    .fetch_one(&pool)
+    .await?;
+
+    let cookie = login(&app).await?;
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/api/config-files/{config_file_id}"))
+                .header(header::COOKIE, cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(format!(
+                    r#"{{"project_id":{project_id},"code":"main-v2","name":"Main Config V2","format":"json","schema_name":"coffee-main","schema_version":"v2","sensitivity":"secret","secret_paths":["$.wifi.password"],"description":"Updated config","status":"archived"}}"#
+                )))?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: ConfigFileSummary = read_json(response).await?;
+    assert_eq!(payload.code, "main-v2");
+    assert_eq!(payload.format, "json");
+    assert_eq!(payload.status, "archived");
+
+    let row = sqlx::query(
+        "SELECT code, format, schema_version, sensitivity, status FROM config_files WHERE id = $1",
+    )
+    .bind(config_file_id)
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(row.get::<String, _>("code"), "main-v2");
+    assert_eq!(row.get::<String, _>("format"), "json");
+    assert_eq!(
+        row.get::<Option<String>, _>("schema_version").as_deref(),
+        Some("v2")
+    );
+    assert_eq!(row.get::<String, _>("sensitivity"), "secret");
+    assert_eq!(row.get::<String, _>("status"), "archived");
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn config_file_crud_flow_persists_changes_across_endpoints() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    let project_id: i64 = sqlx::query_scalar(
+        "INSERT INTO projects (code, name, status) VALUES ('coffee-legacy', 'Coffee Legacy', 'active') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await?;
+    let cookie = login(&app).await?;
+
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/config-files")
+                .header(header::COOKIE, &cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(format!(
+                    r#"{{"project_id":{project_id},"code":"main","name":"Main Config","format":"yaml","description":"Primary config"}}"#
+                )))?,
+        )
+        .await?;
+    assert_eq!(create_response.status(), StatusCode::CREATED);
+    let created: ConfigFileSummary = read_json(create_response).await?;
+
+    let list_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/config-files?project_id={project_id}"))
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(list_response.status(), StatusCode::OK);
+    let listed: ConfigFileListResponse = read_json(list_response).await?;
+    assert_eq!(listed.items.len(), 1);
+    assert_eq!(listed.items[0].id, created.id);
+
+    let detail_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/config-files/{}", created.id))
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(detail_response.status(), StatusCode::OK);
+    let detail: ConfigFileSummary = read_json(detail_response).await?;
+    assert_eq!(detail.code, "main");
+
+    let update_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/api/config-files/{}", created.id))
+                .header(header::COOKIE, &cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(format!(
+                    r#"{{"project_id":{project_id},"code":"main-v2","name":"Main Config V2","format":"json","sensitivity":"secret","secret_paths":["$.wifi.password"],"description":"Updated config","status":"archived"}}"#
+                )))?,
+        )
+        .await?;
+    assert_eq!(update_response.status(), StatusCode::OK);
+    let updated: ConfigFileSummary = read_json(update_response).await?;
+    assert_eq!(updated.code, "main-v2");
+    assert_eq!(updated.status, "archived");
+
+    let detail_after_update = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/config-files/{}", created.id))
+                .header(header::COOKIE, cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(detail_after_update.status(), StatusCode::OK);
+    let detail_after_update: ConfigFileSummary = read_json(detail_after_update).await?;
+    assert_eq!(detail_after_update.code, "main-v2");
+    assert_eq!(detail_after_update.format, "json");
+    assert_eq!(detail_after_update.status, "archived");
+
+    let row = sqlx::query("SELECT code, status FROM config_files WHERE id = $1")
+        .bind(created.id)
+        .fetch_one(&pool)
+        .await?;
+    assert_eq!(row.get::<String, _>("code"), "main-v2");
+    assert_eq!(row.get::<String, _>("status"), "archived");
+
+    teardown(&database_url, &schema, pool).await
+}

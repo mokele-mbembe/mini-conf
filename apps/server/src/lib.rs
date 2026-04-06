@@ -443,6 +443,41 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn update_config_file_requires_required_body_fields() {
+        let app = test_app();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::PUT)
+                    .uri("/api/config-files/1")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        r#"{"project_id":1,"code":"main","name":"Main Config","format":"yaml"}"#,
+                    ))
+                    .expect("request should build"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should be readable");
+        let payload: ErrorResponse =
+            serde_json::from_slice(&body).expect("payload should be valid json");
+
+        assert_eq!(
+            payload,
+            ErrorResponse {
+                code: "invalid_request".to_owned(),
+                message: "missing required body field: status".to_owned(),
+            }
+        );
+    }
+
+    #[tokio::test]
     async fn open_config_bundle_requires_required_query_parameters() {
         let app = test_app();
 
