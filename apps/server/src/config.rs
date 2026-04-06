@@ -41,6 +41,8 @@ pub struct AppConfig {
     pub http_addr: String,
     pub database_url: String,
     pub init_db_on_boot: bool,
+    pub init_admin_username: Option<String>,
+    pub init_admin_password: Option<String>,
     pub static_dir: PathBuf,
     pub openapi_export_path: PathBuf,
 }
@@ -52,6 +54,8 @@ impl Default for AppConfig {
             http_addr: DEFAULT_HTTP_ADDR.to_owned(),
             database_url: DEFAULT_DATABASE_URL.to_owned(),
             init_db_on_boot: DEFAULT_INIT_DB_ON_BOOT,
+            init_admin_username: None,
+            init_admin_password: None,
             static_dir: PathBuf::from(DEFAULT_STATIC_DIR),
             openapi_export_path: PathBuf::from(DEFAULT_OPENAPI_EXPORT_PATH),
         }
@@ -85,6 +89,14 @@ impl AppConfig {
             config.init_db_on_boot = parse_bool("INIT_DB_ON_BOOT", &value)?;
         }
 
+        if let Some(value) = lookup("INIT_ADMIN_USERNAME") {
+            config.init_admin_username = non_empty(value);
+        }
+
+        if let Some(value) = lookup("INIT_ADMIN_PASSWORD") {
+            config.init_admin_password = non_empty(value);
+        }
+
         if let Some(value) = lookup("STATIC_DIR") {
             config.static_dir = PathBuf::from(value);
         }
@@ -102,6 +114,15 @@ impl AppConfig {
 
     pub fn openapi_export_path(&self) -> &Path {
         &self.openapi_export_path
+    }
+}
+
+fn non_empty(value: String) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_owned())
     }
 }
 
@@ -123,6 +144,13 @@ impl ConfigError {
         Self {
             field,
             message: format!("unsupported {field} value: {value}"),
+        }
+    }
+
+    pub fn from_seed(field: &'static str, message: &'static str) -> Self {
+        Self {
+            field,
+            message: message.to_owned(),
         }
     }
 
@@ -178,6 +206,8 @@ mod tests {
                 http_addr: "0.0.0.0:8080".to_owned(),
                 database_url: "postgres://mini_conf:secret@127.0.0.1:5432/mini_conf".to_owned(),
                 init_db_on_boot: false,
+                init_admin_username: None,
+                init_admin_password: None,
                 static_dir: PathBuf::from("apps/web/dist"),
                 openapi_export_path: PathBuf::from("docs/openapi/openapi.json"),
             }
@@ -213,6 +243,8 @@ mod tests {
                 http_addr: "127.0.0.1:9090".to_owned(),
                 database_url: "postgres://db.example/mini_conf".to_owned(),
                 init_db_on_boot: true,
+                init_admin_username: None,
+                init_admin_password: None,
                 static_dir: PathBuf::from("var/web"),
                 openapi_export_path: PathBuf::from("var/openapi.json"),
             }
@@ -353,6 +385,8 @@ mod tests {
                 http_addr: "127.0.0.1:7001".to_owned(),
                 database_url: "postgres://override/mini_conf".to_owned(),
                 init_db_on_boot: true,
+                init_admin_username: None,
+                init_admin_password: None,
                 static_dir: PathBuf::from("tmp/static"),
                 openapi_export_path: PathBuf::from("tmp/openapi.json"),
             }

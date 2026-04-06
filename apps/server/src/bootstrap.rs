@@ -1,5 +1,6 @@
 use crate::{
     app,
+    auth::hash_password,
     config::{AppConfig, ConfigError},
     state::AppState,
 };
@@ -83,6 +84,7 @@ pub async fn build_state(config: AppConfig) -> Result<AppState, StartupError> {
         tracing::info!("database connected; applying migrations");
         MIGRATOR.run(&pool).await?;
         tracing::info!("database migrations applied");
+        seed_admin_if_configured(&pool, &config).await?;
 
         Some(pool)
     } else {
@@ -109,6 +111,41 @@ pub async fn run(state: AppState) -> Result<(), StartupError> {
     );
 
     axum::serve(listener, app(state)).await?;
+
+    Ok(())
+}
+
+async fn seed_admin_if_configured(pool: &PgPool, config: &AppConfig) -> Result<(), StartupError> {
+    let (Some(username), Some(password)) = (
+        config.init_admin_username.as_deref(),
+        config.init_admin_password.as_deref(),
+    ) else {
+        return Ok(());
+    };
+
+    tracing::info!(username, "seeding bootstrap admin user");
+    let password_hash = hash_password(password).map_err(|_| {
+        StartupError::Config(ConfigError::from_seed(
+            "INIT_ADMIN_PASSWORD",
+            "failed to hash admin password",
+        ))
+    })?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO users (username, password_hash, status)
+        VALUES ($1, $2, 'active')
+        ON CONFLICT (username)
+        DO UPDATE SET
+            password_hash = EXCLUDED.password_hash,
+            status = 'active',
+            updated_at = NOW()
+        "#,
+    )
+    .bind(username)
+    .bind(password_hash)
+    .execute(pool)
+    .await?;
 
     Ok(())
 }

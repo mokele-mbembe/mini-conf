@@ -1,11 +1,25 @@
 use crate::error::ApiError;
-use axum::http::{HeaderMap, header};
+use argon2::{
+    Argon2, PasswordHash, PasswordHasher, PasswordVerifier,
+    password_hash::{SaltString, rand_core::OsRng},
+};
+use axum::http::{HeaderMap, HeaderValue, header};
+use axum_extra::extract::cookie::{Cookie, SameSite};
 use sha2::{Digest, Sha256};
 use sqlx::Row;
+use uuid::Uuid;
+
+const ADMIN_SESSION_COOKIE: &str = "mini_conf_session";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AuthenticatedDeployment {
     pub deployment_instance_id: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuthenticatedUser {
+    pub user_id: i64,
+    pub username: String,
 }
 
 pub async fn authenticate_open_request(
@@ -74,6 +88,127 @@ pub fn hash_bearer_token(token: &str) -> String {
     }
 
     output
+}
+
+pub fn hash_password(password: &str) -> Result<String, ApiError> {
+    let salt = SaltString::generate(&mut OsRng);
+
+    Argon2::default()
+        .hash_password(password.as_bytes(), &salt)
+        .map(|hash| hash.to_string())
+        .map_err(|_| ApiError::internal())
+}
+
+pub fn verify_password(password: &str, password_hash: &str) -> Result<bool, ApiError> {
+    let parsed = PasswordHash::new(password_hash).map_err(|_| ApiError::internal())?;
+
+    Ok(Argon2::default()
+        .verify_password(password.as_bytes(), &parsed)
+        .is_ok())
+}
+
+pub fn generate_session_token() -> String {
+    Uuid::new_v4().to_string()
+}
+
+pub fn session_cookie_header(token: &str) -> HeaderValue {
+    let cookie = Cookie::build((ADMIN_SESSION_COOKIE, token.to_owned()))
+        .path("/")
+        .http_only(true)
+        .same_site(SameSite::Lax)
+        .build();
+
+    HeaderValue::from_str(&cookie.encoded().to_string())
+        .expect("session cookie should always produce a valid header")
+}
+
+pub fn clear_session_cookie_header() -> HeaderValue {
+    HeaderValue::from_static("mini_conf_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0")
+}
+
+pub async fn authenticate_admin_session(
+    pool: &sqlx::PgPool,
+    cookie_header: Option<&str>,
+) -> Result<AuthenticatedUser, ApiError> {
+    let token = session_token(cookie_header).ok_or_else(|| {
+        ApiError::unauthorized("auth_session_expired", "Authentication session expired")
+    })?;
+    let token_hash = hash_bearer_token(token);
+
+    let row = sqlx::query(
+        r#"
+        SELECT s.id, u.id AS user_id, u.username
+        FROM auth_sessions s
+        JOIN users u ON u.id = s.user_id
+        WHERE s.session_token_hash = $1
+          AND s.status = 'active'
+          AND s.expires_at > NOW()
+          AND u.status = 'active'
+        LIMIT 1
+        "#,
+    )
+    .bind(&token_hash)
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| ApiError::internal())?
+    .ok_or_else(|| {
+        ApiError::unauthorized("auth_session_expired", "Authentication session expired")
+    })?;
+
+    let session_id: i64 = row.get("id");
+    let user_id: i64 = row.get("user_id");
+    let username: String = row.get("username");
+
+    sqlx::query(
+        r#"
+        UPDATE auth_sessions
+        SET last_used_at = NOW(), updated_at = NOW()
+        WHERE id = $1
+        "#,
+    )
+    .bind(session_id)
+    .execute(pool)
+    .await
+    .map_err(|_| ApiError::internal())?;
+
+    Ok(AuthenticatedUser { user_id, username })
+}
+
+pub async fn revoke_admin_session(
+    pool: &sqlx::PgPool,
+    cookie_header: Option<&str>,
+) -> Result<(), ApiError> {
+    let Some(token) = session_token(cookie_header) else {
+        return Ok(());
+    };
+
+    sqlx::query(
+        r#"
+        UPDATE auth_sessions
+        SET status = 'revoked', updated_at = NOW()
+        WHERE session_token_hash = $1
+        "#,
+    )
+    .bind(hash_bearer_token(token))
+    .execute(pool)
+    .await
+    .map_err(|_| ApiError::internal())?;
+
+    Ok(())
+}
+
+fn session_token(cookie_header: Option<&str>) -> Option<&str> {
+    let cookie_header = cookie_header?;
+    for part in cookie_header.split(';') {
+        let part = part.trim();
+        if let Some(value) = part.strip_prefix(&format!("{ADMIN_SESSION_COOKIE}="))
+            && !value.trim().is_empty()
+        {
+            return Some(value);
+        }
+    }
+
+    None
 }
 
 fn hex_char(value: u8) -> char {

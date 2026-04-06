@@ -67,6 +67,8 @@ mod tests {
                 http_addr: "0.0.0.0:8080".to_owned(),
                 database_url: "postgres://mini_conf:secret@127.0.0.1:5432/mini_conf".to_owned(),
                 init_db_on_boot: false,
+                init_admin_username: None,
+                init_admin_password: None,
                 static_dir: PathBuf::from("apps/web/dist"),
                 openapi_export_path: PathBuf::from("docs/openapi/openapi.json"),
             }
