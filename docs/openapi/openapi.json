@@ -10,11 +10,182 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/auth/login": {
+      "post": {
+        "tags": ["auth"],
+        "operationId": "login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful and session cookie issued",
+            "headers": {
+              "set-cookie": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "HttpOnly session cookie"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSessionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid username or password",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database bootstrap disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": ["auth"],
+        "operationId": "logout",
+        "responses": {
+          "204": {
+            "description": "Session revoked and cookie cleared",
+            "headers": {
+              "set-cookie": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Cleared session cookie"
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database bootstrap disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_auth": []
+          }
+        ]
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": ["auth"],
+        "operationId": "me",
+        "responses": {
+          "200": {
+            "description": "Current authenticated admin session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSessionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or expired admin session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database bootstrap disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_auth": []
+          }
+        ]
+      }
+    },
     "/api/healthz": {
       "get": {
-        "tags": [
-          "system"
-        ],
+        "tags": ["system"],
         "operationId": "get_healthz",
         "responses": {
           "200": {
@@ -32,9 +203,7 @@
     },
     "/api/open/configs/resolve": {
       "get": {
-        "tags": [
-          "open"
-        ],
+        "tags": ["open"],
         "operationId": "resolve_config",
         "parameters": [
           {
@@ -186,9 +355,7 @@
     },
     "/api/open/deployment-sync-records": {
       "post": {
-        "tags": [
-          "open"
-        ],
+        "tags": ["open"],
         "operationId": "create_sync_record",
         "requestBody": {
           "content": {
@@ -281,9 +448,7 @@
     },
     "/api/open/deployments/{deployment_key}/config-bundle": {
       "get": {
-        "tags": [
-          "open"
-        ],
+        "tags": ["open"],
         "operationId": "get_config_bundle",
         "parameters": [
           {
@@ -393,9 +558,7 @@
     },
     "/api/open/heartbeats": {
       "post": {
-        "tags": [
-          "open"
-        ],
+        "tags": ["open"],
         "operationId": "report_heartbeat",
         "requestBody": {
           "content": {
@@ -488,9 +651,7 @@
     },
     "/api/open/releases/{revision}": {
       "get": {
-        "tags": [
-          "open"
-        ],
+        "tags": ["open"],
         "operationId": "get_release",
         "parameters": [
           {
@@ -602,19 +763,91 @@
           }
         ]
       }
+    },
+    "/api/projects": {
+      "get": {
+        "tags": ["admin"],
+        "operationId": "list_projects",
+        "responses": {
+          "200": {
+            "description": "List active projects visible to the current admin session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or expired admin session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database bootstrap disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_auth": []
+          }
+        ]
+      }
     }
   },
   "components": {
     "schemas": {
+      "AuthSessionResponse": {
+        "type": "object",
+        "required": ["user", "auth_mode"],
+        "properties": {
+          "auth_mode": {
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/AuthUser"
+          }
+        }
+      },
+      "AuthUser": {
+        "type": "object",
+        "required": ["id", "username"],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
       "ConfigBundleItem": {
         "type": "object",
-        "required": [
-          "config",
-          "revision",
-          "content_hash",
-          "format",
-          "content"
-        ],
+        "required": ["config", "revision", "content_hash", "format", "content"],
         "properties": {
           "config": {
             "type": "string"
@@ -635,10 +868,7 @@
       },
       "ConfigBundleParams": {
         "type": "object",
-        "required": [
-          "project",
-          "environment"
-        ],
+        "required": ["project", "environment"],
         "properties": {
           "environment": {
             "type": "string"
@@ -650,12 +880,7 @@
       },
       "ConfigBundleResponse": {
         "type": "object",
-        "required": [
-          "project",
-          "environment",
-          "deployment",
-          "configs"
-        ],
+        "required": ["project", "environment", "deployment", "configs"],
         "properties": {
           "configs": {
             "type": "array",
@@ -696,40 +921,25 @@
             "type": "string"
           },
           "detail": {
-            "type": [
-              "object",
-              "null"
-            ]
+            "type": ["object", "null"]
           },
           "environment": {
             "type": "string"
           },
           "message": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "process_key": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "project": {
             "type": "string"
           },
           "reported_at": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "revision": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "status": {
             "type": "string"
@@ -738,9 +948,7 @@
       },
       "DeploymentSyncResponse": {
         "type": "object",
-        "required": [
-          "ok"
-        ],
+        "required": ["ok"],
         "properties": {
           "ok": {
             "type": "boolean"
@@ -749,10 +957,7 @@
       },
       "ErrorResponse": {
         "type": "object",
-        "required": [
-          "code",
-          "message"
-        ],
+        "required": ["code", "message"],
         "properties": {
           "code": {
             "type": "string"
@@ -764,11 +969,7 @@
       },
       "HealthzResponse": {
         "type": "object",
-        "required": [
-          "status",
-          "service",
-          "version"
-        ],
+        "required": ["status", "service", "version"],
         "properties": {
           "service": {
             "type": "string"
@@ -798,10 +999,7 @@
             "type": "string"
           },
           "metadata": {
-            "type": [
-              "object",
-              "null"
-            ]
+            "type": ["object", "null"]
           },
           "process_key": {
             "type": "string"
@@ -810,18 +1008,59 @@
             "type": "string"
           },
           "reported_at": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
+          }
+        }
+      },
+      "LoginRequestBody": {
+        "type": "object",
+        "required": ["username", "password"],
+        "properties": {
+          "password": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "ProjectListResponse": {
+        "type": "object",
+        "required": ["items"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectSummary"
+            }
+          }
+        }
+      },
+      "ProjectSummary": {
+        "type": "object",
+        "required": ["id", "code", "name", "status"],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "description": {
+            "type": ["string", "null"]
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
           }
         }
       },
       "ReleaseConfig": {
         "type": "object",
-        "required": [
-          "name"
-        ],
+        "required": ["name"],
         "properties": {
           "name": {
             "type": "string"
@@ -830,13 +1069,7 @@
       },
       "ReleaseContentResponse": {
         "type": "object",
-        "required": [
-          "release",
-          "deployment",
-          "config",
-          "content",
-          "metadata"
-        ],
+        "required": ["release", "deployment", "config", "content", "metadata"],
         "properties": {
           "config": {
             "$ref": "#/components/schemas/ReleaseConfig"
@@ -857,11 +1090,7 @@
       },
       "ReleaseDeployment": {
         "type": "object",
-        "required": [
-          "project",
-          "environment",
-          "deployment_key"
-        ],
+        "required": ["project", "environment", "deployment_key"],
         "properties": {
           "deployment_key": {
             "type": "string"
@@ -878,36 +1107,22 @@
         "type": "object",
         "properties": {
           "change_summary": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "schema_version": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           }
         }
       },
       "ResolveConfigParams": {
         "type": "object",
-        "required": [
-          "project",
-          "environment",
-          "deployment_key",
-          "config"
-        ],
+        "required": ["project", "environment", "deployment_key", "config"],
         "properties": {
           "config": {
             "type": "string"
           },
           "current_revision": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "deployment_key": {
             "type": "string"
@@ -916,10 +1131,7 @@
             "type": "string"
           },
           "process_key": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "project": {
             "type": "string"
@@ -959,10 +1171,7 @@
       },
       "ResolveDeployment": {
         "type": "object",
-        "required": [
-          "key",
-          "name"
-        ],
+        "required": ["key", "name"],
         "properties": {
           "key": {
             "type": "string"
@@ -974,9 +1183,7 @@
       },
       "ResolveFetch": {
         "type": "object",
-        "required": [
-          "url"
-        ],
+        "required": ["url"],
         "properties": {
           "url": {
             "type": "string"
@@ -1016,6 +1223,11 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "opaque"
+      },
+      "session_auth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "mini_conf_session"
       }
     }
   },
@@ -1023,6 +1235,14 @@
     {
       "name": "system",
       "description": "System and health endpoints"
+    },
+    {
+      "name": "auth",
+      "description": "Management authentication APIs"
+    },
+    {
+      "name": "admin",
+      "description": "Management APIs"
     },
     {
       "name": "open",

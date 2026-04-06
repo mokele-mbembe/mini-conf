@@ -36,6 +36,19 @@ pub fn router() -> Router<AppState> {
         .route("/auth/me", get(me))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/auth/login",
+    tag = "auth",
+    request_body = crate::openapi::LoginRequestBody,
+    responses(
+        (status = 200, description = "Login successful and session cookie issued", body = AuthSessionResponse, headers(("set-cookie" = String, description = "HttpOnly session cookie"))),
+        (status = 400, description = "Invalid request body", body = crate::error::ErrorResponse),
+        (status = 401, description = "Invalid username or password", body = crate::error::ErrorResponse),
+        (status = 503, description = "Database bootstrap disabled", body = crate::error::ErrorResponse),
+        (status = 500, description = "Internal server error", body = crate::error::ErrorResponse),
+    )
+)]
 pub(crate) async fn login(
     State(state): State<AppState>,
     payload: Result<Json<LoginRequest>, JsonRejection>,
@@ -104,6 +117,20 @@ pub(crate) async fn login(
     Ok(response)
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/auth/me",
+    tag = "auth",
+    security(
+        ("session_auth" = [])
+    ),
+    responses(
+        (status = 200, description = "Current authenticated admin session", body = AuthSessionResponse),
+        (status = 401, description = "Missing or expired admin session", body = crate::error::ErrorResponse),
+        (status = 503, description = "Database bootstrap disabled", body = crate::error::ErrorResponse),
+        (status = 500, description = "Internal server error", body = crate::error::ErrorResponse),
+    )
+)]
 pub(crate) async fn me(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -131,6 +158,19 @@ pub(crate) async fn me(
     }))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/auth/logout",
+    tag = "auth",
+    security(
+        ("session_auth" = [])
+    ),
+    responses(
+        (status = 204, description = "Session revoked and cookie cleared", headers(("set-cookie" = String, description = "Cleared session cookie"))),
+        (status = 503, description = "Database bootstrap disabled", body = crate::error::ErrorResponse),
+        (status = 500, description = "Internal server error", body = crate::error::ErrorResponse),
+    )
+)]
 pub(crate) async fn logout(
     State(state): State<AppState>,
     headers: HeaderMap,

@@ -1,17 +1,19 @@
 use crate::{error::ErrorResponse, state::AppState};
 use axum::Router;
 use schema::{
+    auth::{AuthSessionResponse, AuthUser},
     health::HealthzResponse,
     open::{
         ConfigBundleResponse, DeploymentSyncResponse, ReleaseContentResponse, ResolveConfigResponse,
     },
+    project::{ProjectListResponse, ProjectSummary},
 };
 use std::{fs, path::Path, sync::OnceLock};
 use utoipa::{
     IntoParams, Modify, OpenApi, ToSchema,
     openapi::{
         Components, OpenApi as OpenApiDocument,
-        security::{HttpAuthScheme, HttpBuilder, SecurityScheme},
+        security::{ApiKey, ApiKeyValue, HttpAuthScheme, HttpBuilder, SecurityScheme},
     },
 };
 use utoipa_swagger_ui::SwaggerUi;
@@ -27,6 +29,10 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
     ),
     paths(
         crate::http::api::health::get_healthz,
+        crate::http::api::auth::login,
+        crate::http::api::auth::logout,
+        crate::http::api::auth::me,
+        crate::http::api::projects::list_projects,
         crate::http::api::open::configs::resolve_config,
         crate::http::api::open::releases::get_release,
         crate::http::api::open::deployments::get_config_bundle,
@@ -36,11 +42,16 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
     components(
         schemas(
             ErrorResponse,
+            AuthSessionResponse,
+            AuthUser,
             HealthzResponse,
             ResolveConfigResponse,
             ReleaseContentResponse,
             ConfigBundleResponse,
             DeploymentSyncResponse,
+            ProjectSummary,
+            ProjectListResponse,
+            LoginRequestBody,
             ResolveConfigParams,
             ConfigBundleParams,
             DeploymentSyncRecordRequestBody,
@@ -50,6 +61,8 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
     modifiers(&SecurityAddon),
     tags(
         (name = "system", description = "System and health endpoints"),
+        (name = "auth", description = "Management authentication APIs"),
+        (name = "admin", description = "Management APIs"),
         (name = "open", description = "Deployment instance access APIs")
     )
 )]
@@ -70,7 +83,17 @@ impl Modify for SecurityAddon {
                     .build(),
             ),
         );
+        components.add_security_scheme(
+            "session_auth",
+            SecurityScheme::ApiKey(ApiKey::Cookie(ApiKeyValue::new("mini_conf_session"))),
+        );
     }
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
+pub struct LoginRequestBody {
+    pub username: String,
+    pub password: String,
 }
 
 #[derive(Debug, IntoParams, ToSchema)]
@@ -150,6 +173,10 @@ mod tests {
         let paths = openapi.paths.paths;
 
         assert!(paths.contains_key("/api/healthz"));
+        assert!(paths.contains_key("/api/auth/login"));
+        assert!(paths.contains_key("/api/auth/logout"));
+        assert!(paths.contains_key("/api/auth/me"));
+        assert!(paths.contains_key("/api/projects"));
         assert!(paths.contains_key("/api/open/configs/resolve"));
         assert!(paths.contains_key("/api/open/releases/{revision}"));
         assert!(paths.contains_key("/api/open/deployments/{deployment_key}/config-bundle"));
@@ -158,5 +185,6 @@ mod tests {
 
         let components = openapi.components.expect("components should exist");
         assert!(components.security_schemes.contains_key("bearer_auth"));
+        assert!(components.security_schemes.contains_key("session_auth"));
     }
 }
