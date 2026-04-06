@@ -1,4 +1,4 @@
-use crate::{error::ApiError, state::AppState};
+use crate::{auth::authenticate_open_request, error::ApiError, state::AppState};
 use axum::{
     Json, Router,
     extract::{Path, State},
@@ -49,8 +49,9 @@ async fn get_release(
             "Database bootstrap is disabled",
         ));
     };
+    let auth = authenticate_open_request(pool, &headers).await?;
 
-    let release = find_release(pool, &revision)
+    let release = find_release(pool, auth.deployment_instance_id, &revision)
         .await?
         .ok_or_else(|| ApiError::not_found_with("release_not_found", "release not found"))?;
 
@@ -63,6 +64,7 @@ async fn get_release(
 
 async fn find_release(
     pool: &sqlx::PgPool,
+    deployment_instance_id: i64,
     revision: &str,
 ) -> Result<Option<ReleaseLookup>, ApiError> {
     let row = sqlx::query(
@@ -85,11 +87,13 @@ async fn find_release(
         JOIN config_files cf ON cf.id = r.config_file_id
         JOIN deployment_instances d ON d.id = r.deployment_instance_id
         WHERE r.revision = $1
+          AND r.deployment_instance_id = $2
         ORDER BY r.id DESC
         LIMIT 1
         "#,
     )
     .bind(revision)
+    .bind(deployment_instance_id)
     .fetch_optional(pool)
     .await
     .map_err(|_| ApiError::internal())?;

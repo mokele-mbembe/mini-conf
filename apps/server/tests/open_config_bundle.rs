@@ -1,6 +1,6 @@
 use axum::{
     body::{Body, to_bytes},
-    http::{Request, StatusCode},
+    http::{Request, StatusCode, header},
 };
 use schema::open::ConfigBundleResponse;
 use server::{bootstrap, config::AppConfig, error::ErrorResponse};
@@ -13,6 +13,7 @@ use std::{
 use tower::util::ServiceExt;
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
+const TEST_TOKEN: &str = "mini-conf-open-bundle-token";
 
 fn test_database_url() -> Option<String> {
     match std::env::var("TEST_DATABASE_URL") {
@@ -126,6 +127,14 @@ async fn seed_bundle(pool: &PgPool) -> TestResult {
     .execute(pool)
     .await?;
 
+    sqlx::query(
+        "INSERT INTO deployment_credentials (deployment_instance_id, credential_name, token_hash) VALUES ($1, 'default', $2)",
+    )
+    .bind(deployment_id)
+    .bind(server::auth::hash_bearer_token(TEST_TOKEN))
+    .execute(pool)
+    .await?;
+
     Ok(())
 }
 
@@ -136,10 +145,18 @@ async fn seed_deployment_without_releases(pool: &PgPool) -> TestResult {
     .fetch_one(pool)
     .await?;
 
-    sqlx::query(
-        "INSERT INTO deployment_instances (project_id, environment, deployment_key, name) VALUES ($1, 'prod', 'store-empty', 'Store Empty')",
+    let deployment_id: i64 = sqlx::query_scalar(
+        "INSERT INTO deployment_instances (project_id, environment, deployment_key, name) VALUES ($1, 'prod', 'store-empty', 'Store Empty') RETURNING id",
     )
     .bind(project_id)
+    .fetch_one(pool)
+    .await?;
+
+    sqlx::query(
+        "INSERT INTO deployment_credentials (deployment_instance_id, credential_name, token_hash) VALUES ($1, 'default', $2)",
+    )
+    .bind(deployment_id)
+    .bind(server::auth::hash_bearer_token(TEST_TOKEN))
     .execute(pool)
     .await?;
 
@@ -166,6 +183,7 @@ async fn config_bundle_returns_latest_release_per_config() -> TestResult {
         .oneshot(
             Request::builder()
                 .uri("/api/open/deployments/store-001/config-bundle?project=coffee-legacy&environment=prod")
+                .header(header::AUTHORIZATION, format!("Bearer {TEST_TOKEN}"))
                 .body(Body::empty())?,
         )
         .await?;
@@ -202,6 +220,7 @@ async fn config_bundle_returns_empty_list_for_deployment_without_releases() -> T
         .oneshot(
             Request::builder()
                 .uri("/api/open/deployments/store-empty/config-bundle?project=empty-project&environment=prod")
+                .header(header::AUTHORIZATION, format!("Bearer {TEST_TOKEN}"))
                 .body(Body::empty())?,
         )
         .await?;
@@ -221,10 +240,13 @@ async fn config_bundle_returns_not_found_for_unknown_deployment() -> TestResult 
         return Ok(());
     };
 
+    seed_deployment_without_releases(&pool).await?;
+
     let response = app
         .oneshot(
             Request::builder()
                 .uri("/api/open/deployments/store-missing/config-bundle?project=coffee-legacy&environment=prod")
+                .header(header::AUTHORIZATION, format!("Bearer {TEST_TOKEN}"))
                 .body(Body::empty())?,
         )
         .await?;

@@ -1,7 +1,12 @@
-use crate::{error::ApiError, state::AppState};
+use crate::{
+    auth::{authenticate_open_request, ensure_deployment_access},
+    error::ApiError,
+    state::AppState,
+};
 use axum::{
     Json, Router,
     extract::{Path, Query, State},
+    http::HeaderMap,
     response::{IntoResponse, Response},
     routing::get,
 };
@@ -38,6 +43,7 @@ async fn get_config_bundle(
     State(state): State<AppState>,
     Path(deployment_key): Path<String>,
     Query(query): Query<ConfigBundleQuery>,
+    headers: HeaderMap,
 ) -> Result<Response, ApiError> {
     let query = query.validate()?;
 
@@ -54,12 +60,14 @@ async fn get_config_bundle(
             "Database bootstrap is disabled",
         ));
     };
+    let auth = authenticate_open_request(pool, &headers).await?;
 
     let deployment = find_deployment(pool, &query.project, &query.environment, &deployment_key)
         .await?
         .ok_or_else(|| {
             ApiError::not_found_with("deployment_not_found", "deployment instance not found")
         })?;
+    ensure_deployment_access(auth, deployment.deployment_id)?;
 
     let configs = find_current_bundle(pool, deployment.deployment_id)
         .await?

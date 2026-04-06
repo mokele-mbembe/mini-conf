@@ -1,7 +1,12 @@
-use crate::{error::ApiError, state::AppState};
+use crate::{
+    auth::{authenticate_open_request, ensure_deployment_access},
+    error::ApiError,
+    state::AppState,
+};
 use axum::{
     Json, Router,
     extract::{State, rejection::JsonRejection},
+    http::HeaderMap,
     routing::post,
 };
 use schema::open::DeploymentSyncResponse;
@@ -40,6 +45,7 @@ pub fn router() -> Router<AppState> {
 
 async fn report_heartbeat(
     State(state): State<AppState>,
+    headers: HeaderMap,
     payload: Result<Json<HeartbeatRequest>, JsonRejection>,
 ) -> Result<Json<DeploymentSyncResponse>, ApiError> {
     let Json(payload) =
@@ -52,6 +58,7 @@ async fn report_heartbeat(
             "Database bootstrap is disabled",
         ));
     };
+    let auth = authenticate_open_request(pool, &headers).await?;
 
     let deployment = find_deployment(
         pool,
@@ -63,6 +70,7 @@ async fn report_heartbeat(
     .ok_or_else(|| {
         ApiError::not_found_with("deployment_not_found", "deployment instance not found")
     })?;
+    ensure_deployment_access(auth, deployment.deployment_id)?;
 
     upsert_heartbeat(
         pool,

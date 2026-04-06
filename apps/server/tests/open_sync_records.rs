@@ -8,6 +8,8 @@ use sqlx::{Connection, Executor, PgConnection, PgPool, Row};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tower::util::ServiceExt;
 
+const TEST_TOKEN: &str = "mini-conf-open-sync-token";
+
 fn test_database_url() -> Option<String> {
     match std::env::var("TEST_DATABASE_URL") {
         Ok(value) => Some(value),
@@ -115,6 +117,41 @@ async fn seed_release(pool: &PgPool) {
     .execute(pool)
     .await
     .expect("release should insert");
+
+    sqlx::query(
+        "INSERT INTO deployment_credentials (deployment_instance_id, credential_name, token_hash) VALUES ($1, 'default', $2)",
+    )
+    .bind(deployment_id)
+    .bind(server::auth::hash_bearer_token(TEST_TOKEN))
+    .execute(pool)
+    .await
+    .expect("credential should insert");
+}
+
+async fn seed_credential_only(pool: &PgPool) {
+    let project_id: i64 = sqlx::query_scalar(
+        "INSERT INTO projects (code, name) VALUES ('coffee-legacy-auth', 'Coffee Legacy Auth') RETURNING id",
+    )
+    .fetch_one(pool)
+    .await
+    .expect("project should insert");
+
+    let deployment_id: i64 = sqlx::query_scalar(
+        "INSERT INTO deployment_instances (project_id, environment, deployment_key, name) VALUES ($1, 'prod', 'store-auth', 'Store Auth') RETURNING id",
+    )
+    .bind(project_id)
+    .fetch_one(pool)
+    .await
+    .expect("deployment should insert");
+
+    sqlx::query(
+        "INSERT INTO deployment_credentials (deployment_instance_id, credential_name, token_hash) VALUES ($1, 'default', $2)",
+    )
+    .bind(deployment_id)
+    .bind(server::auth::hash_bearer_token(TEST_TOKEN))
+    .execute(pool)
+    .await
+    .expect("credential should insert");
 }
 
 async fn read_json<T: serde::de::DeserializeOwned>(response: axum::response::Response) -> T {
@@ -139,6 +176,7 @@ async fn sync_record_inserts_row_and_returns_ok() {
                 .method("POST")
                 .uri("/api/open/deployment-sync-records")
                 .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {TEST_TOKEN}"))
                 .body(Body::from(
                     r#"{
                         "project":"coffee-legacy",
@@ -190,12 +228,15 @@ async fn sync_record_returns_not_found_for_unknown_deployment() {
         return;
     };
 
+    seed_credential_only(&pool).await;
+
     let response = app
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/api/open/deployment-sync-records")
                 .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {TEST_TOKEN}"))
                 .body(Body::from(
                     r#"{
                         "project":"coffee-legacy",
@@ -238,6 +279,7 @@ async fn sync_record_returns_not_found_for_unknown_release() {
                 .method("POST")
                 .uri("/api/open/deployment-sync-records")
                 .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {TEST_TOKEN}"))
                 .body(Body::from(
                     r#"{
                         "project":"coffee-legacy",

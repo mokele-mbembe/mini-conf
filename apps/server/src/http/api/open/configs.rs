@@ -1,4 +1,8 @@
-use crate::{error::ApiError, state::AppState};
+use crate::{
+    auth::{authenticate_open_request, ensure_deployment_access},
+    error::ApiError,
+    state::AppState,
+};
 use axum::{
     Json, Router,
     extract::{Query, State},
@@ -62,6 +66,7 @@ async fn resolve_config(
             "Database bootstrap is disabled",
         ));
     };
+    let auth = authenticate_open_request(pool, &headers).await?;
 
     let deployment = find_deployment(
         pool,
@@ -73,6 +78,7 @@ async fn resolve_config(
     .ok_or_else(|| {
         ApiError::not_found_with("deployment_not_found", "deployment instance not found")
     })?;
+    ensure_deployment_access(auth, deployment.deployment_id)?;
 
     let config_file_id = find_config_file(pool, deployment.project_id, &query.config)
         .await?

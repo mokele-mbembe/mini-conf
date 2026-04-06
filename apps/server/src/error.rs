@@ -31,6 +31,14 @@ impl ApiError {
         Self::new(StatusCode::BAD_REQUEST, code, message)
     }
 
+    pub const fn unauthorized(code: &'static str, message: &'static str) -> Self {
+        Self::new(StatusCode::UNAUTHORIZED, code, message)
+    }
+
+    pub const fn forbidden(code: &'static str, message: &'static str) -> Self {
+        Self::new(StatusCode::FORBIDDEN, code, message)
+    }
+
     pub const fn not_found() -> Self {
         Self::new(StatusCode::NOT_FOUND, "route_not_found", "Route not found")
     }

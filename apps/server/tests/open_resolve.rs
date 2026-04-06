@@ -7,6 +7,8 @@ use sqlx::{Connection, Executor, PgConnection, PgPool};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tower::util::ServiceExt;
 
+const TEST_TOKEN: &str = "mini-conf-open-resolve-token";
+
 fn test_database_url() -> Option<String> {
     match std::env::var("TEST_DATABASE_URL") {
         Ok(value) => Some(value),
@@ -115,6 +117,15 @@ async fn seed_release(pool: &PgPool, config_code: &str) {
     .execute(pool)
     .await
     .expect("release should insert");
+
+    sqlx::query(
+        "INSERT INTO deployment_credentials (deployment_instance_id, credential_name, token_hash) VALUES ($1, 'default', $2)",
+    )
+    .bind(deployment_id)
+    .bind(server::auth::hash_bearer_token(TEST_TOKEN))
+    .execute(pool)
+    .await
+    .expect("credential should insert");
 }
 
 async fn read_json<T: serde::de::DeserializeOwned>(response: axum::response::Response) -> T {
@@ -137,6 +148,7 @@ async fn resolve_returns_release_payload_and_etag() {
         .oneshot(
             Request::builder()
                 .uri("/api/open/configs/resolve?project=coffee-legacy&environment=prod&deployment_key=store-001&config=main")
+                .header(header::AUTHORIZATION, format!("Bearer {TEST_TOKEN}"))
                 .body(Body::empty())
                 .expect("request should build"),
         )
@@ -161,6 +173,37 @@ async fn resolve_returns_release_payload_and_etag() {
 }
 
 #[tokio::test]
+async fn resolve_returns_unauthorized_when_bearer_token_is_missing() {
+    let Some((app, pool, database_url, schema)) = setup_app().await else {
+        return;
+    };
+
+    seed_release(&pool, "main").await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/open/configs/resolve?project=coffee-legacy&environment=prod&deployment_key=store-001&config=main")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let payload: ErrorResponse = read_json(response).await;
+    assert_eq!(
+        payload,
+        ErrorResponse {
+            code: "missing_token".to_owned(),
+            message: "Missing Bearer token".to_owned(),
+        }
+    );
+
+    teardown(&database_url, &schema, pool).await;
+}
+
+#[tokio::test]
 async fn resolve_returns_not_modified_when_client_already_has_latest_revision() {
     let Some((app, pool, database_url, schema)) = setup_app().await else {
         return;
@@ -173,6 +216,7 @@ async fn resolve_returns_not_modified_when_client_already_has_latest_revision() 
             Request::builder()
                 .uri("/api/open/configs/resolve?project=coffee-legacy&environment=prod&deployment_key=store-001&config=main&current_revision=20260405.0001")
                 .header(header::IF_NONE_MATCH, "\"abc123\"")
+                .header(header::AUTHORIZATION, format!("Bearer {TEST_TOKEN}"))
                 .body(Body::empty())
                 .expect("request should build"),
         )
@@ -204,6 +248,7 @@ async fn resolve_returns_config_file_not_found_when_config_is_missing() {
         .oneshot(
             Request::builder()
                 .uri("/api/open/configs/resolve?project=coffee-legacy&environment=prod&deployment_key=store-001&config=vision")
+                .header(header::AUTHORIZATION, format!("Bearer {TEST_TOKEN}"))
                 .body(Body::empty())
                 .expect("request should build"),
         )

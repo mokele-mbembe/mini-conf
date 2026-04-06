@@ -13,6 +13,7 @@ use std::{
 use tower::util::ServiceExt;
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
+const TEST_TOKEN: &str = "mini-conf-open-heartbeat-token";
 
 fn test_database_url() -> Option<String> {
     match std::env::var("TEST_DATABASE_URL") {
@@ -81,10 +82,43 @@ async fn seed_deployment(pool: &PgPool) -> TestResult {
     .fetch_one(pool)
     .await?;
 
-    sqlx::query(
-        "INSERT INTO deployment_instances (project_id, environment, deployment_key, name) VALUES ($1, 'prod', 'store-001', 'Store 001')",
+    let deployment_id: i64 = sqlx::query_scalar(
+        "INSERT INTO deployment_instances (project_id, environment, deployment_key, name) VALUES ($1, 'prod', 'store-001', 'Store 001') RETURNING id",
     )
     .bind(project_id)
+    .fetch_one(pool)
+    .await?;
+
+    sqlx::query(
+        "INSERT INTO deployment_credentials (deployment_instance_id, credential_name, token_hash) VALUES ($1, 'default', $2)",
+    )
+    .bind(deployment_id)
+    .bind(server::auth::hash_bearer_token(TEST_TOKEN))
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+async fn seed_credential_only(pool: &PgPool) -> TestResult {
+    let project_id: i64 = sqlx::query_scalar(
+        "INSERT INTO projects (code, name) VALUES ('coffee-legacy-auth', 'Coffee Legacy Auth') RETURNING id",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let deployment_id: i64 = sqlx::query_scalar(
+        "INSERT INTO deployment_instances (project_id, environment, deployment_key, name) VALUES ($1, 'prod', 'store-auth', 'Store Auth') RETURNING id",
+    )
+    .bind(project_id)
+    .fetch_one(pool)
+    .await?;
+
+    sqlx::query(
+        "INSERT INTO deployment_credentials (deployment_instance_id, credential_name, token_hash) VALUES ($1, 'default', $2)",
+    )
+    .bind(deployment_id)
+    .bind(server::auth::hash_bearer_token(TEST_TOKEN))
     .execute(pool)
     .await?;
 
@@ -132,6 +166,7 @@ async fn heartbeat_upserts_latest_process_state() -> TestResult {
                     .method("POST")
                     .uri("/api/open/heartbeats")
                     .header(header::CONTENT_TYPE, "application/json")
+                    .header(header::AUTHORIZATION, format!("Bearer {TEST_TOKEN}"))
                     .body(Body::from(body))?,
             )
             .await?;
@@ -170,12 +205,15 @@ async fn heartbeat_returns_not_found_for_unknown_deployment() -> TestResult {
         return Ok(());
     };
 
+    seed_credential_only(&pool).await?;
+
     let response = app
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/api/open/heartbeats")
                 .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {TEST_TOKEN}"))
                 .body(Body::from(
                     r#"{
                         "project":"coffee-legacy",
