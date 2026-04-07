@@ -60,7 +60,13 @@ coverage:
   @if [ -f Cargo.toml ]; then cargo llvm-cov --workspace --lcov --output-path target/lcov.info; else echo "Skipping backend coverage: Cargo.toml not found"; fi
 
 sqlx-check:
-  @if [ -f Cargo.toml ]; then cargo sqlx prepare --check --workspace; else echo "Skipping sqlx prepare check: Cargo.toml not found"; fi
+  @if [ ! -f Cargo.toml ]; then \
+    echo "Skipping sqlx prepare check: Cargo.toml not found"; \
+  elif [ -d .sqlx ] || rg -n 'query!|query_as!|query_scalar!|query_file!|query_file_as!|query_file_scalar!' apps/server crates >/dev/null 2>&1; then \
+    cargo sqlx prepare --check --workspace; \
+  else \
+    echo "Skipping sqlx prepare check: no compile-time SQLx query metadata in this workspace"; \
+  fi
 
 openapi-check:
   @if [ -f scripts/export-openapi.sh ]; then \
