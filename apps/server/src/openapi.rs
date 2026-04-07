@@ -3,14 +3,16 @@ use axum::Router;
 use schema::{
     auth::{AuthSessionResponse, AuthUser},
     config_file::{ConfigFileListResponse, ConfigFileSummary},
-    deployment_instance::{DeploymentInstanceListResponse, DeploymentInstanceSummary},
-    draft::DraftResponse,
+    deployment_instance::{
+        DeploymentBundlePreviewResponse, DeploymentInstanceListResponse, DeploymentInstanceSummary,
+    },
+    draft::{DraftCloneResponse, DraftResponse},
     health::HealthzResponse,
     open::{
         ConfigBundleResponse, DeploymentSyncResponse, ReleaseContentResponse, ResolveConfigResponse,
     },
     project::{ProjectListResponse, ProjectSummary},
-    release::ReleaseSummary,
+    release::{ReleaseDetailResponse, ReleaseListResponse, ReleaseSummary},
 };
 use std::{fs, path::Path, sync::OnceLock};
 use utoipa::{
@@ -44,13 +46,18 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
         crate::http::api::deployment_instances::create_deployment_instance,
         crate::http::api::deployment_instances::get_deployment_instance,
         crate::http::api::deployment_instances::update_deployment_instance,
+        crate::http::api::deployment_instances::clone_deployment_instance,
+        crate::http::api::deployment_instances::preview_deployment_bundle,
         crate::http::api::drafts::get_draft,
         crate::http::api::drafts::put_draft,
+        crate::http::api::drafts::clone_draft,
         crate::http::api::projects::list_projects,
         crate::http::api::projects::create_project,
         crate::http::api::projects::get_project,
         crate::http::api::projects::update_project,
+        crate::http::api::releases::list_releases,
         crate::http::api::releases::publish_release,
+        crate::http::api::releases::get_release_detail,
         crate::http::api::open::configs::resolve_config,
         crate::http::api::open::releases::get_release,
         crate::http::api::open::deployments::get_config_bundle,
@@ -65,8 +72,10 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
             ConfigFileSummary,
             ConfigFileListResponse,
             DraftResponse,
+            DraftCloneResponse,
             DeploymentInstanceSummary,
             DeploymentInstanceListResponse,
+            DeploymentBundlePreviewResponse,
             HealthzResponse,
             ResolveConfigResponse,
             ReleaseContentResponse,
@@ -75,10 +84,14 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
             DeploymentSyncResponse,
             ProjectSummary,
             ProjectListResponse,
+            ReleaseListResponse,
+            ReleaseDetailResponse,
             LoginRequestBody,
             CreateConfigFileRequestBody,
             CreateDeploymentInstanceRequestBody,
+            CloneDeploymentInstanceRequestBody,
             UpdateDraftRequestBody,
+            CloneDraftRequestBody,
             UpdateDeploymentInstanceRequestBody,
             UpdateConfigFileRequestBody,
             CreateProjectRequestBody,
@@ -86,6 +99,7 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
             PublishReleaseRequestBody,
             ListConfigFilesParams,
             ListDeploymentInstancesParams,
+            ListReleasesParams,
             ResolveConfigParams,
             ConfigBundleParams,
             DeploymentSyncRecordRequestBody,
@@ -135,6 +149,7 @@ pub struct CreateConfigFileRequestBody {
     pub project_id: i64,
     pub code: String,
     pub name: String,
+    pub is_required: Option<bool>,
     pub format: String,
     pub schema_name: Option<String>,
     pub schema_version: Option<String>,
@@ -151,6 +166,15 @@ pub struct CreateDeploymentInstanceRequestBody {
     pub name: String,
     pub description: Option<String>,
     pub is_template: Option<bool>,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
+pub struct CloneDeploymentInstanceRequestBody {
+    pub deployment_key: String,
+    pub name: String,
+    pub environment: String,
+    pub description: Option<String>,
+    pub clone_source: String,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
@@ -172,10 +196,17 @@ pub struct UpdateDraftRequestBody {
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
+pub struct CloneDraftRequestBody {
+    pub source_deployment_instance_id: i64,
+    pub source_kind: String,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
 pub struct UpdateConfigFileRequestBody {
     pub project_id: i64,
     pub code: String,
     pub name: String,
+    pub is_required: Option<bool>,
     pub format: String,
     pub schema_name: Option<String>,
     pub schema_version: Option<String>,
@@ -220,6 +251,14 @@ pub struct ListDeploymentInstancesParams {
     pub project_id: Option<i64>,
     pub environment: Option<String>,
     pub status: Option<String>,
+}
+
+#[derive(Debug, IntoParams, ToSchema)]
+#[into_params(parameter_in = Query)]
+pub struct ListReleasesParams {
+    pub project_id: Option<i64>,
+    pub deployment_instance_id: Option<i64>,
+    pub config_file_id: Option<i64>,
 }
 
 #[derive(Debug, IntoParams, ToSchema)]
@@ -306,10 +345,15 @@ mod tests {
         assert!(paths.contains_key("/api/config-files/{id}"));
         assert!(paths.contains_key("/api/deployment-instances"));
         assert!(paths.contains_key("/api/deployment-instances/{id}"));
+        assert!(paths.contains_key("/api/deployment-instances/{id}/clone"));
+        assert!(paths.contains_key("/api/deployment-instances/{id}/preview-bundle"));
         assert!(paths.contains_key("/api/drafts/{deployment_id}/{config_file_id}"));
+        assert!(paths.contains_key("/api/drafts/{target_deployment_id}/{config_file_id}/clone"));
         assert!(paths.contains_key("/api/projects"));
         assert!(paths.contains_key("/api/projects/{id}"));
+        assert!(paths.contains_key("/api/releases"));
         assert!(paths.contains_key("/api/releases/publish"));
+        assert!(paths.contains_key("/api/releases/{id}"));
         assert!(paths.contains_key("/api/open/configs/resolve"));
         assert!(paths.contains_key("/api/open/releases/{revision}"));
         assert!(paths.contains_key("/api/open/deployments/{deployment_key}/config-bundle"));

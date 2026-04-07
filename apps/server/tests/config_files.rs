@@ -187,7 +187,7 @@ async fn create_config_file_creates_row_with_secret_paths() -> TestResult {
                 .header(header::COOKIE, cookie)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(format!(
-                    r#"{{"project_id":{project_id},"code":"main","name":"Main Config","format":"yaml","schema_name":"coffee-main","schema_version":"v1","sensitivity":"secret","secret_paths":["$.wifi.password","$.third_party.api_key"],"description":"Primary device configuration"}}"#
+                    r#"{{"project_id":{project_id},"code":"main","name":"Main Config","is_required":true,"format":"yaml","schema_name":"coffee-main","schema_version":"v1","sensitivity":"secret","secret_paths":["$.wifi.password","$.third_party.api_key"],"description":"Primary device configuration"}}"#
                 )))?,
         )
         .await?;
@@ -196,6 +196,7 @@ async fn create_config_file_creates_row_with_secret_paths() -> TestResult {
     let payload: ConfigFileSummary = read_json(response).await?;
     assert_eq!(payload.project_id, project_id);
     assert_eq!(payload.code, "main");
+    assert!(payload.is_required);
     assert_eq!(payload.sensitivity, "secret");
     assert_eq!(
         payload.secret_paths.as_deref(),
@@ -208,12 +209,13 @@ async fn create_config_file_creates_row_with_secret_paths() -> TestResult {
     );
 
     let row = sqlx::query(
-        "SELECT code, schema_name, schema_version, sensitivity, secret_paths FROM config_files WHERE id = $1",
+        "SELECT code, is_required, schema_name, schema_version, sensitivity, secret_paths FROM config_files WHERE id = $1",
     )
     .bind(payload.id)
     .fetch_one(&pool)
     .await?;
     assert_eq!(row.get::<String, _>("code"), "main");
+    assert!(row.get::<bool, _>("is_required"));
     assert_eq!(
         row.get::<Option<String>, _>("schema_name").as_deref(),
         Some("coffee-main")
@@ -338,6 +340,7 @@ async fn get_config_file_returns_detail_for_authenticated_session() -> TestResul
     assert_eq!(payload.id, config_file_id);
     assert_eq!(payload.project_id, project_id);
     assert_eq!(payload.code, "main");
+    assert!(!payload.is_required);
 
     teardown(&database_url, &schema, pool).await
 }
@@ -370,7 +373,7 @@ async fn update_config_file_updates_existing_row() -> TestResult {
                 .header(header::COOKIE, cookie)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(format!(
-                    r#"{{"project_id":{project_id},"code":"main-v2","name":"Main Config V2","format":"json","schema_name":"coffee-main","schema_version":"v2","sensitivity":"secret","secret_paths":["$.wifi.password"],"description":"Updated config","status":"archived"}}"#
+                    r#"{{"project_id":{project_id},"code":"main-v2","name":"Main Config V2","is_required":true,"format":"json","schema_name":"coffee-main","schema_version":"v2","sensitivity":"secret","secret_paths":["$.wifi.password"],"description":"Updated config","status":"archived"}}"#
                 )))?,
         )
         .await?;
@@ -378,16 +381,18 @@ async fn update_config_file_updates_existing_row() -> TestResult {
     assert_eq!(response.status(), StatusCode::OK);
     let payload: ConfigFileSummary = read_json(response).await?;
     assert_eq!(payload.code, "main-v2");
+    assert!(payload.is_required);
     assert_eq!(payload.format, "json");
     assert_eq!(payload.status, "archived");
 
     let row = sqlx::query(
-        "SELECT code, format, schema_version, sensitivity, status FROM config_files WHERE id = $1",
+        "SELECT code, is_required, format, schema_version, sensitivity, status FROM config_files WHERE id = $1",
     )
     .bind(config_file_id)
     .fetch_one(&pool)
     .await?;
     assert_eq!(row.get::<String, _>("code"), "main-v2");
+    assert!(row.get::<bool, _>("is_required"));
     assert_eq!(row.get::<String, _>("format"), "json");
     assert_eq!(
         row.get::<Option<String>, _>("schema_version").as_deref(),
@@ -421,12 +426,13 @@ async fn config_file_crud_flow_persists_changes_across_endpoints() -> TestResult
                 .header(header::COOKIE, &cookie)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(format!(
-                    r#"{{"project_id":{project_id},"code":"main","name":"Main Config","format":"yaml","description":"Primary config"}}"#
+                    r#"{{"project_id":{project_id},"code":"main","name":"Main Config","is_required":false,"format":"yaml","description":"Primary config"}}"#
                 )))?,
         )
         .await?;
     assert_eq!(create_response.status(), StatusCode::CREATED);
     let created: ConfigFileSummary = read_json(create_response).await?;
+    assert!(!created.is_required);
 
     let list_response = app
         .clone()
@@ -464,13 +470,14 @@ async fn config_file_crud_flow_persists_changes_across_endpoints() -> TestResult
                 .header(header::COOKIE, &cookie)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(format!(
-                    r#"{{"project_id":{project_id},"code":"main-v2","name":"Main Config V2","format":"json","sensitivity":"secret","secret_paths":["$.wifi.password"],"description":"Updated config","status":"archived"}}"#
+                    r#"{{"project_id":{project_id},"code":"main-v2","name":"Main Config V2","is_required":true,"format":"json","sensitivity":"secret","secret_paths":["$.wifi.password"],"description":"Updated config","status":"archived"}}"#
                 )))?,
         )
         .await?;
     assert_eq!(update_response.status(), StatusCode::OK);
     let updated: ConfigFileSummary = read_json(update_response).await?;
     assert_eq!(updated.code, "main-v2");
+    assert!(updated.is_required);
     assert_eq!(updated.status, "archived");
 
     let detail_after_update = app
@@ -484,14 +491,16 @@ async fn config_file_crud_flow_persists_changes_across_endpoints() -> TestResult
     assert_eq!(detail_after_update.status(), StatusCode::OK);
     let detail_after_update: ConfigFileSummary = read_json(detail_after_update).await?;
     assert_eq!(detail_after_update.code, "main-v2");
+    assert!(detail_after_update.is_required);
     assert_eq!(detail_after_update.format, "json");
     assert_eq!(detail_after_update.status, "archived");
 
-    let row = sqlx::query("SELECT code, status FROM config_files WHERE id = $1")
+    let row = sqlx::query("SELECT code, is_required, status FROM config_files WHERE id = $1")
         .bind(created.id)
         .fetch_one(&pool)
         .await?;
     assert_eq!(row.get::<String, _>("code"), "main-v2");
+    assert!(row.get::<bool, _>("is_required"));
     assert_eq!(row.get::<String, _>("status"), "archived");
 
     teardown(&database_url, &schema, pool).await

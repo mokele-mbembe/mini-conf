@@ -1,13 +1,20 @@
 use crate::{auth::authenticate_admin_session, error::ApiError, state::AppState};
 use axum::{
     Json, Router,
-    extract::{State, rejection::JsonRejection},
+    extract::{Path, Query, State, rejection::JsonRejection},
     http::{HeaderMap, StatusCode, header},
-    routing::post,
+    routing::{get, post},
 };
-use schema::release::ReleaseSummary;
+use schema::release::{ReleaseDetailResponse, ReleaseListResponse, ReleaseSummary};
 use serde::Deserialize;
-use sqlx::Row;
+use sqlx::{Row, types::Json as SqlxJson};
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct ListReleasesQuery {
+    project_id: Option<i64>,
+    deployment_instance_id: Option<i64>,
+    config_file_id: Option<i64>,
+}
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct PublishReleaseRequest {
@@ -28,6 +35,7 @@ struct ValidatedPublishReleaseRequest {
 #[derive(Debug)]
 struct ReleasePublishContext {
     format: String,
+    is_template: bool,
 }
 
 #[derive(Debug)]
@@ -38,7 +46,78 @@ struct DraftForPublish {
 }
 
 pub fn router() -> Router<AppState> {
-    Router::new().route("/releases/publish", post(publish_release))
+    Router::new()
+        .route("/releases", get(list_releases))
+        .route("/releases/publish", post(publish_release))
+        .route("/releases/{id}", get(get_release_detail))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/releases",
+    tag = "admin",
+    params(crate::openapi::ListReleasesParams),
+    security(
+        ("session_auth" = [])
+    ),
+    responses(
+        (status = 200, description = "List releases", body = ReleaseListResponse),
+        (status = 401, description = "Missing or expired admin session", body = crate::error::ErrorResponse),
+        (status = 503, description = "Database bootstrap disabled", body = crate::error::ErrorResponse),
+        (status = 500, description = "Internal server error", body = crate::error::ErrorResponse),
+    )
+)]
+pub(crate) async fn list_releases(
+    State(state): State<AppState>,
+    Query(query): Query<ListReleasesQuery>,
+    headers: HeaderMap,
+) -> Result<Json<ReleaseListResponse>, ApiError> {
+    let Some(pool) = state.db_pool() else {
+        return Err(ApiError::service_unavailable(
+            "database_unavailable",
+            "Database bootstrap is disabled",
+        ));
+    };
+
+    authenticate_admin_session(
+        pool,
+        headers
+            .get(header::COOKIE)
+            .and_then(|value| value.to_str().ok()),
+    )
+    .await?;
+
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            id,
+            project_id,
+            deployment_instance_id,
+            config_file_id,
+            revision,
+            btrim(content_hash) AS content_hash,
+            format,
+            change_summary,
+            apply_mode,
+            published_by,
+            to_char(published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS published_at
+        FROM releases
+        WHERE ($1::bigint IS NULL OR project_id = $1)
+          AND ($2::bigint IS NULL OR deployment_instance_id = $2)
+          AND ($3::bigint IS NULL OR config_file_id = $3)
+        ORDER BY published_at DESC, id DESC
+        "#,
+    )
+    .bind(query.project_id)
+    .bind(query.deployment_instance_id)
+    .bind(query.config_file_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|_| ApiError::internal())?;
+
+    Ok(Json(ReleaseListResponse {
+        items: rows.iter().map(map_release_row).collect(),
+    }))
 }
 
 #[utoipa::path(
@@ -92,6 +171,14 @@ pub(crate) async fn publish_release(
     let draft =
         load_draft_for_publish(pool, payload.deployment_instance_id, payload.config_file_id)
             .await?;
+    if context.is_template {
+        return Err(ApiError::conflict(
+            "deployment_instance_template_publish_forbidden",
+            "template deployment instances cannot publish releases",
+        ));
+    }
+    ensure_required_configs_present(pool, payload.project_id, payload.deployment_instance_id)
+        .await?;
     if draft.format != context.format {
         return Err(ApiError::unprocessable_entity(
             "release_publish_failed",
@@ -143,7 +230,81 @@ pub(crate) async fn publish_release(
     .await
     .map_err(|_| ApiError::internal())?;
 
-    Ok((StatusCode::CREATED, Json(map_release_row(row))))
+    Ok((StatusCode::CREATED, Json(map_release_row(&row))))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/releases/{id}",
+    tag = "admin",
+    params(
+        ("id" = i64, Path, description = "Release ID")
+    ),
+    security(
+        ("session_auth" = [])
+    ),
+    responses(
+        (status = 200, description = "Release detail", body = ReleaseDetailResponse),
+        (status = 401, description = "Missing or expired admin session", body = crate::error::ErrorResponse),
+        (status = 404, description = "Release not found", body = crate::error::ErrorResponse),
+        (status = 503, description = "Database bootstrap disabled", body = crate::error::ErrorResponse),
+        (status = 500, description = "Internal server error", body = crate::error::ErrorResponse),
+    )
+)]
+pub(crate) async fn get_release_detail(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    headers: HeaderMap,
+) -> Result<Json<ReleaseDetailResponse>, ApiError> {
+    let Some(pool) = state.db_pool() else {
+        return Err(ApiError::service_unavailable(
+            "database_unavailable",
+            "Database bootstrap is disabled",
+        ));
+    };
+
+    authenticate_admin_session(
+        pool,
+        headers
+            .get(header::COOKIE)
+            .and_then(|value| value.to_str().ok()),
+    )
+    .await?;
+
+    let row = sqlx::query(
+        r#"
+        SELECT
+            id,
+            project_id,
+            deployment_instance_id,
+            config_file_id,
+            revision,
+            btrim(content_hash) AS content_hash,
+            format,
+            change_summary,
+            diff_summary,
+            apply_mode,
+            published_by,
+            to_char(published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS published_at,
+            content
+        FROM releases
+        WHERE id = $1
+        LIMIT 1
+        "#,
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| ApiError::internal())?
+    .ok_or_else(|| ApiError::not_found_with("release_not_found", "release not found"))?;
+
+    Ok(Json(ReleaseDetailResponse {
+        release: map_release_row(&row),
+        content: row.get("content"),
+        diff_summary: row
+            .get::<Option<SqlxJson<serde_json::Value>>, _>("diff_summary")
+            .map(|value| value.0),
+    }))
 }
 
 impl PublishReleaseRequest {
@@ -180,9 +341,9 @@ async fn load_publish_context(
     .map_err(|_| ApiError::internal())?
     .ok_or_else(|| ApiError::not_found_with("project_not_found", "project not found"))?;
 
-    let deployment_project_id: i64 = sqlx::query_scalar(
+    let deployment_row = sqlx::query(
         r#"
-        SELECT project_id
+        SELECT project_id, is_template
         FROM deployment_instances
         WHERE id = $1
         LIMIT 1
@@ -199,6 +360,7 @@ async fn load_publish_context(
         )
     })?;
 
+    let deployment_project_id: i64 = deployment_row.get("project_id");
     if deployment_project_id != project_id {
         return Err(ApiError::not_found_with(
             "deployment_instance_not_found",
@@ -229,7 +391,52 @@ async fn load_publish_context(
 
     Ok(ReleasePublishContext {
         format: row.get("format"),
+        is_template: deployment_row.get("is_template"),
     })
+}
+
+async fn ensure_required_configs_present(
+    pool: &sqlx::PgPool,
+    project_id: i64,
+    deployment_instance_id: i64,
+) -> Result<(), ApiError> {
+    let missing_required = sqlx::query_scalar::<_, String>(
+        r#"
+        SELECT cf.code
+        FROM config_files cf
+        WHERE cf.project_id = $1
+          AND cf.status = 'active'
+          AND cf.is_required = TRUE
+          AND NOT EXISTS (
+              SELECT 1
+              FROM drafts d
+              WHERE d.deployment_instance_id = $2
+                AND d.config_file_id = cf.id
+          )
+          AND NOT EXISTS (
+              SELECT 1
+              FROM releases r
+              WHERE r.deployment_instance_id = $2
+                AND r.config_file_id = cf.id
+          )
+        ORDER BY cf.code ASC
+        LIMIT 1
+        "#,
+    )
+    .bind(project_id)
+    .bind(deployment_instance_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| ApiError::internal())?;
+
+    if missing_required.is_some() {
+        return Err(ApiError::conflict(
+            "required_config_missing",
+            "deployment instance is missing a required config",
+        ));
+    }
+
+    Ok(())
 }
 
 async fn load_draft_for_publish(
@@ -275,7 +482,7 @@ async fn next_revision(pool: &sqlx::PgPool) -> Result<String, ApiError> {
     .map_err(|_| ApiError::internal())
 }
 
-fn map_release_row(row: sqlx::postgres::PgRow) -> ReleaseSummary {
+fn map_release_row(row: &sqlx::postgres::PgRow) -> ReleaseSummary {
     ReleaseSummary {
         id: row.get("id"),
         project_id: row.get("project_id"),

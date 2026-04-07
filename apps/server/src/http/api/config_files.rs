@@ -19,6 +19,7 @@ pub(crate) struct CreateConfigFileRequest {
     project_id: Option<i64>,
     code: Option<String>,
     name: Option<String>,
+    is_required: Option<bool>,
     format: Option<String>,
     schema_name: Option<String>,
     schema_version: Option<String>,
@@ -32,6 +33,7 @@ struct ValidatedCreateConfigFileRequest {
     project_id: i64,
     code: String,
     name: String,
+    is_required: bool,
     format: String,
     schema_name: Option<String>,
     schema_version: Option<String>,
@@ -45,6 +47,7 @@ pub(crate) struct UpdateConfigFileRequest {
     project_id: Option<i64>,
     code: Option<String>,
     name: Option<String>,
+    is_required: Option<bool>,
     format: Option<String>,
     schema_name: Option<String>,
     schema_version: Option<String>,
@@ -59,6 +62,7 @@ struct ValidatedUpdateConfigFileRequest {
     project_id: i64,
     code: String,
     name: String,
+    is_required: bool,
     format: String,
     schema_name: Option<String>,
     schema_version: Option<String>,
@@ -122,6 +126,7 @@ pub(crate) async fn list_config_files(
             project_id,
             code,
             name,
+            is_required,
             format,
             schema_name,
             schema_version,
@@ -193,6 +198,7 @@ pub(crate) async fn create_config_file(
             project_id,
             code,
             name,
+            is_required,
             format,
             schema_name,
             schema_version,
@@ -201,12 +207,13 @@ pub(crate) async fn create_config_file(
             description,
             status
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'active')
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'active')
         RETURNING
             id,
             project_id,
             code,
             name,
+            is_required,
             format,
             schema_name,
             schema_version,
@@ -219,6 +226,7 @@ pub(crate) async fn create_config_file(
     .bind(payload.project_id)
     .bind(payload.code)
     .bind(payload.name)
+    .bind(payload.is_required)
     .bind(payload.format)
     .bind(payload.schema_name)
     .bind(payload.schema_version)
@@ -277,6 +285,7 @@ pub(crate) async fn get_config_file(
             project_id,
             code,
             name,
+            is_required,
             format,
             schema_name,
             schema_version,
@@ -351,13 +360,14 @@ pub(crate) async fn update_config_file(
             project_id = $2,
             code = $3,
             name = $4,
-            format = $5,
-            schema_name = $6,
-            schema_version = $7,
-            sensitivity = $8,
-            secret_paths = $9,
-            description = $10,
-            status = $11,
+            is_required = $5,
+            format = $6,
+            schema_name = $7,
+            schema_version = $8,
+            sensitivity = $9,
+            secret_paths = $10,
+            description = $11,
+            status = $12,
             updated_at = NOW()
         WHERE id = $1
         RETURNING
@@ -365,6 +375,7 @@ pub(crate) async fn update_config_file(
             project_id,
             code,
             name,
+            is_required,
             format,
             schema_name,
             schema_version,
@@ -378,6 +389,7 @@ pub(crate) async fn update_config_file(
     .bind(payload.project_id)
     .bind(payload.code)
     .bind(payload.name)
+    .bind(payload.is_required)
     .bind(payload.format)
     .bind(payload.schema_name)
     .bind(payload.schema_version)
@@ -399,6 +411,7 @@ impl CreateConfigFileRequest {
             project_id: required_i64(self.project_id, "project_id")?,
             code: required(self.code, "code")?,
             name: required(self.name, "name")?,
+            is_required: self.is_required.unwrap_or(false),
             format: required(self.format, "format")?,
             schema_name: normalize_optional(self.schema_name),
             schema_version: normalize_optional(self.schema_version),
@@ -415,6 +428,7 @@ impl UpdateConfigFileRequest {
             project_id: required_i64(self.project_id, "project_id")?,
             code: required(self.code, "code")?,
             name: required(self.name, "name")?,
+            is_required: self.is_required.unwrap_or(false),
             format: required(self.format, "format")?,
             schema_name: normalize_optional(self.schema_name),
             schema_version: normalize_optional(self.schema_version),
@@ -436,6 +450,7 @@ fn map_config_file_row(row: sqlx::postgres::PgRow) -> ConfigFileSummary {
         project_id: row.get("project_id"),
         code: row.get("code"),
         name: row.get("name"),
+        is_required: row.get("is_required"),
         format: row.get("format"),
         schema_name: row.get("schema_name"),
         schema_version: row.get("schema_version"),

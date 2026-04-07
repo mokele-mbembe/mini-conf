@@ -2,7 +2,10 @@ use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode, header},
 };
-use schema::{auth::AuthSessionResponse, draft::DraftResponse};
+use schema::{
+    auth::AuthSessionResponse,
+    draft::{DraftCloneResponse, DraftResponse},
+};
 use server::{bootstrap, config::AppConfig, error::ErrorResponse};
 use sqlx::{Connection, Executor, PgConnection, PgPool, Row};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -150,6 +153,33 @@ async fn seed_project_config_deployment(pool: &PgPool) -> TestResult<(i64, i64, 
     .await?;
 
     Ok((project_id, config_file_id, deployment_id))
+}
+
+async fn seed_second_deployment(
+    pool: &PgPool,
+    project_id: i64,
+    deployment_key: &str,
+) -> TestResult<i64> {
+    let deployment_id: i64 = sqlx::query_scalar(
+        r#"
+        INSERT INTO deployment_instances (
+            project_id,
+            environment,
+            deployment_key,
+            name,
+            is_template,
+            status
+        )
+        VALUES ($1, 'prod', $2, $3, false, 'active')
+        RETURNING id
+        "#,
+    )
+    .bind(project_id)
+    .bind(deployment_key)
+    .bind(format!("{deployment_key} deployment"))
+    .fetch_one(pool)
+    .await?;
+    Ok(deployment_id)
 }
 
 #[tokio::test]
@@ -349,5 +379,178 @@ async fn put_draft_rejects_format_mismatch() -> TestResult {
         }
     );
 
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn clone_draft_copies_latest_release_into_target_draft() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+    let (project_id, config_file_id, source_deployment_id) =
+        seed_project_config_deployment(&pool).await?;
+    let target_deployment_id = seed_second_deployment(&pool, project_id, "store-002").await?;
+    let publisher_user_id: i64 =
+        sqlx::query_scalar("SELECT id FROM users WHERE username = 'admin' LIMIT 1")
+            .fetch_one(&pool)
+            .await?;
+    sqlx::query(
+        r#"
+        INSERT INTO releases (
+            project_id,
+            config_file_id,
+            deployment_instance_id,
+            revision,
+            content,
+            content_hash,
+            format,
+            change_summary,
+            diff_summary,
+            apply_mode,
+            published_by
+        )
+        VALUES
+            ($1, $2, $3, '20260407.0001', $4, repeat('c', 64), 'yaml', NULL, NULL, 'soft', $5)
+        "#,
+    )
+    .bind(project_id)
+    .bind(config_file_id)
+    .bind(source_deployment_id)
+    .bind("poll_interval_ms: 7000\n")
+    .bind(publisher_user_id)
+    .execute(&pool)
+    .await?;
+
+    let cookie = login(&app).await?;
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/drafts/{target_deployment_id}/{config_file_id}/clone"
+                ))
+                .header(header::COOKIE, &cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(format!(
+                    r#"{{"source_deployment_instance_id":{source_deployment_id},"source_kind":"latest_release"}}"#
+                )))?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: DraftCloneResponse = read_json(response).await?;
+    assert_eq!(payload.source_kind, "latest_release");
+    assert_eq!(payload.source_deployment_instance_id, source_deployment_id);
+    assert_eq!(payload.draft.deployment_instance_id, target_deployment_id);
+    assert_eq!(payload.draft.content, "poll_interval_ms: 7000\n");
+    assert_eq!(payload.draft.version, 1);
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn clone_draft_overwrites_existing_target_and_increments_version() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+    let (project_id, config_file_id, source_deployment_id) =
+        seed_project_config_deployment(&pool).await?;
+    let target_deployment_id = seed_second_deployment(&pool, project_id, "store-002").await?;
+    let cookie = login(&app).await?;
+
+    let _ = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!(
+                    "/api/drafts/{source_deployment_id}/{config_file_id}"
+                ))
+                .header(header::COOKIE, &cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"content":"poll_interval_ms: 5000\n","format":"yaml"}"#,
+                ))?,
+        )
+        .await?;
+    let _ = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!(
+                    "/api/drafts/{target_deployment_id}/{config_file_id}"
+                ))
+                .header(header::COOKIE, &cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"content":"poll_interval_ms: 3000\n","format":"yaml"}"#,
+                ))?,
+        )
+        .await?;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/drafts/{target_deployment_id}/{config_file_id}/clone"
+                ))
+                .header(header::COOKIE, &cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(format!(
+                    r#"{{"source_deployment_instance_id":{source_deployment_id},"source_kind":"draft"}}"#
+                )))?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: DraftCloneResponse = read_json(response).await?;
+    assert_eq!(payload.draft.content, "poll_interval_ms: 5000\n");
+    assert_eq!(payload.draft.version, 2);
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn clone_draft_rejects_cross_project_source() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+    let (_project_id, config_file_id, target_deployment_id) =
+        seed_project_config_deployment(&pool).await?;
+    let other_project_id: i64 = sqlx::query_scalar(
+        "INSERT INTO projects (code, name, status) VALUES ('store-os', 'Store OS', 'active') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await?;
+    let source_deployment_id =
+        seed_second_deployment(&pool, other_project_id, "store-foreign").await?;
+    let cookie = login(&app).await?;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/drafts/{target_deployment_id}/{config_file_id}/clone"
+                ))
+                .header(header::COOKIE, cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(format!(
+                    r#"{{"source_deployment_instance_id":{source_deployment_id},"source_kind":"draft"}}"#
+                )))?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    let payload: ErrorResponse = read_json(response).await?;
+    assert_eq!(
+        payload,
+        ErrorResponse {
+            code: "draft_clone_cross_project_forbidden".to_owned(),
+            message: "draft clone source must be in the same project".to_owned(),
+        }
+    );
     teardown(&database_url, &schema, pool).await
 }

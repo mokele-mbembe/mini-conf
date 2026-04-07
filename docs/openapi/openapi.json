@@ -865,6 +865,186 @@
         ]
       }
     },
+    "/api/deployment-instances/{id}/clone": {
+      "post": {
+        "tags": ["admin"],
+        "operationId": "clone_deployment_instance",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Template deployment instance ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloneDeploymentInstanceRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Deployment instance cloned from template",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentInstanceSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or expired admin session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Template deployment instance not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Template deployment is invalid or deployment key conflicts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database bootstrap disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_auth": []
+          }
+        ]
+      }
+    },
+    "/api/deployment-instances/{id}/preview-bundle": {
+      "get": {
+        "tags": ["admin"],
+        "operationId": "preview_deployment_bundle",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Deployment instance ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deployment bundle preview",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentBundlePreviewResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or expired admin session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Deployment instance not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database bootstrap disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_auth": []
+          }
+        ]
+      }
+    },
     "/api/drafts/{deployment_id}/{config_file_id}": {
       "get": {
         "tags": ["admin"],
@@ -1027,6 +1207,131 @@
           },
           "409": {
             "description": "Draft version conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Draft validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database bootstrap disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_auth": []
+          }
+        ]
+      }
+    },
+    "/api/drafts/{target_deployment_id}/{config_file_id}/clone": {
+      "post": {
+        "tags": ["admin"],
+        "operationId": "clone_draft",
+        "parameters": [
+          {
+            "name": "target_deployment_id",
+            "in": "path",
+            "description": "Target deployment instance ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "config_file_id",
+            "in": "path",
+            "description": "Config file ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloneDraftRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Draft cloned from source deployment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftCloneResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or expired admin session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Cross-project draft clone is forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Deployment instance, config file, or source revision not found",
             "content": {
               "application/json": {
                 "schema": {
@@ -1966,6 +2271,88 @@
         ]
       }
     },
+    "/api/releases": {
+      "get": {
+        "tags": ["admin"],
+        "operationId": "list_releases",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "deployment_instance_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "config_file_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List releases",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or expired admin session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database bootstrap disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_auth": []
+          }
+        ]
+      }
+    },
     "/api/releases/publish": {
       "post": {
         "tags": ["admin"],
@@ -2048,6 +2435,81 @@
           }
         ]
       }
+    },
+    "/api/releases/{id}": {
+      "get": {
+        "tags": ["admin"],
+        "operationId": "get_release_detail",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Release ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Release detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseDetailResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or expired admin session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Release not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database bootstrap disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_auth": []
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -2073,6 +2535,40 @@
             "format": "int64"
           },
           "username": {
+            "type": "string"
+          }
+        }
+      },
+      "CloneDeploymentInstanceRequestBody": {
+        "type": "object",
+        "required": ["deployment_key", "name", "environment", "clone_source"],
+        "properties": {
+          "clone_source": {
+            "type": "string"
+          },
+          "deployment_key": {
+            "type": "string"
+          },
+          "description": {
+            "type": ["string", "null"]
+          },
+          "environment": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "CloneDraftRequestBody": {
+        "type": "object",
+        "required": ["source_deployment_instance_id", "source_kind"],
+        "properties": {
+          "source_deployment_instance_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "source_kind": {
             "type": "string"
           }
         }
@@ -2150,6 +2646,7 @@
           "project_id",
           "code",
           "name",
+          "is_required",
           "format",
           "sensitivity",
           "status"
@@ -2167,6 +2664,9 @@
           "id": {
             "type": "integer",
             "format": "int64"
+          },
+          "is_required": {
+            "type": "boolean"
           },
           "name": {
             "type": "string"
@@ -2207,6 +2707,9 @@
           },
           "format": {
             "type": "string"
+          },
+          "is_required": {
+            "type": ["boolean", "null"]
           },
           "name": {
             "type": "string"
@@ -2272,6 +2775,25 @@
           }
         }
       },
+      "DeploymentBundlePreviewResponse": {
+        "type": "object",
+        "required": ["deployment_instance_id", "items", "open_bundle_preview"],
+        "properties": {
+          "deployment_instance_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeploymentPreviewItem"
+            }
+          },
+          "open_bundle_preview": {
+            "$ref": "#/components/schemas/ConfigBundleResponse"
+          }
+        }
+      },
       "DeploymentInstanceListResponse": {
         "type": "object",
         "required": ["items"],
@@ -2328,6 +2850,48 @@
           }
         }
       },
+      "DeploymentPreviewItem": {
+        "type": "object",
+        "required": [
+          "config_file_id",
+          "code",
+          "name",
+          "is_required",
+          "source",
+          "status",
+          "format"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "config_file_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "content": {
+            "type": ["string", "null"]
+          },
+          "format": {
+            "type": "string"
+          },
+          "is_required": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "revision": {
+            "type": ["string", "null"]
+          },
+          "source": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
       "DeploymentSyncRecordRequestBody": {
         "type": "object",
         "required": [
@@ -2381,6 +2945,22 @@
         "properties": {
           "ok": {
             "type": "boolean"
+          }
+        }
+      },
+      "DraftCloneResponse": {
+        "type": "object",
+        "required": ["draft", "source_deployment_instance_id", "source_kind"],
+        "properties": {
+          "draft": {
+            "$ref": "#/components/schemas/DraftResponse"
+          },
+          "source_deployment_instance_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "source_kind": {
+            "type": "string"
           }
         }
       },
@@ -2502,6 +3082,23 @@
           }
         }
       },
+      "ListReleasesParams": {
+        "type": "object",
+        "properties": {
+          "config_file_id": {
+            "type": ["integer", "null"],
+            "format": "int64"
+          },
+          "deployment_instance_id": {
+            "type": ["integer", "null"],
+            "format": "int64"
+          },
+          "project_id": {
+            "type": ["integer", "null"],
+            "format": "int64"
+          }
+        }
+      },
       "LoginRequestBody": {
         "type": "object",
         "required": ["username", "password"],
@@ -2611,6 +3208,31 @@
           },
           "project": {
             "type": "string"
+          }
+        }
+      },
+      "ReleaseDetailResponse": {
+        "type": "object",
+        "required": ["release", "content"],
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "diff_summary": {},
+          "release": {
+            "$ref": "#/components/schemas/ReleaseSummary"
+          }
+        }
+      },
+      "ReleaseListResponse": {
+        "type": "object",
+        "required": ["items"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReleaseSummary"
+            }
           }
         }
       },
@@ -2795,6 +3417,9 @@
           },
           "format": {
             "type": "string"
+          },
+          "is_required": {
+            "type": ["boolean", "null"]
           },
           "name": {
             "type": "string"

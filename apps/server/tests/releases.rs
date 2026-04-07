@@ -2,7 +2,11 @@ use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode, header},
 };
-use schema::{auth::AuthSessionResponse, draft::DraftResponse, release::ReleaseSummary};
+use schema::{
+    auth::AuthSessionResponse,
+    draft::DraftResponse,
+    release::{ReleaseDetailResponse, ReleaseListResponse, ReleaseSummary},
+};
 use server::{bootstrap, config::AppConfig, error::ErrorResponse};
 use sqlx::{Connection, Executor, PgConnection, PgPool, Row};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -152,6 +156,32 @@ async fn seed_project_config_deployment(pool: &PgPool) -> TestResult<(i64, i64, 
     Ok((project_id, config_file_id, deployment_id))
 }
 
+async fn seed_required_config_file(pool: &PgPool, project_id: i64, code: &str) -> TestResult<i64> {
+    let config_file_id: i64 = sqlx::query_scalar(
+        r#"
+        INSERT INTO config_files (
+            project_id,
+            code,
+            name,
+            is_required,
+            format,
+            schema_name,
+            schema_version,
+            sensitivity,
+            status
+        )
+        VALUES ($1, $2, $3, true, 'yaml', 'coffee-main', 'v1', 'normal', 'active')
+        RETURNING id
+        "#,
+    )
+    .bind(project_id)
+    .bind(code)
+    .bind(format!("{code} config"))
+    .fetch_one(pool)
+    .await?;
+    Ok(config_file_id)
+}
+
 async fn save_draft(
     app: &axum::Router,
     cookie: &str,
@@ -187,6 +217,40 @@ async fn save_draft(
     read_json(response).await
 }
 
+async fn publish_release(
+    app: &axum::Router,
+    cookie: &str,
+    project_id: i64,
+    deployment_id: i64,
+    config_file_id: i64,
+    change_summary: Option<&str>,
+) -> TestResult<ReleaseSummary> {
+    let body = if let Some(change_summary) = change_summary {
+        format!(
+            r#"{{"project_id":{project_id},"deployment_instance_id":{deployment_id},"config_file_id":{config_file_id},"change_summary":{}}}"#,
+            serde_json::to_string(change_summary)?
+        )
+    } else {
+        format!(
+            r#"{{"project_id":{project_id},"deployment_instance_id":{deployment_id},"config_file_id":{config_file_id}}}"#
+        )
+    };
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/releases/publish")
+                .header(header::COOKIE, cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body))?,
+        )
+        .await?;
+
+    read_json(response).await
+}
+
 #[tokio::test]
 async fn publish_release_creates_release_from_current_draft() -> TestResult {
     let Some((app, pool, database_url, schema)) = setup_app().await? else {
@@ -204,22 +268,15 @@ async fn publish_release_creates_release_from_current_draft() -> TestResult {
     )
     .await?;
 
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/releases/publish")
-                .header(header::COOKIE, &cookie)
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(format!(
-                    r#"{{"project_id":{project_id},"deployment_instance_id":{deployment_id},"config_file_id":{config_file_id},"change_summary":"increase polling interval"}}"#
-                )))?,
-        )
-        .await?;
-
-    assert_eq!(response.status(), StatusCode::CREATED);
-    let payload: ReleaseSummary = read_json(response).await?;
+    let payload = publish_release(
+        &app,
+        &cookie,
+        project_id,
+        deployment_id,
+        config_file_id,
+        Some("increase polling interval"),
+    )
+    .await?;
     assert_eq!(payload.project_id, project_id);
     assert_eq!(payload.deployment_instance_id, deployment_id);
     assert_eq!(payload.config_file_id, config_file_id);
@@ -264,34 +321,25 @@ async fn publish_release_generates_new_revision_for_identical_draft_content() ->
     )
     .await?;
 
-    let first = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/releases/publish")
-                .header(header::COOKIE, &cookie)
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(format!(
-                    r#"{{"project_id":{project_id},"deployment_instance_id":{deployment_id},"config_file_id":{config_file_id}}}"#
-                )))?,
-        )
-        .await?;
-    let first: ReleaseSummary = read_json(first).await?;
+    let first = publish_release(
+        &app,
+        &cookie,
+        project_id,
+        deployment_id,
+        config_file_id,
+        None,
+    )
+    .await?;
 
-    let second = app
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/releases/publish")
-                .header(header::COOKIE, cookie)
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(format!(
-                    r#"{{"project_id":{project_id},"deployment_instance_id":{deployment_id},"config_file_id":{config_file_id}}}"#
-                )))?,
-        )
-        .await?;
-    let second: ReleaseSummary = read_json(second).await?;
+    let second = publish_release(
+        &app,
+        &cookie,
+        project_id,
+        deployment_id,
+        config_file_id,
+        None,
+    )
+    .await?;
 
     assert_ne!(first.revision, second.revision);
     assert_eq!(first.content_hash, second.content_hash);
@@ -329,6 +377,317 @@ async fn publish_release_returns_draft_not_found_when_current_draft_is_missing()
             message: "draft not found".to_owned(),
         }
     );
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn list_releases_filters_by_deployment_instance() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+    let (project_id, config_file_id, deployment_id) = seed_project_config_deployment(&pool).await?;
+    let second_deployment_id: i64 = sqlx::query_scalar(
+        r#"
+        INSERT INTO deployment_instances (
+            project_id,
+            environment,
+            deployment_key,
+            name,
+            is_template,
+            status
+        )
+        VALUES ($1, 'prod', 'store-002', 'Store 002', false, 'active')
+        RETURNING id
+        "#,
+    )
+    .bind(project_id)
+    .fetch_one(&pool)
+    .await?;
+    let cookie = login(&app).await?;
+
+    let _ = save_draft(
+        &app,
+        &cookie,
+        deployment_id,
+        config_file_id,
+        "poll_interval_ms: 5000\n",
+        None,
+    )
+    .await?;
+    let _ = save_draft(
+        &app,
+        &cookie,
+        second_deployment_id,
+        config_file_id,
+        "poll_interval_ms: 8000\n",
+        None,
+    )
+    .await?;
+    let _ = publish_release(
+        &app,
+        &cookie,
+        project_id,
+        deployment_id,
+        config_file_id,
+        Some("first"),
+    )
+    .await?;
+    let target = publish_release(
+        &app,
+        &cookie,
+        project_id,
+        second_deployment_id,
+        config_file_id,
+        Some("second"),
+    )
+    .await?;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/releases?deployment_instance_id={second_deployment_id}"
+                ))
+                .header(header::COOKIE, cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: ReleaseListResponse = read_json(response).await?;
+    assert_eq!(payload.items.len(), 1);
+    assert_eq!(payload.items[0].id, target.id);
+    assert_eq!(
+        payload.items[0].deployment_instance_id,
+        second_deployment_id
+    );
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn get_release_detail_returns_content_and_metadata() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+    let (project_id, config_file_id, deployment_id) = seed_project_config_deployment(&pool).await?;
+    let cookie = login(&app).await?;
+    let _ = save_draft(
+        &app,
+        &cookie,
+        deployment_id,
+        config_file_id,
+        "poll_interval_ms: 5000\n",
+        None,
+    )
+    .await?;
+    let created = publish_release(
+        &app,
+        &cookie,
+        project_id,
+        deployment_id,
+        config_file_id,
+        Some("increase polling interval"),
+    )
+    .await?;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/releases/{}", created.id))
+                .header(header::COOKIE, cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: ReleaseDetailResponse = read_json(response).await?;
+    assert_eq!(payload.release.id, created.id);
+    assert_eq!(payload.content, "poll_interval_ms: 5000\n");
+    assert!(payload.diff_summary.is_none());
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn get_release_detail_returns_not_found_for_unknown_release() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+    let cookie = login(&app).await?;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/releases/999999")
+                .header(header::COOKIE, cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let payload: ErrorResponse = read_json(response).await?;
+    assert_eq!(
+        payload,
+        ErrorResponse {
+            code: "release_not_found".to_owned(),
+            message: "release not found".to_owned(),
+        }
+    );
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn publish_release_rejects_template_deployment_instances() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+    let (project_id, config_file_id, deployment_id) = seed_project_config_deployment(&pool).await?;
+    sqlx::query("UPDATE deployment_instances SET is_template = TRUE WHERE id = $1")
+        .bind(deployment_id)
+        .execute(&pool)
+        .await?;
+
+    let cookie = login(&app).await?;
+    let _ = save_draft(
+        &app,
+        &cookie,
+        deployment_id,
+        config_file_id,
+        "poll_interval_ms: 5000\n",
+        None,
+    )
+    .await?;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/releases/publish")
+                .header(header::COOKIE, cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(format!(
+                    r#"{{"project_id":{project_id},"deployment_instance_id":{deployment_id},"config_file_id":{config_file_id}}}"#
+                )))?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let payload: ErrorResponse = read_json(response).await?;
+    assert_eq!(
+        payload,
+        ErrorResponse {
+            code: "deployment_instance_template_publish_forbidden".to_owned(),
+            message: "template deployment instances cannot publish releases".to_owned(),
+        }
+    );
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn publish_release_rejects_when_required_config_is_missing() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+    let (project_id, config_file_id, deployment_id) = seed_project_config_deployment(&pool).await?;
+    let _required_config_file_id = seed_required_config_file(&pool, project_id, "vision").await?;
+    let cookie = login(&app).await?;
+    let _ = save_draft(
+        &app,
+        &cookie,
+        deployment_id,
+        config_file_id,
+        "poll_interval_ms: 5000\n",
+        None,
+    )
+    .await?;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/releases/publish")
+                .header(header::COOKIE, cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(format!(
+                    r#"{{"project_id":{project_id},"deployment_instance_id":{deployment_id},"config_file_id":{config_file_id}}}"#
+                )))?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let payload: ErrorResponse = read_json(response).await?;
+    assert_eq!(
+        payload,
+        ErrorResponse {
+            code: "required_config_missing".to_owned(),
+            message: "deployment instance is missing a required config".to_owned(),
+        }
+    );
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn publish_release_allows_required_config_when_it_has_existing_release() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+    let (project_id, config_file_id, deployment_id) = seed_project_config_deployment(&pool).await?;
+    let required_config_file_id = seed_required_config_file(&pool, project_id, "vision").await?;
+    let publisher_user_id: i64 =
+        sqlx::query_scalar("SELECT id FROM users WHERE username = 'admin' LIMIT 1")
+            .fetch_one(&pool)
+            .await?;
+    sqlx::query(
+        r#"
+        INSERT INTO releases (
+            project_id,
+            config_file_id,
+            deployment_instance_id,
+            revision,
+            content,
+            content_hash,
+            format,
+            change_summary,
+            diff_summary,
+            apply_mode,
+            published_by
+        )
+        VALUES ($1, $2, $3, '20260407.0100', 'vision_enabled: true\n', repeat('d', 64), 'yaml', NULL, NULL, 'soft', $4)
+        "#,
+    )
+    .bind(project_id)
+    .bind(required_config_file_id)
+    .bind(deployment_id)
+    .bind(publisher_user_id)
+    .execute(&pool)
+    .await?;
+
+    let cookie = login(&app).await?;
+    let _ = save_draft(
+        &app,
+        &cookie,
+        deployment_id,
+        config_file_id,
+        "poll_interval_ms: 5000\n",
+        None,
+    )
+    .await?;
+
+    let payload = publish_release(
+        &app,
+        &cookie,
+        project_id,
+        deployment_id,
+        config_file_id,
+        None,
+    )
+    .await?;
+    assert_eq!(payload.deployment_instance_id, deployment_id);
 
     teardown(&database_url, &schema, pool).await
 }

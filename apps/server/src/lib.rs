@@ -548,6 +548,41 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn clone_deployment_instance_requires_required_body_fields() {
+        let app = test_app();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/deployment-instances/1/clone")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        r#"{"deployment_key":"store-002","environment":"prod"}"#,
+                    ))
+                    .expect("request should build"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should be readable");
+        let payload: ErrorResponse =
+            serde_json::from_slice(&body).expect("payload should be valid json");
+
+        assert_eq!(
+            payload,
+            ErrorResponse {
+                code: "invalid_request".to_owned(),
+                message: "missing required body field: clone_source".to_owned(),
+            }
+        );
+    }
+
+    #[tokio::test]
     async fn put_draft_requires_required_body_fields() {
         let app = test_app();
 

@@ -4,7 +4,9 @@ use axum::{
 };
 use schema::{
     auth::AuthSessionResponse,
-    deployment_instance::{DeploymentInstanceListResponse, DeploymentInstanceSummary},
+    deployment_instance::{
+        DeploymentBundlePreviewResponse, DeploymentInstanceListResponse, DeploymentInstanceSummary,
+    },
 };
 use server::{bootstrap, config::AppConfig, error::ErrorResponse};
 use sqlx::{Connection, Executor, PgConnection, PgPool, Row};
@@ -107,6 +109,68 @@ async fn login(app: &axum::Router) -> TestResult<String> {
     let cookie = session_cookie(&response)?;
     let _: AuthSessionResponse = read_json(response).await?;
     Ok(cookie)
+}
+
+async fn seed_project(pool: &PgPool, code: &str, name: &str) -> TestResult<i64> {
+    let project_id: i64 = sqlx::query_scalar(
+        "INSERT INTO projects (code, name, status) VALUES ($1, $2, 'active') RETURNING id",
+    )
+    .bind(code)
+    .bind(name)
+    .fetch_one(pool)
+    .await?;
+    Ok(project_id)
+}
+
+async fn seed_config_file(pool: &PgPool, project_id: i64, code: &str) -> TestResult<i64> {
+    let config_file_id: i64 = sqlx::query_scalar(
+        r#"
+        INSERT INTO config_files (
+            project_id,
+            code,
+            name,
+            format,
+            schema_name,
+            schema_version,
+            sensitivity,
+            status
+        )
+        VALUES ($1, $2, $3, 'yaml', 'coffee-main', 'v1', 'normal', 'active')
+        RETURNING id
+        "#,
+    )
+    .bind(project_id)
+    .bind(code)
+    .bind(format!("{code} config"))
+    .fetch_one(pool)
+    .await?;
+    Ok(config_file_id)
+}
+
+async fn seed_template_deployment(
+    pool: &PgPool,
+    project_id: i64,
+    deployment_key: &str,
+) -> TestResult<i64> {
+    let deployment_id: i64 = sqlx::query_scalar(
+        r#"
+        INSERT INTO deployment_instances (
+            project_id,
+            environment,
+            deployment_key,
+            name,
+            is_template,
+            status
+        )
+        VALUES ($1, 'prod', $2, 'Template Store', true, 'active')
+        RETURNING id
+        "#,
+    )
+    .bind(project_id)
+    .bind(deployment_key)
+    .fetch_one(pool)
+    .await?;
+    Ok(deployment_id)
 }
 
 #[tokio::test]
@@ -482,6 +546,210 @@ async fn deployment_instance_crud_flow_persists_changes_across_endpoints() -> Te
     assert_eq!(row.get::<String, _>("environment"), "staging");
     assert_eq!(row.get::<String, _>("deployment_key"), "store-stg");
     assert_eq!(row.get::<String, _>("status"), "archived");
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn clone_deployment_instance_copies_template_drafts() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    let project_id = seed_project(&pool, "coffee-legacy", "Coffee Legacy").await?;
+    let config_file_id = seed_config_file(&pool, project_id, "main").await?;
+    let template_id = seed_template_deployment(&pool, project_id, "store-template").await?;
+    let editor_user_id: i64 =
+        sqlx::query_scalar("SELECT id FROM users WHERE username = 'admin' LIMIT 1")
+            .fetch_one(&pool)
+            .await?;
+    sqlx::query(
+        r#"
+        INSERT INTO drafts (
+            project_id,
+            config_file_id,
+            deployment_instance_id,
+            content,
+            content_hash,
+            format,
+            schema_version,
+            version,
+            editor_user_id
+        )
+        VALUES ($1, $2, $3, $4, repeat('a', 64), 'yaml', 'v1', 4, $5)
+        "#,
+    )
+    .bind(project_id)
+    .bind(config_file_id)
+    .bind(template_id)
+    .bind("poll_interval_ms: 5000\n")
+    .bind(editor_user_id)
+    .execute(&pool)
+    .await?;
+
+    let cookie = login(&app).await?;
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/deployment-instances/{template_id}/clone"))
+                .header(header::COOKIE, &cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"deployment_key":"store-002","name":"Store 002","environment":"prod","description":"cloned from template","clone_source":"draft"}"#,
+                ))?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let payload: DeploymentInstanceSummary = read_json(response).await?;
+    assert_eq!(payload.project_id, project_id);
+    assert_eq!(payload.template_source_id, Some(template_id));
+    assert!(!payload.is_template);
+
+    let row = sqlx::query(
+        "SELECT content, format, schema_version, version FROM drafts WHERE deployment_instance_id = $1 AND config_file_id = $2",
+    )
+    .bind(payload.id)
+    .bind(config_file_id)
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(row.get::<String, _>("content"), "poll_interval_ms: 5000\n");
+    assert_eq!(row.get::<String, _>("format"), "yaml");
+    assert_eq!(
+        row.get::<Option<String>, _>("schema_version").as_deref(),
+        Some("v1")
+    );
+    assert_eq!(row.get::<i64, _>("version"), 1);
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn clone_deployment_instance_rejects_latest_release_source() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    let project_id = seed_project(&pool, "coffee-legacy", "Coffee Legacy").await?;
+    let _config_file_id = seed_config_file(&pool, project_id, "main").await?;
+    let template_id = seed_template_deployment(&pool, project_id, "store-template").await?;
+
+    let cookie = login(&app).await?;
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/deployment-instances/{template_id}/clone"))
+                .header(header::COOKIE, &cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"deployment_key":"store-003","name":"Store 003","environment":"staging","clone_source":"latest_release"}"#,
+                ))?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let payload: ErrorResponse = read_json(response).await?;
+    assert_eq!(
+        payload,
+        ErrorResponse {
+            code: "invalid_request".to_owned(),
+            message: "invalid deployment clone source".to_owned(),
+        }
+    );
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn preview_bundle_prefers_draft_and_marks_missing_required() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    let project_id = seed_project(&pool, "coffee-legacy", "Coffee Legacy").await?;
+    let main_config_id = seed_config_file(&pool, project_id, "main").await?;
+    let vision_config_id = seed_config_file(&pool, project_id, "vision").await?;
+    sqlx::query("UPDATE config_files SET is_required = TRUE WHERE id = $1")
+        .bind(vision_config_id)
+        .execute(&pool)
+        .await?;
+    let deployment_id: i64 = sqlx::query_scalar(
+        r#"
+        INSERT INTO deployment_instances (
+            project_id,
+            environment,
+            deployment_key,
+            name,
+            is_template,
+            status
+        )
+        VALUES ($1, 'prod', 'store-001', 'Store 001', false, 'active')
+        RETURNING id
+        "#,
+    )
+    .bind(project_id)
+    .fetch_one(&pool)
+    .await?;
+    let editor_user_id: i64 =
+        sqlx::query_scalar("SELECT id FROM users WHERE username = 'admin' LIMIT 1")
+            .fetch_one(&pool)
+            .await?;
+    sqlx::query(
+        r#"
+        INSERT INTO drafts (
+            project_id,
+            config_file_id,
+            deployment_instance_id,
+            content,
+            content_hash,
+            format,
+            schema_version,
+            version,
+            editor_user_id
+        )
+        VALUES ($1, $2, $3, $4, repeat('a', 64), 'yaml', 'v1', 2, $5)
+        "#,
+    )
+    .bind(project_id)
+    .bind(main_config_id)
+    .bind(deployment_id)
+    .bind("poll_interval_ms: 5000\n")
+    .bind(editor_user_id)
+    .execute(&pool)
+    .await?;
+
+    let cookie = login(&app).await?;
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/deployment-instances/{deployment_id}/preview-bundle"
+                ))
+                .header(header::COOKIE, cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: DeploymentBundlePreviewResponse = read_json(response).await?;
+    assert_eq!(payload.deployment_instance_id, deployment_id);
+    assert_eq!(payload.open_bundle_preview.configs.len(), 1);
+    assert_eq!(payload.open_bundle_preview.configs[0].config, "main");
+    assert_eq!(payload.open_bundle_preview.configs[0].revision, "draft-v2");
+    assert_eq!(payload.items.len(), 2);
+    assert!(
+        payload
+            .items
+            .iter()
+            .any(|item| item.code == "main" && item.source == "draft" && item.status == "ready")
+    );
+    assert!(payload.items.iter().any(|item| item.code == "vision"
+        && item.source == "none"
+        && item.status == "missing_required"));
 
     teardown(&database_url, &schema, pool).await
 }

@@ -1,3 +1,4 @@
+use crate::open::ConfigBundleResponse;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -19,9 +20,33 @@ pub struct DeploymentInstanceListResponse {
     pub items: Vec<DeploymentInstanceSummary>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct DeploymentPreviewItem {
+    pub config_file_id: i64,
+    pub code: String,
+    pub name: String,
+    pub is_required: bool,
+    pub source: String,
+    pub status: String,
+    pub format: String,
+    pub content: Option<String>,
+    pub revision: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct DeploymentBundlePreviewResponse {
+    pub deployment_instance_id: i64,
+    pub items: Vec<DeploymentPreviewItem>,
+    pub open_bundle_preview: ConfigBundleResponse,
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{DeploymentInstanceListResponse, DeploymentInstanceSummary};
+    use super::{
+        DeploymentBundlePreviewResponse, DeploymentInstanceListResponse, DeploymentInstanceSummary,
+        DeploymentPreviewItem,
+    };
+    use crate::open::{ConfigBundleItem, ConfigBundleResponse, ResolveDeployment};
 
     #[test]
     fn deployment_instance_list_response_serializes_expected_shape() {
@@ -56,6 +81,101 @@ mod tests {
                         "status": "active"
                     }
                 ]
+            })
+        );
+    }
+
+    #[test]
+    fn deployment_bundle_preview_response_serializes_expected_shape() {
+        let value = serde_json::to_value(DeploymentBundlePreviewResponse {
+            deployment_instance_id: 9,
+            items: vec![
+                DeploymentPreviewItem {
+                    config_file_id: 3,
+                    code: "main".to_owned(),
+                    name: "Main Config".to_owned(),
+                    is_required: true,
+                    source: "draft".to_owned(),
+                    status: "ready".to_owned(),
+                    format: "yaml".to_owned(),
+                    content: Some("poll_interval_ms: 8000\n".to_owned()),
+                    revision: Some("draft-v2".to_owned()),
+                },
+                DeploymentPreviewItem {
+                    config_file_id: 4,
+                    code: "vision".to_owned(),
+                    name: "Vision Config".to_owned(),
+                    is_required: false,
+                    source: "none".to_owned(),
+                    status: "missing_optional".to_owned(),
+                    format: "yaml".to_owned(),
+                    content: None,
+                    revision: None,
+                },
+            ],
+            open_bundle_preview: ConfigBundleResponse {
+                project: "coffee-legacy".to_owned(),
+                environment: "prod".to_owned(),
+                deployment: ResolveDeployment {
+                    key: "store-001".to_owned(),
+                    name: "Store 001".to_owned(),
+                },
+                configs: vec![ConfigBundleItem {
+                    config: "main".to_owned(),
+                    revision: "draft-v2".to_owned(),
+                    content_hash: "abc123".to_owned(),
+                    format: "yaml".to_owned(),
+                    content: "poll_interval_ms: 8000\n".to_owned(),
+                }],
+            },
+        })
+        .expect("response should serialize");
+
+        assert_eq!(
+            value,
+            serde_json::json!({
+                "deployment_instance_id": 9,
+                "items": [
+                    {
+                        "config_file_id": 3,
+                        "code": "main",
+                        "name": "Main Config",
+                        "is_required": true,
+                        "source": "draft",
+                        "status": "ready",
+                        "format": "yaml",
+                        "content": "poll_interval_ms: 8000\n",
+                        "revision": "draft-v2"
+                    },
+                    {
+                        "config_file_id": 4,
+                        "code": "vision",
+                        "name": "Vision Config",
+                        "is_required": false,
+                        "source": "none",
+                        "status": "missing_optional",
+                        "format": "yaml",
+                        "content": null,
+                        "revision": null
+                    }
+                ],
+                "open_bundle_preview": {
+                    "project": "coffee-legacy",
+                    "environment": "prod",
+                    "deployment": {
+                        "key": "store-001",
+                        "name": "Store 001"
+                    },
+                    "configs": [
+                        {
+                            "config": "main",
+                            "revision": "draft-v2",
+                            "content_hash": "abc123",
+                            "format": "yaml",
+                            "content": "poll_interval_ms: 8000\n"
+                        }
+                    ]
+                }
             })
         );
     }
