@@ -72,10 +72,9 @@ openapi-check:
   @if [ -f scripts/export-openapi.sh ]; then \
     bash scripts/export-openapi.sh; \
     if [ -f docs/openapi/openapi.json ]; then \
-      status="$$(git status --short -- docs/openapi/openapi.json || true)"; \
-      if [ -n "$$status" ]; then \
+      if ! git diff --quiet -- docs/openapi/openapi.json; then \
         echo "OpenAPI spec changed:"; \
-        echo "$$status"; \
+        git status --short -- docs/openapi/openapi.json || true; \
         exit 1; \
       fi; \
     else \

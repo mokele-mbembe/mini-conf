@@ -89,11 +89,14 @@ sudo apt install -y \
   build-essential \
   pkg-config \
   libssl-dev \
+  postgresql \
+  postgresql-contrib \
   postgresql-client \
   jq \
   curl \
   git \
-  ripgrep
+  ripgrep \
+  just
 ```
 
 安装 Rust：
@@ -119,6 +122,89 @@ cargo install sqlx-cli --no-default-features --features rustls,postgres
 corepack enable
 corepack prepare pnpm@latest --activate
 ```
+
+## 6.1 WSL2 下推荐的 PostgreSQL 初始化方式
+
+WSL2 下不建议把数据库密码管理强绑定到 `secret-tool` 或桌面 keyring。
+
+推荐方式是：
+
+1. 直接在 WSL 内安装并启动 PostgreSQL
+2. 在 WSL 的本地配置脚本里保存开发库连接信息
+3. 让现有 `scripts/load-dev-env.sh` 和 `scripts/dev-db-env.sh` 自动读取
+
+这样：
+
+- `just dev-server`
+- `just db-migrate-up`
+- `just test-backend-db`
+
+都能直接衔接，不需要改仓库脚本。
+
+### 初始化 PostgreSQL
+
+```bash
+sudo service postgresql start
+sudo -u postgres psql <<'SQL'
+CREATE USER mini_conf WITH PASSWORD 'replace-with-a-local-dev-password';
+CREATE DATABASE mini_conf OWNER mini_conf;
+SQL
+```
+
+如果用户或数据库已存在，就把上面两句改成：
+
+```sql
+ALTER USER mini_conf WITH PASSWORD 'replace-with-a-local-dev-password';
+```
+
+### 推荐的本机配置文件
+
+当前仓库会自动加载：
+
+```bash
+~/.config/mini-conf/dev-env.sh
+```
+
+推荐在 WSL 里写这个文件：
+
+```bash
+mkdir -p ~/.config/mini-conf
+cat > ~/.config/mini-conf/dev-env.sh <<'EOF'
+export MINI_CONF_DB_HOST=127.0.0.1
+export MINI_CONF_DB_PORT=5432
+export MINI_CONF_DB_NAME=mini_conf
+export MINI_CONF_DB_USER=mini_conf
+export MINI_CONF_DB_PASSWORD='replace-with-a-local-dev-password'
+export TEST_DATABASE_URL=''
+export INIT_DB_ON_BOOT=true
+EOF
+chmod 600 ~/.config/mini-conf/dev-env.sh
+```
+
+说明：
+
+- `scripts/dev-db-env.sh` 现在会优先读取 `MINI_CONF_DB_PASSWORD`
+- 然后自动 URL 编码并拼出 `DATABASE_URL`
+- 如果 `TEST_DATABASE_URL` 为空，会自动回落到 `DATABASE_URL`
+
+也就是说，这样配置后，现有测试脚本会自动接上，不需要额外导出完整 URL。
+
+### 验证方式
+
+```bash
+source ~/.config/mini-conf/dev-env.sh
+just db-migrate-up
+just test-backend-db
+```
+
+如果你更愿意显式保存完整连接串，也可以直接在这个文件里写：
+
+```bash
+export DATABASE_URL='postgres://mini_conf:...@127.0.0.1:5432/mini_conf'
+export TEST_DATABASE_URL="$DATABASE_URL"
+```
+
+但更推荐保留 `MINI_CONF_DB_PASSWORD` 这种写法，让脚本统一处理 URL 编码。
 
 ## 7. 仓库约束
 
@@ -198,7 +284,20 @@ STATIC_DIR=apps/web/dist
 
 在未显式设置 `DATABASE_URL` / `TEST_DATABASE_URL` 时，会尝试从本机 `secret-tool` 读取 `mini_conf` 开发库密码，并自动做 URL 编码。
 
+在 WSL2 中，如果没有可用的 `secret-tool` / keyring，推荐在 `~/.config/mini-conf/dev-env.sh` 中提供：
+
+- `MINI_CONF_DB_PASSWORD`
+- 或 `DATABASE_URL`
+
+这两种方式都能被当前脚本链路识别。
+
 ## 10. 代码质量基线
+
+补充说明：
+
+- OpenAPI 导出已经是强制检查，改接口定义后必须重新导出并提交 `docs/openapi/openapi.json`
+- `sqlx-check` 当前是条件启用：只有开始使用 compile-time SQLx 查询宏或提交 `.sqlx/` 元数据后，才应恢复为强制检查
+- 更详细的引入时机和测试收口节奏，见 [质量检查与测试收口计划](./QUALITY_CHECK_PLAN.md)
 
 后端：
 

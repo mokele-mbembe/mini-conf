@@ -19,16 +19,28 @@ if [[ -z "${DATABASE_URL:-}" ]]; then
   db_name="${MINI_CONF_DB_NAME:-mini_conf}"
   db_user="${MINI_CONF_DB_USER:-mini_conf}"
   secret_env="${MINI_CONF_SECRET_ENV:-dev}"
+  raw_password="${MINI_CONF_DB_PASSWORD:-}"
 
-  if ! command -v secret-tool >/dev/null 2>&1; then
-    echo "DATABASE_URL is not set and secret-tool is unavailable" >&2
-    exit 1
+  if [[ -z "${raw_password}" && -n "${MINI_CONF_DB_PASSWORD_FILE:-}" ]]; then
+    if [[ -f "${MINI_CONF_DB_PASSWORD_FILE}" ]]; then
+      raw_password="$(<"${MINI_CONF_DB_PASSWORD_FILE}")"
+    else
+      echo "MINI_CONF_DB_PASSWORD_FILE is set but the file does not exist" >&2
+      exit 1
+    fi
   fi
 
-  raw_password="$(secret-tool lookup service mini-conf env "${secret_env}" role app-db user "${db_user}")"
+  if [[ -z "${raw_password}" ]]; then
+    if ! command -v secret-tool >/dev/null 2>&1; then
+      echo "DATABASE_URL is not set, MINI_CONF_DB_PASSWORD is empty, and secret-tool is unavailable" >&2
+      exit 1
+    fi
+
+    raw_password="$(secret-tool lookup service mini-conf env "${secret_env}" role app-db user "${db_user}")"
+  fi
 
   if [[ -z "${raw_password}" ]]; then
-    echo "secret-tool returned an empty password for mini-conf dev database" >&2
+    echo "database password is empty; provide MINI_CONF_DB_PASSWORD or a valid secret-tool entry" >&2
     exit 1
   fi
 

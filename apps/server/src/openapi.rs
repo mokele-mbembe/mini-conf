@@ -316,7 +316,8 @@ pub fn router() -> Router<AppState> {
 
 pub fn export_to(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let openapi = document();
-    let json = serde_json::to_string_pretty(&openapi)?;
+    let mut json = serde_json::to_string_pretty(&openapi)?;
+    json.push('\n');
 
     if let Some(parent) = path.parent()
         && !parent.as_os_str().is_empty()
