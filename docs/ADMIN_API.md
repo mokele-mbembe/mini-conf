@@ -154,7 +154,8 @@
   "schema_name": "coffee-main",
   "schema_version": "v1",
   "sensitivity": "secret",
-  "secret_paths": ["$.wifi.password", "$.third_party.api_key"]
+  "secret_paths": ["$.wifi.password", "$.third_party.api_key"],
+  "is_required": true
 }
 ```
 
@@ -166,6 +167,7 @@
 
 - `sensitivity` 首版可支持 `normal` 和 `secret`
 - `secret_paths` 用于前端脱敏展示和日志裁剪
+- `is_required` 是项目级规则，用于约束实例发布前是否必须已具备该配置
 
 ## 10. Deployment Instance API
 
@@ -218,8 +220,9 @@
 
 说明：
 
-- `clone_source` 首版可支持 `draft` 或 `latest_release`
+- `clone_source` 首版只支持 `draft`
 - 克隆完成后与模板不联动
+- Template 本身不可发布，只用于创建实例
 
 ## 11. Draft API
 
@@ -258,6 +261,28 @@
 - 校验失败返回 `422`
 - `base_version` 与服务端当前版本不一致时返回 `409`
 
+### `POST /api/drafts/:targetDeploymentId/:configFileId/clone`
+
+用途：
+
+- 将同项目内其他实例的单个配置文件复制到目标实例 Draft
+
+请求体建议：
+
+```json
+{
+  "source_deployment_instance_id": 9,
+  "source_kind": "latest_release"
+}
+```
+
+行为约定：
+
+- `source_kind` 支持 `draft` 或 `latest_release`
+- 来源和目标必须在同一项目内
+- 如果目标 Draft 已存在，则覆盖内容并递增 `version`
+- 前端通过多次调用这个接口完成批量 clone
+
 ## 12. Release API
 
 ### `POST /api/releases/publish`
@@ -278,6 +303,20 @@
 - 只允许基于当前 Draft 发布
 - 发布成功后 Release 不可变
 - 即使当前 Draft 内容与上一版相同，重复发布仍生成新 revision
+- `is_template = true` 的实例禁止发布
+- 如果目标实例缺少任一必选配置，则本次发布被阻止
+
+### `GET /api/deployment-instances/:id/preview-bundle`
+
+用途：
+
+- 预览某个实例当前“最终会被消费端看到的整包配置效果”
+
+响应语义：
+
+- `items` 中逐项展示每份配置来自 Draft 还是最新 Release
+- 必选配置缺失时要明确标记
+- 同时返回一份可直接复制的 `open_bundle_preview`
 
 ### `GET /api/releases`
 
@@ -342,6 +381,8 @@
 - `draft_validation_failed`
 - `draft_version_conflict`
 - `draft_not_found`
+- `required_config_missing`
+- `deployment_instance_template_publish_forbidden`
 - `release_publish_failed`
 - `release_not_found`
 - `deployment_not_found`
