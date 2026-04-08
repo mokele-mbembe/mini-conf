@@ -20,7 +20,7 @@ jobs:
 
       - name: Upload perf report
         if: ${{ always() && hashFiles('target/perf/smoke.json') != '' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: perf-smoke-report
           path: target/perf/smoke.json
