@@ -118,9 +118,9 @@
 
 理由：
 
-- `diff` 是当前发布主链路里最直接的缺口
-- `token/reset` 直接关系到部署实例生命周期闭环
-- `project_members` 和权限应该放在资源 API 基本齐备之后再做
+- `release diff` 与 `token/reset` 已完成，下一阶段应该转入权限模型主线
+- `project_members` 会直接决定后续项目级权限收口的实现边界
+- `audit_logs` 更适合放在成员与权限主链路明确之后统一补齐
 
 ### 当前建议的第一个开发任务
 
@@ -164,6 +164,7 @@ just test-backend-db
 - [质量检查与测试收口计划](./docs/QUALITY_CHECK_PLAN.md)
 - [产品澄清目录](./docs/product-qa/README.md)
 - [必选配置与预览澄清](./docs/product-qa/0002-required-configs-and-preview.md)
+- [部署实例 Token 重置澄清](./docs/product-qa/0004-token-reset.md)
 - [前端 MVP 蓝图](./docs/FRONTEND_MVP_BLUEPRINT.md)
 
 ### 与环境相关
