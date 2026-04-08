@@ -11,6 +11,12 @@
 
 如果你同时维护 WSL 和 Fedora 两套环境，双环境工具对齐清单见 [WSL 与 Fedora 双环境并列开发清单](./DEV_DUAL_ENV_PARITY.md)。
 
+如果你之前已经按旧版文档配置过 Fedora 桌面环境，这次额外建议同步 3 件事：
+
+- 系统依赖里补装 `openssl`，不要只保留 `openssl-devel`
+- 把 `~/.config/mini-conf/dev-env.sh` 自动加载片段补进 `~/.bashrc`
+- 如果你原来只依赖 `secret-tool` 存数据库密码，现在也可以直接把 `MINI_CONF_DB_*` 写进 `dev-env.sh`，让 Fedora 和 WSL 的行为对齐
+
 ## 2. 最短执行清单
 
 如果你现在只想先把开发底座装起来，按下面顺序复制执行即可。
@@ -42,8 +48,31 @@ export SCCACHE_DIR="$CODEX_SHARED_CACHE_ROOT/sccache"
 export RUSTC_WRAPPER=sccache
 export PNPM_HOME="$HOME/.local/share/pnpm"
 export PATH="$CARGO_HOME/bin:$HOME/.local/bin:$PNPM_HOME:$PATH"
+
+# Optional but recommended for parity with WSL:
+# export MINI_CONF_DB_HOST=127.0.0.1
+# export MINI_CONF_DB_PORT=5432
+# export MINI_CONF_DB_NAME=mini_conf
+# export MINI_CONF_DB_USER=mini_conf
+# export MINI_CONF_DB_PASSWORD='replace-with-a-local-dev-password'
+# export TEST_DATABASE_URL=''
+# export INIT_DB_ON_BOOT=true
 EOF
 source "${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/dev-env.sh"
+```
+
+如果这台 Fedora 桌面机会长期承担 `mini-conf` 开发，建议和 WSL 保持同一套自动加载方式，把下面片段追加到 `~/.bashrc`：
+
+```bash
+# mini-conf development environment
+if [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/dev-env.sh" ]; then
+    . "${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/dev-env.sh"
+fi
+if [ -n "${CARGO_HOME:-}" ] && [ -f "$CARGO_HOME/env" ]; then
+    . "$CARGO_HOME/env"
+elif [ -f "/var/cache/codex/shared/cargo-home/env" ]; then
+    . "/var/cache/codex/shared/cargo-home/env"
+fi
 ```
 
 安装系统依赖：
@@ -52,7 +81,7 @@ source "${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/dev-env.sh"
 sudo dnf upgrade --refresh -y
 sudo dnf install -y \
   git curl jq ripgrep just \
-  gcc gcc-c++ make pkgconf-pkg-config openssl-devel \
+  gcc gcc-c++ make pkgconf-pkg-config openssl openssl-devel \
   nodejs rustup sccache \
   postgresql16 postgresql16-server postgresql16-contrib
 ```
@@ -137,6 +166,7 @@ just --version
 PGPASSWORD="$(secret-tool lookup service mini-conf env dev role app-db user mini_conf)" psql -h 127.0.0.1 -p 5432 -U mini_conf -d mini_conf -c "select current_database(), current_user;"
 pnpm format:check
 just bootstrap-dev
+just openapi-check
 ```
 
 ## 3. 基于现有计划得出的开发约束
@@ -243,6 +273,15 @@ export SCCACHE_DIR="$CODEX_SHARED_CACHE_ROOT/sccache"
 export RUSTC_WRAPPER=sccache
 export PNPM_HOME="$HOME/.local/share/pnpm"
 export PATH="$CARGO_HOME/bin:$HOME/.local/bin:$PNPM_HOME:$PATH"
+
+# Optional but recommended for parity with WSL:
+# export MINI_CONF_DB_HOST=127.0.0.1
+# export MINI_CONF_DB_PORT=5432
+# export MINI_CONF_DB_NAME=mini_conf
+# export MINI_CONF_DB_USER=mini_conf
+# export MINI_CONF_DB_PASSWORD='replace-with-a-local-dev-password'
+# export TEST_DATABASE_URL=''
+# export INIT_DB_ON_BOOT=true
 EOF
 ```
 
@@ -255,10 +294,24 @@ env | grep -E 'CODEX_SHARED_CACHE_ROOT|MINI_CONF_BUILD_ROOT|CARGO_HOME|RUSTUP_HO
 
 说明：
 
-- 这里没有把脚本自动写进 `~/.bashrc`
-- 推荐只在你准备开发 `mini-conf` 或启动本地 agent 的 shell 里手动 `source`
+- 如果这台机器只偶尔碰 `mini-conf`，继续手动 `source` 也可以
+- 如果这台机器会长期承担 `mini-conf` 开发，建议直接把下面这段写进 `~/.bashrc`
 - `RUSTC_WRAPPER=sccache` 只有在系统里已经安装了 `sccache` 时才会生效，所以下一步会一起安装
 - `CARGO_HOME/bin` 已经放进 PATH，`cargo-nextest`、`cargo-llvm-cov`、`sqlx` 这类 cargo 安装出来的工具会直接可用
+
+推荐追加到 `~/.bashrc` 的内容：
+
+```bash
+# mini-conf development environment
+if [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/dev-env.sh" ]; then
+    . "${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/dev-env.sh"
+fi
+if [ -n "${CARGO_HOME:-}" ] && [ -f "$CARGO_HOME/env" ]; then
+    . "$CARGO_HOME/env"
+elif [ -f "/var/cache/codex/shared/cargo-home/env" ]; then
+    . "/var/cache/codex/shared/cargo-home/env"
+fi
+```
 
 ## 6. 步骤 1：安装 Fedora 基础开发工具
 
@@ -281,6 +334,7 @@ sudo dnf install -y \
   gcc-c++ \
   make \
   pkgconf-pkg-config \
+  openssl \
   openssl-devel \
   nodejs \
   rustup \
@@ -305,6 +359,7 @@ npm --version
 - Fedora 官方文档建议 Node.js 直接安装 `nodejs`
 - Fedora 官方 Rust 文档建议二选一使用 `rust/cargo` 或 `rustup`，这里选 `rustup`
 - 不要同时混用 Fedora 打包的 `rust`/`cargo` 和 `rustup` 工具链
+- `openssl-devel` 只提供开发库，不提供 `openssl` 命令行工具；如果你要生成随机密码或排查证书问题，两者都要装
 
 ## 7. 步骤 2：安装 Rust stable toolchain
 
@@ -444,7 +499,9 @@ rm -rf /var/cache/codex/shared/sccache/*
 
 `mini-conf` 规划里明确是 PostgreSQL 16+。Fedora 43 已提供 `postgresql16` / `postgresql16-server` 包。
 
-如果你希望数据库密码不写进文档或 shell 历史，可以先把密码存进 GNOME Keyring。
+如果你希望和 WSL 保持完全一致，可以直接把 `MINI_CONF_DB_*` 写进 `dev-env.sh`；当前仓库的 `scripts/dev-db-env.sh` 已经支持这种方式。
+
+如果你更希望数据库密码不写进文档或 shell 历史，再把密码存进 GNOME Keyring。
 
 命令行方式：
 
@@ -514,6 +571,7 @@ psql -h 127.0.0.1 -p 5432 -U mini_conf -d mini_conf \
 
 - 这里的 `postgresql-setup` / `postgresql` service 用法是基于 Fedora 官方 PostgreSQL 快速开始和 Fedora 43 的 PostgreSQL 16 包命名推断出来的
 - 如果你使用随机强密码，不要把明文直接塞进 `postgres://...` URI 里做 CLI 验证；密码里可能含有 URL 保留字符，`psql` 会解析失败
+- 只要 `MINI_CONF_DB_PASSWORD` 已经在 `dev-env.sh` 里设置好，`just db-migrate-up`、`just test-backend-db` 和 Git hooks 都不再依赖 `secret-tool`
 - 如果你的机器提示 unit 名不对，先执行下面这条确认本机实际服务名：
 
 ```bash
@@ -571,6 +629,7 @@ pnpm dlx lefthook install
 just --list
 pnpm format:check
 just bootstrap-dev
+just openapi-check
 ```
 
 说明：
@@ -646,8 +705,11 @@ source "${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/dev-env.sh"
 - `PGPASSWORD="$(secret-tool lookup service mini-conf env dev role app-db user mini_conf)" psql -h 127.0.0.1 -p 5432 -U mini_conf -d mini_conf -c "select current_database(), current_user;"`
 - `pnpm format:check`
 - `just bootstrap-dev`
+- `just openapi-check`
 
 如果这些都正常，说明 Fedora 43 的 `mini-conf` 开发底座已经够用了。
+
+如果你已经把 `MINI_CONF_DB_PASSWORD` 写进 `dev-env.sh`，上面的 `psql` 验证也可以改成先 `source "${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/dev-env.sh"`，再用 `PGPASSWORD="$MINI_CONF_DB_PASSWORD"` 连接。
 
 ## 18. 参考来源
 

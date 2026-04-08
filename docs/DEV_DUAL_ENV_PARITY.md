@@ -19,7 +19,7 @@
 
 - 都能运行 `cargo fmt`、`cargo clippy`、`cargo nextest`
 - 都能运行 `bash scripts/export-openapi.sh`
-- 都能运行 `just lint`、`just test`
+- 都能运行 `just lint`、`just test`、`just openapi-check`
 - 至少有一个环境能稳定运行 `just test-backend-db`
 
 如果两个环境都要承担完整开发职责，建议两个环境都装齐数据库和 `sqlx-cli`。
@@ -72,6 +72,7 @@ Fedora 系：
 - `gcc-c++`
 - `make`
 - `pkgconf-pkg-config`
+- `openssl`
 - `openssl-devel`
 
 ### 3.4 Node 工具链
@@ -95,6 +96,7 @@ Fedora 系：
 ```bash
 just lint
 just test
+just openapi-check
 bash scripts/export-openapi.sh
 ```
 
@@ -153,6 +155,7 @@ export INIT_ADMIN_PASSWORD=...
 这样现有 `scripts/load-dev-env.sh` 和 `scripts/dev-db-env.sh` 会自动接上。
 
 不要把 WSL 环境是否有桌面 keyring 当成阻塞项。
+如果这台 WSL 会长期承担开发，建议把 `dev-env.sh` 和 `$CARGO_HOME/env` 的自动加载片段写进 `~/.bashrc`。
 
 这次实际验证还确认了两个额外注意点：
 
@@ -161,11 +164,14 @@ export INIT_ADMIN_PASSWORD=...
 
 ## 7. Fedora 特别说明
 
-Fedora 43 这边更适合作为“全量环境”：
+Fedora 43 这边更适合作为“全量环境”，但现在也建议和 WSL 采用同一套本地环境布局：
 
 - 安装完整 PostgreSQL
-- 安装 `secret-tool`
+- 使用 `~/.config/mini-conf/dev-env.sh`
+- 视个人偏好决定是否继续使用 `secret-tool`
+- 在长期开发 shell 里自动加载 `dev-env.sh` 和 `$CARGO_HOME/env`
 - 跑 `just test-backend-db`
+- 跑 `just openapi-check`
 - 跑完整本地联调
 
 如果你只想维护一个能完整跑 DB 集成测试的环境，优先保留已经实际跑通的那套环境作为基准。
