@@ -56,6 +56,7 @@
 - [x] `GET /api/releases`
 - [x] `GET /api/releases/:id`
 - [x] `GET /api/releases/:id/diff`
+- [x] `POST /api/deployment-instances/:id/token/reset`
 
 ### 2.5 产品规则收口
 
@@ -67,6 +68,7 @@
 - [x] 单配置 clone 支持 `draft | latest_release`
 - [x] preview-bundle 返回业务预览明细和 consumer 侧整包预览
 - [x] `release diff` 固定比较上一版并返回文本级摘要
+- [x] token reset 原地轮换默认凭证并立即切换 open API 鉴权
 
 ### 2.6 测试基线
 
@@ -83,14 +85,12 @@
 
 ### 3.1 后端主路径仍缺的模块
 
-- [ ] `POST /api/deployment-instances/:id/token/reset`
 - [ ] `project_members` 表与管理端 API
 - [ ] 项目级权限校验从“管理员会话”收口到成员模型
 - [ ] `audit_logs`
 
 ### 3.2 后端补强项
 
-- [ ] token reset 后与 open API 鉴权的联动
 - [ ] 管理端查看 deployment sync records
 - [ ] 更完整的 OpenAPI 文档说明与示例
 - [ ] `sqlx-check` 恢复为强制检查的时机评估
@@ -111,10 +111,10 @@
 
 推荐顺序：
 
-1. `POST /api/deployment-instances/:id/token/reset`
-2. `project_members`
-3. 项目级权限收口
-4. `audit_logs`
+1. `project_members`
+2. 项目级权限收口
+3. `audit_logs`
+4. 管理端查看 deployment sync records
 
 理由：
 
@@ -124,13 +124,13 @@
 
 ### 当前建议的第一个开发任务
 
-优先从 `POST /api/deployment-instances/:id/token/reset` 开始。
+优先从 `project_members` 开始。
 
 建议做法：
 
-- 先明确旧 token 失效与新 token 生效的联动语义
-- 再补接口响应模型与 OpenAPI
-- 最后写真实 PostgreSQL 集成测试，覆盖 open API 鉴权切换
+- 先补一篇产品澄清文档，锁定首版角色与管理边界
+- 再补表结构、接口响应模型与 OpenAPI
+- 最后写真实 PostgreSQL 集成测试，覆盖成员增删改查与权限边界
 
 ## 5. 下一个会话建议先跑的命令
 
@@ -189,5 +189,5 @@ just test-backend-db
 如果下一个会话需要快速恢复上下文，可以直接从这里开始：
 
 ```text
-先阅读 DEVELOPMENT_LOG.md、docs/QUALITY_CHECK_PLAN.md、docs/product-qa/0003-release-diff.md，然后继续做 POST /api/deployment-instances/:id/token/reset，并先补文档再改代码。
+先阅读 DEVELOPMENT_LOG.md、docs/QUALITY_CHECK_PLAN.md、docs/product-qa/0004-token-reset.md，然后继续做 project_members，并先补文档再改代码。
 ```

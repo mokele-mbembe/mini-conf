@@ -5,6 +5,7 @@ use schema::{
     config_file::{ConfigFileListResponse, ConfigFileSummary},
     deployment_instance::{
         DeploymentBundlePreviewResponse, DeploymentInstanceListResponse, DeploymentInstanceSummary,
+        DeploymentTokenResetResponse,
     },
     draft::{DraftCloneResponse, DraftResponse},
     health::HealthzResponse,
@@ -51,6 +52,7 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
         crate::http::api::deployment_instances::update_deployment_instance,
         crate::http::api::deployment_instances::clone_deployment_instance,
         crate::http::api::deployment_instances::preview_deployment_bundle,
+        crate::http::api::deployment_instances::reset_deployment_token,
         crate::http::api::drafts::get_draft,
         crate::http::api::drafts::put_draft,
         crate::http::api::drafts::clone_draft,
@@ -80,6 +82,7 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
             DeploymentInstanceSummary,
             DeploymentInstanceListResponse,
             DeploymentBundlePreviewResponse,
+            DeploymentTokenResetResponse,
             HealthzResponse,
             ResolveConfigResponse,
             ReleaseContentResponse,
@@ -354,6 +357,7 @@ mod tests {
         assert!(paths.contains_key("/api/deployment-instances/{id}"));
         assert!(paths.contains_key("/api/deployment-instances/{id}/clone"));
         assert!(paths.contains_key("/api/deployment-instances/{id}/preview-bundle"));
+        assert!(paths.contains_key("/api/deployment-instances/{id}/token/reset"));
         assert!(paths.contains_key("/api/drafts/{deployment_id}/{config_file_id}"));
         assert!(paths.contains_key("/api/drafts/{target_deployment_id}/{config_file_id}/clone"));
         assert!(paths.contains_key("/api/projects"));

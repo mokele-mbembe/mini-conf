@@ -40,11 +40,19 @@ pub struct DeploymentBundlePreviewResponse {
     pub open_bundle_preview: ConfigBundleResponse,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct DeploymentTokenResetResponse {
+    pub deployment_instance_id: i64,
+    pub credential_name: String,
+    pub token_preview: String,
+    pub token: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         DeploymentBundlePreviewResponse, DeploymentInstanceListResponse, DeploymentInstanceSummary,
-        DeploymentPreviewItem,
+        DeploymentPreviewItem, DeploymentTokenResetResponse,
     };
     use crate::open::{ConfigBundleItem, ConfigBundleResponse, ResolveDeployment};
 
@@ -176,6 +184,27 @@ mod tests {
                         }
                     ]
                 }
+            })
+        );
+    }
+
+    #[test]
+    fn deployment_token_reset_response_serializes_expected_shape() {
+        let value = serde_json::to_value(DeploymentTokenResetResponse {
+            deployment_instance_id: 9,
+            credential_name: "default".to_owned(),
+            token_preview: "mc_live_***".to_owned(),
+            token: "mc_live_1234567890abcdef".to_owned(),
+        })
+        .expect("response should serialize");
+
+        assert_eq!(
+            value,
+            serde_json::json!({
+                "deployment_instance_id": 9,
+                "credential_name": "default",
+                "token_preview": "mc_live_***",
+                "token": "mc_live_1234567890abcdef"
             })
         );
     }

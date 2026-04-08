@@ -111,6 +111,18 @@ pub fn generate_session_token() -> String {
     Uuid::new_v4().to_string()
 }
 
+pub fn generate_deployment_token() -> String {
+    format!("mc_live_{}", Uuid::new_v4().simple())
+}
+
+pub fn deployment_token_preview(token: &str) -> String {
+    if token.starts_with("mc_live_") {
+        "mc_live_***".to_owned()
+    } else {
+        "***".to_owned()
+    }
+}
+
 pub fn session_cookie_header(token: &str) -> HeaderValue {
     let cookie = Cookie::build((ADMIN_SESSION_COOKIE, token.to_owned()))
         .path("/")
@@ -243,13 +255,29 @@ fn bearer_token(headers: &HeaderMap) -> Result<&str, ApiError> {
 
 #[cfg(test)]
 mod tests {
-    use super::hash_bearer_token;
+    use super::{deployment_token_preview, generate_deployment_token, hash_bearer_token};
 
     #[test]
     fn hashes_bearer_token_to_sha256_hex() {
         assert_eq!(
             hash_bearer_token("mini-conf-test-token"),
             "2b9a8821c9539e3376dc45b347ab94f8e3691c9a03485f91343393b5e402cc51"
+        );
+    }
+
+    #[test]
+    fn generates_deployment_tokens_with_live_prefix() {
+        let token = generate_deployment_token();
+
+        assert!(token.starts_with("mc_live_"));
+        assert!(token.len() > "mc_live_".len());
+    }
+
+    #[test]
+    fn deployment_token_preview_masks_live_tokens() {
+        assert_eq!(
+            deployment_token_preview("mc_live_1234567890abcdef"),
+            "mc_live_***"
         );
     }
 }

@@ -348,10 +348,19 @@
 ```json
 {
   "deployment_instance_id": 8,
+  "credential_name": "default",
   "token_preview": "mc_live_***",
   "token": "mc_live_xxxxxxxxx"
 }
 ```
+
+行为约定：
+
+- 默认只处理 `credential_name = "default"`
+- 如果实例还没有默认凭证，则本次 reset 会创建默认凭证
+- 如果实例已经有默认凭证，则原地覆盖 `token_hash`
+- reset 成功后旧 token 立即失效，新 token 立即生效
+- `token` 明文只在响应里返回一次
 
 ## 14. Deployment Sync Record API
 

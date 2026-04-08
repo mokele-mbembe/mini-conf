@@ -1,4 +1,11 @@
-use crate::{auth::authenticate_admin_session, error::ApiError, state::AppState};
+use crate::{
+    auth::{
+        authenticate_admin_session, deployment_token_preview, generate_deployment_token,
+        hash_bearer_token,
+    },
+    error::ApiError,
+    state::AppState,
+};
 use axum::{
     Json, Router,
     extract::{Path, Query, State, rejection::JsonRejection},
@@ -8,7 +15,7 @@ use axum::{
 use schema::{
     deployment_instance::{
         DeploymentBundlePreviewResponse, DeploymentInstanceListResponse, DeploymentInstanceSummary,
-        DeploymentPreviewItem,
+        DeploymentPreviewItem, DeploymentTokenResetResponse,
     },
     open::{ConfigBundleItem, ConfigBundleResponse, ResolveDeployment},
 };
@@ -113,6 +120,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/deployment-instances/{id}/preview-bundle",
             get(preview_deployment_bundle),
+        )
+        .route(
+            "/deployment-instances/{id}/token/reset",
+            post(reset_deployment_token),
         )
 }
 
@@ -692,6 +703,58 @@ pub(crate) async fn preview_deployment_bundle(
     }))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/deployment-instances/{id}/token/reset",
+    tag = "admin",
+    params(
+        ("id" = i64, Path, description = "Deployment instance ID")
+    ),
+    security(
+        ("session_auth" = [])
+    ),
+    responses(
+        (status = 200, description = "Deployment token rotated", body = DeploymentTokenResetResponse),
+        (status = 401, description = "Missing or expired admin session", body = crate::error::ErrorResponse),
+        (status = 404, description = "Deployment instance not found", body = crate::error::ErrorResponse),
+        (status = 503, description = "Database bootstrap disabled", body = crate::error::ErrorResponse),
+        (status = 500, description = "Internal server error", body = crate::error::ErrorResponse),
+    )
+)]
+pub(crate) async fn reset_deployment_token(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    headers: HeaderMap,
+) -> Result<Json<DeploymentTokenResetResponse>, ApiError> {
+    let Some(pool) = state.db_pool() else {
+        return Err(ApiError::service_unavailable(
+            "database_unavailable",
+            "Database bootstrap is disabled",
+        ));
+    };
+
+    authenticate_admin_session(
+        pool,
+        headers
+            .get(header::COOKIE)
+            .and_then(|value| value.to_str().ok()),
+    )
+    .await?;
+
+    ensure_deployment_exists(pool, id).await?;
+
+    let token = generate_deployment_token();
+    let token_hash = hash_bearer_token(&token);
+    let credential_name = upsert_default_deployment_credential(pool, id, &token_hash).await?;
+
+    Ok(Json(DeploymentTokenResetResponse {
+        deployment_instance_id: id,
+        credential_name,
+        token_preview: deployment_token_preview(&token),
+        token,
+    }))
+}
+
 impl CreateDeploymentInstanceRequest {
     fn validate(self) -> Result<ValidatedCreateDeploymentInstanceRequest, ApiError> {
         Ok(ValidatedCreateDeploymentInstanceRequest {
@@ -792,6 +855,62 @@ async fn load_template_context(
         project_id: row.get("project_id"),
         is_template: row.get("is_template"),
     })
+}
+
+async fn ensure_deployment_exists(pool: &sqlx::PgPool, id: i64) -> Result<(), ApiError> {
+    sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT id
+        FROM deployment_instances
+        WHERE id = $1
+        LIMIT 1
+        "#,
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| ApiError::internal())?
+    .ok_or_else(|| {
+        ApiError::not_found_with(
+            "deployment_instance_not_found",
+            "deployment instance not found",
+        )
+    })?;
+
+    Ok(())
+}
+
+async fn upsert_default_deployment_credential(
+    pool: &sqlx::PgPool,
+    deployment_id: i64,
+    token_hash: &str,
+) -> Result<String, ApiError> {
+    let row = sqlx::query(
+        r#"
+        INSERT INTO deployment_credentials (
+            deployment_instance_id,
+            credential_name,
+            token_hash,
+            status,
+            last_used_at
+        )
+        VALUES ($1, 'default', $2, 'active', NULL)
+        ON CONFLICT (deployment_instance_id, credential_name)
+        DO UPDATE SET
+            token_hash = EXCLUDED.token_hash,
+            status = 'active',
+            last_used_at = NULL,
+            updated_at = NOW()
+        RETURNING credential_name
+        "#,
+    )
+    .bind(deployment_id)
+    .bind(token_hash)
+    .fetch_one(pool)
+    .await
+    .map_err(|_| ApiError::internal())?;
+
+    Ok(row.get("credential_name"))
 }
 
 async fn load_preview_context(

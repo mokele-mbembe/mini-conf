@@ -1071,6 +1071,83 @@
         ]
       }
     },
+    "/api/deployment-instances/{id}/token/reset": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "reset_deployment_token",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Deployment instance ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deployment token rotated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentTokenResetResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or expired admin session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Deployment instance not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database bootstrap disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_auth": []
+          }
+        ]
+      }
+    },
     "/api/drafts/{deployment_id}/{config_file_id}": {
       "get": {
         "tags": [
@@ -3200,6 +3277,30 @@
         "properties": {
           "ok": {
             "type": "boolean"
+          }
+        }
+      },
+      "DeploymentTokenResetResponse": {
+        "type": "object",
+        "required": [
+          "deployment_instance_id",
+          "credential_name",
+          "token_preview",
+          "token"
+        ],
+        "properties": {
+          "credential_name": {
+            "type": "string"
+          },
+          "deployment_instance_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "token": {
+            "type": "string"
+          },
+          "token_preview": {
+            "type": "string"
           }
         }
       },

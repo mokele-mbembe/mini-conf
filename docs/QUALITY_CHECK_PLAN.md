@@ -165,6 +165,7 @@ CI 对应关系：
 - `projects` CRUD
 - `config-files` CRUD
 - `deployment-instances` CRUD / clone / preview
+- `POST /api/deployment-instances/:id/token/reset`
 - `drafts`
 - `releases/publish`
 - `GET /api/releases/:id/diff`
@@ -172,9 +173,8 @@ CI 对应关系：
 接下来最适合继续补这类测试的模块：
 
 1. `project_members`
-2. `POST /api/deployment-instances/:id/token/reset`
-3. `audit_logs`
-4. 管理端鉴权失败路径和 cookie/session 边界
+2. `audit_logs`
+3. 管理端鉴权失败路径和 cookie/session 边界
 
 原因：
 
