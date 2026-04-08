@@ -1,84 +1,51 @@
+use infra::testing::{test_database_url, unique_schema_name};
 use sqlx::{
     Connection, Executor, PgConnection, migrate::Migrator, postgres::PgPoolOptions, query_scalar,
 };
-use std::{
-    path::PathBuf,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{error::Error, path::PathBuf};
 
-fn test_database_url() -> Option<String> {
-    match std::env::var("TEST_DATABASE_URL") {
-        Ok(value) => Some(value),
-        Err(_) => {
-            eprintln!("skipping postgres integration test: TEST_DATABASE_URL not set");
-            None
-        }
-    }
-}
+type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
 fn migrations_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../migrations")
 }
 
-fn unique_schema_name() -> String {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |duration| duration.as_nanos());
-
-    format!("mini_conf_test_{nanos}")
-}
-
 #[tokio::test]
-async fn connect_establishes_pool_when_database_is_available() {
-    let Some(database_url) = test_database_url() else {
-        return;
+async fn connect_establishes_pool_when_database_is_available() -> TestResult {
+    let Some(database_url) = test_database_url("postgres") else {
+        return Ok(());
     };
 
-    let pool = infra::db::connect(&database_url)
-        .await
-        .expect("pool should connect");
+    let pool = infra::db::connect(&database_url).await?;
 
-    let value: i32 = query_scalar("SELECT 1")
-        .fetch_one(&pool)
-        .await
-        .expect("query should succeed");
+    let value: i32 = query_scalar("SELECT 1").fetch_one(&pool).await?;
 
     assert_eq!(value, 1);
 
     pool.close().await;
+
+    Ok(())
 }
 
 #[tokio::test]
-async fn migrations_run_up_and_down_in_an_isolated_schema() {
-    let Some(database_url) = test_database_url() else {
-        return;
+async fn migrations_run_up_and_down_in_an_isolated_schema() -> TestResult {
+    let Some(database_url) = test_database_url("postgres") else {
+        return Ok(());
     };
 
-    let migrator = Migrator::new(migrations_dir().as_path())
-        .await
-        .expect("migrator should load migrations");
-    let schema = unique_schema_name();
-    let mut connection = PgConnection::connect(&database_url)
-        .await
-        .expect("connection should succeed");
+    let migrator = Migrator::new(migrations_dir().as_path()).await?;
+    let schema = unique_schema_name("mini_conf_test");
+    let mut connection = PgConnection::connect(&database_url).await?;
 
     connection
         .execute(format!("CREATE SCHEMA {schema}").as_str())
-        .await
-        .expect("schema should be created");
+        .await?;
     connection
         .execute(format!("SET search_path TO {schema}").as_str())
-        .await
-        .expect("search_path should be set");
+        .await?;
 
-    migrator
-        .run_direct(&mut connection)
-        .await
-        .expect("migrations should apply");
-    migrator
-        .run_direct(&mut connection)
-        .await
-        .expect("re-running migrations should be idempotent");
+    migrator.run_direct(&mut connection).await?;
+    migrator.run_direct(&mut connection).await?;
 
     let exists_after_up: bool = query_scalar(
         "SELECT EXISTS (
@@ -89,18 +56,14 @@ async fn migrations_run_up_and_down_in_an_isolated_schema() {
         )",
     )
     .fetch_one(&mut connection)
-    .await
-    .expect("table existence query should succeed");
+    .await?;
 
     assert!(
         exists_after_up,
         "bootstrap_metadata should exist after migrate up"
     );
 
-    migrator
-        .undo(&mut connection, 0)
-        .await
-        .expect("migrations should roll back");
+    migrator.undo(&mut connection, 0).await?;
 
     let exists_after_down: bool = query_scalar(
         "SELECT EXISTS (
@@ -111,64 +74,54 @@ async fn migrations_run_up_and_down_in_an_isolated_schema() {
         )",
     )
     .fetch_one(&mut connection)
-    .await
-    .expect("table existence query should succeed");
+    .await?;
 
     assert!(
         !exists_after_down,
         "bootstrap_metadata should be removed after migrate down"
     );
 
-    connection
-        .execute("SET search_path TO public")
-        .await
-        .expect("search_path should reset");
+    connection.execute("SET search_path TO public").await?;
     connection
         .execute(format!("DROP SCHEMA IF EXISTS {schema} CASCADE").as_str())
-        .await
-        .expect("schema should be dropped");
+        .await?;
+
+    Ok(())
 }
 
 #[tokio::test]
-async fn migration_schema_can_be_used_through_a_pool_connection() {
-    let Some(database_url) = test_database_url() else {
-        return;
+async fn migration_schema_can_be_used_through_a_pool_connection() -> TestResult {
+    let Some(database_url) = test_database_url("postgres") else {
+        return Ok(());
     };
 
-    let schema = unique_schema_name();
-    let mut admin = PgConnection::connect(&database_url)
-        .await
-        .expect("connection should succeed");
+    let schema = unique_schema_name("mini_conf_test");
+    let mut admin = PgConnection::connect(&database_url).await?;
 
     admin
         .execute(format!("CREATE SCHEMA {schema}").as_str())
-        .await
-        .expect("schema should be created");
-    admin
-        .execute("SET search_path TO public")
-        .await
-        .expect("search_path should reset");
+        .await?;
+    admin.execute("SET search_path TO public").await?;
 
     let database_url_with_schema = database_url
         .parse::<sqlx::postgres::PgConnectOptions>()
-        .expect("database url should parse")
+        .map_err(|error| -> Box<dyn Error> { Box::new(error) })?
         .options([("search_path", schema.as_str())]);
     let pool = PgPoolOptions::new()
         .max_connections(1)
         .connect_with(database_url_with_schema)
-        .await
-        .expect("pool should connect with schema search_path");
+        .await?;
 
     let schema_name: String = query_scalar("SELECT current_schema()")
         .fetch_one(&pool)
-        .await
-        .expect("query should succeed");
+        .await?;
 
     assert_eq!(schema_name, schema);
 
     pool.close().await;
     admin
         .execute(format!("DROP SCHEMA IF EXISTS {schema} CASCADE").as_str())
-        .await
-        .expect("schema should be dropped");
+        .await?;
+
+    Ok(())
 }

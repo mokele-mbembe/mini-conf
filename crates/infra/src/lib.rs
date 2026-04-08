@@ -1,4 +1,5 @@
 pub mod db;
+pub mod testing;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AppIdentity {

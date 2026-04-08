@@ -155,7 +155,14 @@ OPENAPI_EXPORT_PATH=docs/openapi/openapi.json
 - `just test-backend-db`
 
 会优先使用已设置的 `DATABASE_URL` / `TEST_DATABASE_URL`。
+如果 `TEST_DATABASE_URL` 为空字符串，测试会自动回退到 `DATABASE_URL`。
 如果未设置，则尝试从 `secret-tool lookup service mini-conf env dev role app-db user mini_conf` 读取开发库密码，并自动做 URL 编码后再连接本地 PostgreSQL。
+
+数据库集成测试约定：
+
+- 测试文件不要各自重复解析 `TEST_DATABASE_URL` / `DATABASE_URL`
+- 统一复用 [`infra::testing`](/home/zjj/Projects/mini-conf/crates/infra/src/testing.rs) 中的 `test_database_url`、`unique_schema_name`、`with_search_path`
+- 这样可以把 Linux / WSL2 / 本地 shell 的环境差异收口在一处，避免后续新增测试时再引入分叉
 
 ## 8. 代码质量与 TDD 基线
 

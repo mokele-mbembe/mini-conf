@@ -2,6 +2,7 @@ use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode, header},
 };
+use infra::testing::{test_database_url, unique_schema_name, with_search_path};
 use schema::{
     auth::AuthSessionResponse,
     deployment_instance::{
@@ -10,39 +11,15 @@ use schema::{
 };
 use server::{bootstrap, config::AppConfig, error::ErrorResponse};
 use sqlx::{Connection, Executor, PgConnection, PgPool, Row};
-use std::time::{SystemTime, UNIX_EPOCH};
 use tower::util::ServiceExt;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
-fn test_database_url() -> Option<String> {
-    match std::env::var("TEST_DATABASE_URL") {
-        Ok(value) => Some(value),
-        Err(_) => {
-            eprintln!("skipping deployment instances integration test: TEST_DATABASE_URL not set");
-            None
-        }
-    }
-}
-
-fn unique_schema_name() -> String {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |duration| duration.as_nanos());
-
-    format!("mini_conf_deployments_{nanos}")
-}
-
-fn with_search_path(database_url: &str, schema: &str) -> String {
-    let separator = if database_url.contains('?') { '&' } else { '?' };
-    format!("{database_url}{separator}options[search_path]={schema}")
-}
-
 async fn setup_app() -> TestResult<Option<(axum::Router, PgPool, String, String)>> {
-    let Some(database_url) = test_database_url() else {
+    let Some(database_url) = test_database_url("deployment instances") else {
         return Ok(None);
     };
-    let schema = unique_schema_name();
+    let schema = unique_schema_name("mini_conf_deployments");
     let mut admin = PgConnection::connect(&database_url).await?;
     admin
         .execute(format!("CREATE SCHEMA {schema}").as_str())

@@ -146,6 +146,16 @@ MVP 默认采用 `DeploymentInstance` 作为配置组织模型，因为它最贴
 - 本地调试流程优先针对 Linux / WSL2 编写
 - CI 也应以 Linux 环境为标准
 
+## 测试约定
+
+数据库集成测试统一使用 [`infra::testing`](/home/zjj/Projects/mini-conf/crates/infra/src/testing.rs) 提供的 helper。
+
+- 新增数据库集成测试时，使用 `test_database_url(...)` 解析测试连接串，不要在测试文件里重复读取 `TEST_DATABASE_URL` / `DATABASE_URL`
+- 需要隔离 schema 时，使用 `unique_schema_name(...)`
+- 需要按 schema 建连接时，使用 `with_search_path(...)`
+
+这样可以把多环境差异收口到一处，避免新增测试时遗漏空值回退或 search path 逻辑
+
 ## 文档导航
 
 - 项目启动与里程碑：[KICKOFF.md](c:\Users\zhaoj\Projects\mini-conf\KICKOFF.md)
