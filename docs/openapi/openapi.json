@@ -2568,6 +2568,83 @@
           }
         ]
       }
+    },
+    "/api/releases/{id}/diff": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "get_release_diff",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Release ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Release diff against previous release",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseDiffResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or expired admin session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Release not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database bootstrap disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_auth": []
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -3472,9 +3549,80 @@
           "content": {
             "type": "string"
           },
-          "diff_summary": {},
+          "diff_summary": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ReleaseDiffSummary"
+              }
+            ]
+          },
           "release": {
             "$ref": "#/components/schemas/ReleaseSummary"
+          }
+        }
+      },
+      "ReleaseDiffResponse": {
+        "type": "object",
+        "required": [
+          "release",
+          "after_content",
+          "diff_summary"
+        ],
+        "properties": {
+          "after_content": {
+            "type": "string"
+          },
+          "base_release": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ReleaseSummary"
+              }
+            ]
+          },
+          "before_content": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "diff_summary": {
+            "$ref": "#/components/schemas/ReleaseDiffSummary"
+          },
+          "release": {
+            "$ref": "#/components/schemas/ReleaseSummary"
+          }
+        }
+      },
+      "ReleaseDiffSummary": {
+        "type": "object",
+        "required": [
+          "is_initial",
+          "has_changes",
+          "added_lines",
+          "removed_lines"
+        ],
+        "properties": {
+          "added_lines": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "has_changes": {
+            "type": "boolean"
+          },
+          "is_initial": {
+            "type": "boolean"
+          },
+          "removed_lines": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
           }
         }
       },

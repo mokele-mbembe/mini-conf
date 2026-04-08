@@ -23,3 +23,4 @@
 
 - `0001-template-publish-and-clone.md`
 - `0002-required-configs-and-preview.md`
+- `0003-release-diff.md`

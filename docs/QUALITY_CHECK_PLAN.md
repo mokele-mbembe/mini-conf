@@ -167,14 +167,14 @@ CI 对应关系：
 - `deployment-instances` CRUD / clone / preview
 - `drafts`
 - `releases/publish`
+- `GET /api/releases/:id/diff`
 
 接下来最适合继续补这类测试的模块：
 
 1. `project_members`
-2. `GET /api/releases/:id/diff`
-3. `POST /api/deployment-instances/:id/token/reset`
-4. `audit_logs`
-5. 管理端鉴权失败路径和 cookie/session 边界
+2. `POST /api/deployment-instances/:id/token/reset`
+3. `audit_logs`
+4. 管理端鉴权失败路径和 cookie/session 边界
 
 原因：
 

@@ -55,6 +55,7 @@
 - [x] `releases/publish`
 - [x] `GET /api/releases`
 - [x] `GET /api/releases/:id`
+- [x] `GET /api/releases/:id/diff`
 
 ### 2.5 产品规则收口
 
@@ -65,6 +66,7 @@
 - [x] 模板 clone 仅允许从 draft
 - [x] 单配置 clone 支持 `draft | latest_release`
 - [x] preview-bundle 返回业务预览明细和 consumer 侧整包预览
+- [x] `release diff` 固定比较上一版并返回文本级摘要
 
 ### 2.6 测试基线
 
@@ -81,7 +83,6 @@
 
 ### 3.1 后端主路径仍缺的模块
 
-- [ ] `GET /api/releases/:id/diff`
 - [ ] `POST /api/deployment-instances/:id/token/reset`
 - [ ] `project_members` 表与管理端 API
 - [ ] 项目级权限校验从“管理员会话”收口到成员模型
@@ -89,7 +90,6 @@
 
 ### 3.2 后端补强项
 
-- [ ] `release diff` 的业务语义和响应结构
 - [ ] token reset 后与 open API 鉴权的联动
 - [ ] 管理端查看 deployment sync records
 - [ ] 更完整的 OpenAPI 文档说明与示例
@@ -111,10 +111,10 @@
 
 推荐顺序：
 
-1. `GET /api/releases/:id/diff`
-2. `POST /api/deployment-instances/:id/token/reset`
-3. `project_members`
-4. 项目级权限收口
+1. `POST /api/deployment-instances/:id/token/reset`
+2. `project_members`
+3. 项目级权限收口
+4. `audit_logs`
 
 理由：
 
@@ -122,15 +122,15 @@
 - `token/reset` 直接关系到部署实例生命周期闭环
 - `project_members` 和权限应该放在资源 API 基本齐备之后再做
 
-### 建议的第一个开发任务
+### 当前建议的第一个开发任务
 
-优先从 `GET /api/releases/:id/diff` 开始。
+优先从 `POST /api/deployment-instances/:id/token/reset` 开始。
 
 建议做法：
 
-- 先补一篇产品澄清文档，明确 diff 输出要展示什么
+- 先明确旧 token 失效与新 token 生效的联动语义
 - 再补接口响应模型与 OpenAPI
-- 最后写真实 PostgreSQL 集成测试
+- 最后写真实 PostgreSQL 集成测试，覆盖 open API 鉴权切换
 
 ## 5. 下一个会话建议先跑的命令
 
@@ -189,5 +189,5 @@ just test-backend-db
 如果下一个会话需要快速恢复上下文，可以直接从这里开始：
 
 ```text
-先阅读 DEVELOPMENT_LOG.md、docs/QUALITY_CHECK_PLAN.md、docs/product-qa/0002-required-configs-and-preview.md，然后继续做 GET /api/releases/:id/diff，并先补文档再改代码。
+先阅读 DEVELOPMENT_LOG.md、docs/QUALITY_CHECK_PLAN.md、docs/product-qa/0003-release-diff.md，然后继续做 POST /api/deployment-instances/:id/token/reset，并先补文档再改代码。
 ```

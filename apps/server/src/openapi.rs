@@ -12,7 +12,10 @@ use schema::{
         ConfigBundleResponse, DeploymentSyncResponse, ReleaseContentResponse, ResolveConfigResponse,
     },
     project::{ProjectListResponse, ProjectSummary},
-    release::{ReleaseDetailResponse, ReleaseListResponse, ReleaseSummary},
+    release::{
+        ReleaseDetailResponse, ReleaseDiffResponse, ReleaseDiffSummary, ReleaseListResponse,
+        ReleaseSummary,
+    },
 };
 use std::{fs, path::Path, sync::OnceLock};
 use utoipa::{
@@ -58,6 +61,7 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
         crate::http::api::releases::list_releases,
         crate::http::api::releases::publish_release,
         crate::http::api::releases::get_release_detail,
+        crate::http::api::releases::get_release_diff,
         crate::http::api::open::configs::resolve_config,
         crate::http::api::open::releases::get_release,
         crate::http::api::open::deployments::get_config_bundle,
@@ -80,12 +84,14 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
             ResolveConfigResponse,
             ReleaseContentResponse,
             ReleaseSummary,
+            ReleaseDiffSummary,
             ConfigBundleResponse,
             DeploymentSyncResponse,
             ProjectSummary,
             ProjectListResponse,
             ReleaseListResponse,
             ReleaseDetailResponse,
+            ReleaseDiffResponse,
             LoginRequestBody,
             CreateConfigFileRequestBody,
             CreateDeploymentInstanceRequestBody,
@@ -355,6 +361,7 @@ mod tests {
         assert!(paths.contains_key("/api/releases"));
         assert!(paths.contains_key("/api/releases/publish"));
         assert!(paths.contains_key("/api/releases/{id}"));
+        assert!(paths.contains_key("/api/releases/{id}/diff"));
         assert!(paths.contains_key("/api/open/configs/resolve"));
         assert!(paths.contains_key("/api/open/releases/{revision}"));
         assert!(paths.contains_key("/api/open/deployments/{deployment_key}/config-bundle"));

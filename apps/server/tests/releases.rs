@@ -6,7 +6,7 @@ use infra::testing::{test_database_url, unique_schema_name, with_search_path};
 use schema::{
     auth::AuthSessionResponse,
     draft::DraftResponse,
-    release::{ReleaseDetailResponse, ReleaseListResponse, ReleaseSummary},
+    release::{ReleaseDetailResponse, ReleaseDiffResponse, ReleaseListResponse, ReleaseSummary},
 };
 use server::{bootstrap, config::AppConfig, error::ErrorResponse};
 use sqlx::{Connection, Executor, PgConnection, PgPool, Row};
@@ -265,7 +265,7 @@ async fn publish_release_creates_release_from_current_draft() -> TestResult {
     );
 
     let row = sqlx::query(
-        "SELECT revision, content, change_summary, published_by FROM releases WHERE id = $1",
+        "SELECT revision, content, change_summary, diff_summary::text AS diff_summary, published_by FROM releases WHERE id = $1",
     )
     .bind(payload.id)
     .fetch_one(&pool)
@@ -275,6 +275,17 @@ async fn publish_release_creates_release_from_current_draft() -> TestResult {
     assert_eq!(
         row.get::<Option<String>, _>("change_summary").as_deref(),
         Some("increase polling interval")
+    );
+    let diff_summary: serde_json::Value =
+        serde_json::from_str(&row.get::<String, _>("diff_summary"))?;
+    assert_eq!(
+        diff_summary,
+        serde_json::json!({
+            "is_initial": true,
+            "has_changes": true,
+            "added_lines": 1,
+            "removed_lines": 0
+        })
     );
     assert!(row.get::<i64, _>("published_by") > 0);
 
@@ -482,7 +493,259 @@ async fn get_release_detail_returns_content_and_metadata() -> TestResult {
     let payload: ReleaseDetailResponse = read_json(response).await?;
     assert_eq!(payload.release.id, created.id);
     assert_eq!(payload.content, "poll_interval_ms: 5000\n");
-    assert!(payload.diff_summary.is_none());
+    assert_eq!(
+        payload.diff_summary,
+        Some(schema::release::ReleaseDiffSummary {
+            is_initial: true,
+            has_changes: true,
+            added_lines: 1,
+            removed_lines: 0,
+        })
+    );
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn get_release_diff_requires_session_cookie() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/releases/1/diff")
+                .body(Body::empty())?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let payload: ErrorResponse = read_json(response).await?;
+    assert_eq!(
+        payload,
+        ErrorResponse {
+            code: "auth_session_expired".to_owned(),
+            message: "Authentication session expired".to_owned(),
+        }
+    );
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn get_release_diff_returns_not_found_for_unknown_release() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+    let cookie = login(&app).await?;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/releases/999999/diff")
+                .header(header::COOKIE, cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let payload: ErrorResponse = read_json(response).await?;
+    assert_eq!(
+        payload,
+        ErrorResponse {
+            code: "release_not_found".to_owned(),
+            message: "release not found".to_owned(),
+        }
+    );
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn get_release_diff_returns_initial_release_shape_for_first_publish() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+    let (project_id, config_file_id, deployment_id) = seed_project_config_deployment(&pool).await?;
+    let cookie = login(&app).await?;
+    let _ = save_draft(
+        &app,
+        &cookie,
+        deployment_id,
+        config_file_id,
+        "poll_interval_ms: 5000\n",
+        None,
+    )
+    .await?;
+    let created = publish_release(
+        &app,
+        &cookie,
+        project_id,
+        deployment_id,
+        config_file_id,
+        Some("initial publish"),
+    )
+    .await?;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/releases/{}/diff", created.id))
+                .header(header::COOKIE, cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: ReleaseDiffResponse = read_json(response).await?;
+    assert_eq!(payload.release.id, created.id);
+    assert!(payload.base_release.is_none());
+    assert!(payload.before_content.is_none());
+    assert_eq!(payload.after_content, "poll_interval_ms: 5000\n");
+    assert!(payload.diff_summary.is_initial);
+    assert!(payload.diff_summary.has_changes);
+    assert_eq!(payload.diff_summary.added_lines, 1);
+    assert_eq!(payload.diff_summary.removed_lines, 0);
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn get_release_diff_returns_previous_release_content_and_summary() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+    let (project_id, config_file_id, deployment_id) = seed_project_config_deployment(&pool).await?;
+    let cookie = login(&app).await?;
+    let _ = save_draft(
+        &app,
+        &cookie,
+        deployment_id,
+        config_file_id,
+        "poll_interval_ms: 3000\nmode: steady\n",
+        None,
+    )
+    .await?;
+    let first = publish_release(
+        &app,
+        &cookie,
+        project_id,
+        deployment_id,
+        config_file_id,
+        Some("initial publish"),
+    )
+    .await?;
+    let _ = save_draft(
+        &app,
+        &cookie,
+        deployment_id,
+        config_file_id,
+        "poll_interval_ms: 5000\nmode: steady\nfeature_flag: true\n",
+        Some(1),
+    )
+    .await?;
+    let second = publish_release(
+        &app,
+        &cookie,
+        project_id,
+        deployment_id,
+        config_file_id,
+        Some("bump interval"),
+    )
+    .await?;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/releases/{}/diff", second.id))
+                .header(header::COOKIE, cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: ReleaseDiffResponse = read_json(response).await?;
+    assert_eq!(payload.release.id, second.id);
+    let Some(base_release) = payload.base_release else {
+        return Err("base release should exist".into());
+    };
+    assert_eq!(base_release.id, first.id);
+    assert_eq!(
+        payload.before_content.as_deref(),
+        Some("poll_interval_ms: 3000\nmode: steady\n")
+    );
+    assert_eq!(
+        payload.after_content,
+        "poll_interval_ms: 5000\nmode: steady\nfeature_flag: true\n"
+    );
+    assert!(!payload.diff_summary.is_initial);
+    assert!(payload.diff_summary.has_changes);
+    assert_eq!(payload.diff_summary.added_lines, 2);
+    assert_eq!(payload.diff_summary.removed_lines, 1);
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn get_release_diff_marks_identical_republish_as_no_change() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+    let (project_id, config_file_id, deployment_id) = seed_project_config_deployment(&pool).await?;
+    let cookie = login(&app).await?;
+    let _ = save_draft(
+        &app,
+        &cookie,
+        deployment_id,
+        config_file_id,
+        "poll_interval_ms: 5000\n",
+        None,
+    )
+    .await?;
+    let first = publish_release(
+        &app,
+        &cookie,
+        project_id,
+        deployment_id,
+        config_file_id,
+        None,
+    )
+    .await?;
+    let second = publish_release(
+        &app,
+        &cookie,
+        project_id,
+        deployment_id,
+        config_file_id,
+        None,
+    )
+    .await?;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/releases/{}/diff", second.id))
+                .header(header::COOKIE, cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: ReleaseDiffResponse = read_json(response).await?;
+    let Some(base_release) = payload.base_release else {
+        return Err("base release should exist".into());
+    };
+    assert_eq!(base_release.id, first.id);
+    assert_eq!(
+        payload.before_content.as_deref(),
+        Some("poll_interval_ms: 5000\n")
+    );
+    assert_eq!(payload.after_content, "poll_interval_ms: 5000\n");
+    assert!(!payload.diff_summary.is_initial);
+    assert!(!payload.diff_summary.has_changes);
+    assert_eq!(payload.diff_summary.added_lines, 0);
+    assert_eq!(payload.diff_summary.removed_lines, 0);
 
     teardown(&database_url, &schema, pool).await
 }

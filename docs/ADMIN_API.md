@@ -324,6 +324,17 @@
 
 ### `GET /api/releases/:id/diff`
 
+用途：
+
+- 查看某次发布相对上一版 release 的文本差异
+
+响应语义：
+
+- `base_release` 固定表示同一 `deployment_instance + config_file` 下的上一条 release
+- 如果当前 release 是首发，则 `base_release = null`
+- `before_content` / `after_content` 供前端 DiffEditor 直接使用
+- `diff_summary` 只返回轻量摘要，不返回 unified diff / patch 文本
+
 ## 13. Deployment Credential API
 
 ### `POST /api/deployment-instances/:id/token/reset`

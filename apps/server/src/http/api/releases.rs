@@ -5,7 +5,10 @@ use axum::{
     http::{HeaderMap, StatusCode, header},
     routing::{get, post},
 };
-use schema::release::{ReleaseDetailResponse, ReleaseListResponse, ReleaseSummary};
+use schema::release::{
+    ReleaseDetailResponse, ReleaseDiffResponse, ReleaseDiffSummary, ReleaseListResponse,
+    ReleaseSummary,
+};
 use serde::Deserialize;
 use sqlx::{Row, types::Json as SqlxJson};
 
@@ -45,10 +48,18 @@ struct DraftForPublish {
     format: String,
 }
 
+#[derive(Debug, Clone)]
+struct ReleaseRecord {
+    release: ReleaseSummary,
+    content: String,
+    diff_summary: Option<ReleaseDiffSummary>,
+}
+
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/releases", get(list_releases))
         .route("/releases/publish", post(publish_release))
+        .route("/releases/{id}/diff", get(get_release_diff))
         .route("/releases/{id}", get(get_release_detail))
 }
 
@@ -185,6 +196,14 @@ pub(crate) async fn publish_release(
             "draft format no longer matches config file",
         ));
     }
+    let previous_release =
+        find_latest_release(pool, payload.deployment_instance_id, payload.config_file_id).await?;
+    let diff_summary = build_diff_summary(
+        previous_release
+            .as_ref()
+            .map(|release| release.content.as_str()),
+        &draft.content,
+    );
     let revision = next_revision(pool).await?;
 
     let row = sqlx::query(
@@ -202,7 +221,7 @@ pub(crate) async fn publish_release(
             apply_mode,
             published_by
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULL, 'soft', $9)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'soft', $10)
         RETURNING
             id,
             project_id,
@@ -225,6 +244,7 @@ pub(crate) async fn publish_release(
     .bind(draft.content_hash)
     .bind(draft.format)
     .bind(payload.change_summary)
+    .bind(SqlxJson(diff_summary))
     .bind(auth.user_id)
     .fetch_one(pool)
     .await
@@ -271,39 +291,67 @@ pub(crate) async fn get_release_detail(
     )
     .await?;
 
-    let row = sqlx::query(
-        r#"
-        SELECT
-            id,
-            project_id,
-            deployment_instance_id,
-            config_file_id,
-            revision,
-            btrim(content_hash) AS content_hash,
-            format,
-            change_summary,
-            diff_summary,
-            apply_mode,
-            published_by,
-            to_char(published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS published_at,
-            content
-        FROM releases
-        WHERE id = $1
-        LIMIT 1
-        "#,
-    )
-    .bind(id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|_| ApiError::internal())?
-    .ok_or_else(|| ApiError::not_found_with("release_not_found", "release not found"))?;
-
+    let release = load_release_by_id(pool, id).await?;
     Ok(Json(ReleaseDetailResponse {
-        release: map_release_row(&row),
-        content: row.get("content"),
-        diff_summary: row
-            .get::<Option<SqlxJson<serde_json::Value>>, _>("diff_summary")
-            .map(|value| value.0),
+        release: release.release,
+        content: release.content,
+        diff_summary: release.diff_summary,
+    }))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/releases/{id}/diff",
+    tag = "admin",
+    params(
+        ("id" = i64, Path, description = "Release ID")
+    ),
+    security(
+        ("session_auth" = [])
+    ),
+    responses(
+        (status = 200, description = "Release diff against previous release", body = ReleaseDiffResponse),
+        (status = 401, description = "Missing or expired admin session", body = crate::error::ErrorResponse),
+        (status = 404, description = "Release not found", body = crate::error::ErrorResponse),
+        (status = 503, description = "Database bootstrap disabled", body = crate::error::ErrorResponse),
+        (status = 500, description = "Internal server error", body = crate::error::ErrorResponse),
+    )
+)]
+pub(crate) async fn get_release_diff(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    headers: HeaderMap,
+) -> Result<Json<ReleaseDiffResponse>, ApiError> {
+    let Some(pool) = state.db_pool() else {
+        return Err(ApiError::service_unavailable(
+            "database_unavailable",
+            "Database bootstrap is disabled",
+        ));
+    };
+
+    authenticate_admin_session(
+        pool,
+        headers
+            .get(header::COOKIE)
+            .and_then(|value| value.to_str().ok()),
+    )
+    .await?;
+
+    let release = load_release_by_id(pool, id).await?;
+    let base_release = find_previous_release_before_id(pool, id).await?;
+    let diff_summary = release.diff_summary.clone().unwrap_or_else(|| {
+        build_diff_summary(
+            base_release.as_ref().map(|base| base.content.as_str()),
+            &release.content,
+        )
+    });
+
+    Ok(Json(ReleaseDiffResponse {
+        release: release.release,
+        base_release: base_release.as_ref().map(|base| base.release.clone()),
+        before_content: base_release.map(|base| base.content),
+        after_content: release.content,
+        diff_summary,
     }))
 }
 
@@ -467,6 +515,117 @@ async fn load_draft_for_publish(
     })
 }
 
+async fn load_release_by_id(pool: &sqlx::PgPool, id: i64) -> Result<ReleaseRecord, ApiError> {
+    let row = sqlx::query(
+        r#"
+        SELECT
+            id,
+            project_id,
+            deployment_instance_id,
+            config_file_id,
+            revision,
+            btrim(content_hash) AS content_hash,
+            format,
+            change_summary,
+            diff_summary,
+            apply_mode,
+            published_by,
+            to_char(published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS published_at,
+            content
+        FROM releases
+        WHERE id = $1
+        LIMIT 1
+        "#,
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| ApiError::internal())?
+    .ok_or_else(|| ApiError::not_found_with("release_not_found", "release not found"))?;
+
+    Ok(map_release_record(&row))
+}
+
+async fn find_latest_release(
+    pool: &sqlx::PgPool,
+    deployment_instance_id: i64,
+    config_file_id: i64,
+) -> Result<Option<ReleaseRecord>, ApiError> {
+    let row = sqlx::query(
+        r#"
+        SELECT
+            id,
+            project_id,
+            deployment_instance_id,
+            config_file_id,
+            revision,
+            btrim(content_hash) AS content_hash,
+            format,
+            change_summary,
+            diff_summary,
+            apply_mode,
+            published_by,
+            to_char(published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS published_at,
+            content
+        FROM releases
+        WHERE deployment_instance_id = $1
+          AND config_file_id = $2
+        ORDER BY published_at DESC, id DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(deployment_instance_id)
+    .bind(config_file_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| ApiError::internal())?;
+
+    Ok(row.map(|row| map_release_record(&row)))
+}
+
+async fn find_previous_release_before_id(
+    pool: &sqlx::PgPool,
+    release_id: i64,
+) -> Result<Option<ReleaseRecord>, ApiError> {
+    let row = sqlx::query(
+        r#"
+        WITH target AS (
+            SELECT id, deployment_instance_id, config_file_id, published_at
+            FROM releases
+            WHERE id = $1
+        )
+        SELECT
+            r.id,
+            r.project_id,
+            r.deployment_instance_id,
+            r.config_file_id,
+            r.revision,
+            btrim(r.content_hash) AS content_hash,
+            r.format,
+            r.change_summary,
+            r.diff_summary,
+            r.apply_mode,
+            r.published_by,
+            to_char(r.published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS published_at,
+            r.content
+        FROM releases r
+        JOIN target t
+          ON r.deployment_instance_id = t.deployment_instance_id
+         AND r.config_file_id = t.config_file_id
+        WHERE r.published_at < t.published_at
+           OR (r.published_at = t.published_at AND r.id < t.id)
+        ORDER BY r.published_at DESC, r.id DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(release_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| ApiError::internal())?;
+
+    Ok(row.map(|row| map_release_record(&row)))
+}
+
 async fn next_revision(pool: &sqlx::PgPool) -> Result<String, ApiError> {
     sqlx::query_scalar(
         r#"
@@ -480,6 +639,16 @@ async fn next_revision(pool: &sqlx::PgPool) -> Result<String, ApiError> {
     .fetch_one(pool)
     .await
     .map_err(|_| ApiError::internal())
+}
+
+fn map_release_record(row: &sqlx::postgres::PgRow) -> ReleaseRecord {
+    ReleaseRecord {
+        release: map_release_row(row),
+        content: row.get("content"),
+        diff_summary: row
+            .get::<Option<SqlxJson<ReleaseDiffSummary>>, _>("diff_summary")
+            .map(|value| value.0),
+    }
 }
 
 fn map_release_row(row: &sqlx::postgres::PgRow) -> ReleaseSummary {
@@ -496,6 +665,62 @@ fn map_release_row(row: &sqlx::postgres::PgRow) -> ReleaseSummary {
         published_by: row.get("published_by"),
         published_at: row.get("published_at"),
     }
+}
+
+fn build_diff_summary(before: Option<&str>, after: &str) -> ReleaseDiffSummary {
+    match before {
+        None => ReleaseDiffSummary {
+            is_initial: true,
+            has_changes: !after.is_empty(),
+            added_lines: line_count(after),
+            removed_lines: 0,
+        },
+        Some(before) if before == after => ReleaseDiffSummary {
+            is_initial: false,
+            has_changes: false,
+            added_lines: 0,
+            removed_lines: 0,
+        },
+        Some(before) => {
+            let before_lines: Vec<&str> = before.lines().collect();
+            let after_lines: Vec<&str> = after.lines().collect();
+            let common_lines = lcs_len(&before_lines, &after_lines) as u32;
+
+            ReleaseDiffSummary {
+                is_initial: false,
+                has_changes: true,
+                added_lines: after_lines.len() as u32 - common_lines,
+                removed_lines: before_lines.len() as u32 - common_lines,
+            }
+        }
+    }
+}
+
+fn line_count(content: &str) -> u32 {
+    content.lines().count() as u32
+}
+
+fn lcs_len(before: &[&str], after: &[&str]) -> usize {
+    if before.is_empty() || after.is_empty() {
+        return 0;
+    }
+
+    let mut previous = vec![0usize; after.len() + 1];
+    let mut current = vec![0usize; after.len() + 1];
+
+    for before_line in before {
+        for (index, after_line) in after.iter().enumerate() {
+            current[index + 1] = if before_line == after_line {
+                previous[index] + 1
+            } else {
+                current[index].max(previous[index + 1])
+            };
+        }
+        std::mem::swap(&mut previous, &mut current);
+        current.fill(0);
+    }
+
+    previous[after.len()]
 }
 
 fn required_i64(value: Option<i64>, field: &'static str) -> Result<i64, ApiError> {
@@ -524,7 +749,7 @@ fn invalid_body_message(field: &'static str) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::invalid_body_message;
+    use super::{build_diff_summary, invalid_body_message};
 
     #[test]
     fn invalid_body_message_covers_publish_fields() {
@@ -532,5 +757,18 @@ mod tests {
             invalid_body_message("deployment_instance_id"),
             "invalid request body: deployment_instance_id is required"
         );
+    }
+
+    #[test]
+    fn build_diff_summary_counts_line_changes_against_previous_release() {
+        let summary = build_diff_summary(
+            Some("poll_interval_ms: 3000\nmode: steady\n"),
+            "poll_interval_ms: 5000\nmode: steady\nfeature_flag: true\n",
+        );
+
+        assert!(!summary.is_initial);
+        assert!(summary.has_changes);
+        assert_eq!(summary.added_lines, 2);
+        assert_eq!(summary.removed_lines, 1);
     }
 }
