@@ -7,15 +7,7 @@ pub fn test_database_url(test_name: &str) -> Option<String> {
         }
     }
 
-    if let Ok(value) = std::env::var("DATABASE_URL") {
-        if !value.trim().is_empty() {
-            return Some(value);
-        }
-    }
-
-    eprintln!(
-        "skipping {test_name} integration test: TEST_DATABASE_URL and DATABASE_URL are not set"
-    );
+    eprintln!("skipping {test_name} integration test: TEST_DATABASE_URL is not set");
     None
 }
 

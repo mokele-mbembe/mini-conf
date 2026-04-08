@@ -30,8 +30,8 @@ async fn setup_app() -> TestResult<Option<(axum::Router, PgPool, String, String)
 
     let pool = state
         .db_pool()
-        .expect("db pool should be present after bootstrap")
-        .clone();
+        .cloned()
+        .ok_or_else(|| std::io::Error::other("db pool should be present after bootstrap"))?;
 
     Ok(Some((server::app(state), pool, database_url, schema)))
 }

@@ -1,4 +1,4 @@
-# WSL 与 Fedora 双环境并列开发清单
+# WSL 与 Fedora 平台并行对齐说明
 
 ## 1. 文档目的
 
@@ -7,22 +7,31 @@
 - Laptop 上的 WSL
 - 当前 Fedora 43 工作站
 
-这份文档的目标不是重复所有安装步骤，而是把两边必须对齐的工具和验证命令收敛成一份清单，避免出现：
+这份文档不再负责定义仓库工作流规范。
+
+标准工作流以 [docs/STANDARD_WORKFLOW.md](./STANDARD_WORKFLOW.md) 为准；本文只负责回答 WSL 与 Fedora 两个平台如何保持同一套规范实现。
+
+目标是避免出现：
 
 - 一边能编译，一边不能
 - 一边能跑 CI 对应检查，一边缺工具
 - 一边能连本地数据库，一边脚本失效
 
-## 2. 最低一致性要求
+## 2. 平台对齐目标
 
-两个环境都至少需要满足：
+两个环境都应按标准工作流对齐：
+
+- 两边都满足 `Core`
+- 你的两台 Fedora 43 都满足 `Full`
+- 两边都使用 `~/.config/mini-conf/dev-env.sh`
+- 两边都通过 `just` 命令入口，而不是平台专用旁路脚本
+
+落实到当前仓库，就是：
 
 - 都能运行 `cargo fmt`、`cargo clippy`、`cargo nextest`
 - 都能运行 `bash scripts/export-openapi.sh`
 - 都能运行 `just lint`、`just test`、`just openapi-check`
-- 至少有一个环境能稳定运行 `just test-backend-db`
-
-如果两个环境都要承担完整开发职责，建议两个环境都装齐数据库和 `sqlx-cli`。
+- 两台 Fedora 43 都能运行 `just db-migrate-up`、`just test-backend-db`、`just dev-server`
 
 截至 2026-04-08，当前这套 `Fedora Linux 43 (WSL)` 已经实际跑通：
 
@@ -91,21 +100,26 @@ Fedora 系：
 
 ## 4. 当前仓库最重要的本地命令
 
-两个环境最少都要能跑通这些命令：
+先对齐 `Core`：
 
 ```bash
 just lint
 just test
 just openapi-check
-bash scripts/export-openapi.sh
 ```
 
-承担真实数据库验证的环境，还要能跑：
+再对齐 `Full`：
 
 ```bash
 just test-backend-db
 just db-migrate-up
 just dev-server
+```
+
+OpenAPI 导出命令仍然应一致可用：
+
+```bash
+bash scripts/export-openapi.sh
 ```
 
 ## 5. 当前项目对工具的实际依赖
@@ -136,12 +150,10 @@ WSL 下最容易出现的不是编译问题，而是“桌面集成工具不可�
 - keyring / session bus
 - 从 Windows PATH 透传进来的 `corepack`
 
-如果你的 WSL 环境里 `secret-tool` 不稳定，建议直接显式设置：
+如果你的 WSL 环境里 `secret-tool` 不稳定，建议把数据库配置直接写入：
 
 ```bash
 export MINI_CONF_DB_PASSWORD='...'
-export DATABASE_URL=...
-export TEST_DATABASE_URL=...
 export INIT_ADMIN_USERNAME=...
 export INIT_ADMIN_PASSWORD=...
 ```
@@ -152,7 +164,7 @@ export INIT_ADMIN_PASSWORD=...
 ~/.config/mini-conf/dev-env.sh
 ```
 
-这样现有 `scripts/load-dev-env.sh` 和 `scripts/dev-db-env.sh` 会自动接上。
+这样现有 `scripts/load-dev-env.sh` 和 `scripts/dev-db-env.sh` 会自动接上，`Full` 工作流所需的 `DATABASE_URL` 和 `TEST_DATABASE_URL` 也会由脚本统一补齐。
 
 不要把 WSL 环境是否有桌面 keyring 当成阻塞项。
 如果这台 WSL 会长期承担开发，建议把 `dev-env.sh` 和 `$CARGO_HOME/env` 的自动加载片段写进 `~/.bashrc`。
@@ -212,6 +224,7 @@ just --version
 
 ## 10. 关联文档
 
+- [标准 Linux 开发工作流](./STANDARD_WORKFLOW.md)
 - [Linux / WSL2 开发环境实录](./DEV_LINUX_WSL2.md)
 - [Fedora 43 开发环境与本地 Agent 约定](./DEV_FEDORA43_WORKSTATION.md)
 - [质量检查与测试收口计划](./QUALITY_CHECK_PLAN.md)

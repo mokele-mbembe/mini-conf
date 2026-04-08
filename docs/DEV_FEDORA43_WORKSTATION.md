@@ -9,6 +9,8 @@
 - 把 `mini-conf` 的开发工具链一次装齐
 - 约束本地 agent 在保持 Default permissions 的前提下，尽量贴近正常工程实践，不因为沙箱机制造成项目内异常堆积构建缓存和临时目录
 
+标准工作流规范见 [docs/STANDARD_WORKFLOW.md](./STANDARD_WORKFLOW.md)。
+
 如果你同时维护 WSL 和 Fedora 两套环境，双环境工具对齐清单见 [WSL 与 Fedora 双环境并列开发清单](./DEV_DUAL_ENV_PARITY.md)。
 
 如果你之前已经按旧版文档配置过 Fedora 桌面环境，这次额外建议同步 3 件事：
@@ -668,7 +670,7 @@ source "${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/dev-env.sh"
 
 再从这个 shell 启动你的 IDE、终端会话或本地 agent。
 
-仓库内的 Git hooks 会先执行 [scripts/load-dev-env.sh](/home/zjj/Projects/mini-conf/scripts/load-dev-env.sh)，它会按这个顺序寻找本地环境脚本：
+仓库内的 Git hooks 会先执行 [scripts/load-dev-env.sh](../scripts/load-dev-env.sh)，它会按这个顺序寻找本地环境脚本：
 
 - `MINI_CONF_DEV_ENV_FILE` 指向的文件
 - `${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/dev-env.sh`

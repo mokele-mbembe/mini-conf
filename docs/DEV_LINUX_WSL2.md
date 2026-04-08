@@ -2,9 +2,11 @@
 
 ## 1. 文档目的
 
-这份文档不再记录“打算怎么做”，而是记录一次已经在本仓库真实跑通的 WSL 环境初始化结果。
+这份文档不再定义仓库工作流规范，而是记录一次已经在本仓库真实跑通的 WSL 环境初始化结果。
 
 本文基于 2026-04-08 在 `Fedora Linux 43 (WSL)` 上的实际搭建过程整理，目标是让后续重新创建 WSL 环境时可以直接复用，而不是再次从建议性方案里试错。
+
+标准工作流规范见 [docs/STANDARD_WORKFLOW.md](./STANDARD_WORKFLOW.md)。
 
 ## 2. 当前已验证结果
 
@@ -97,7 +99,7 @@ chmod 600 ~/.config/mini-conf/dev-env.sh
 
 - `scripts/dev-db-env.sh` 会优先读取 `MINI_CONF_DB_PASSWORD`
 - 脚本会自动 URL 编码并生成 `DATABASE_URL`
-- 如果 `TEST_DATABASE_URL` 为空，脚本会自动回落到 `DATABASE_URL`
+- 如果 `TEST_DATABASE_URL` 为空，脚本会把它补成与 `DATABASE_URL` 一致
 
 因此：
 
@@ -315,7 +317,7 @@ just test-backend-db
 - 如果 `DATABASE_URL` 未设置，就根据 `MINI_CONF_DB_*` 变量拼接
 - 如果 `MINI_CONF_DB_PASSWORD` 未设置，才尝试 `MINI_CONF_DB_PASSWORD_FILE`
 - 以上都没有时，才会回退到 `secret-tool`
-- `TEST_DATABASE_URL` 默认为 `DATABASE_URL`
+- `TEST_DATABASE_URL` 为空时会被补成 `DATABASE_URL`
 - `INIT_DB_ON_BOOT` 默认为 `true`
 
 ### `justfile`
@@ -328,6 +330,7 @@ just test-backend-db
 - `just dev-server`
 
 这些命令都会先 `source scripts/dev-db-env.sh`，所以只要 `~/.config/mini-conf/dev-env.sh` 正确，就不需要每次手工导出连接串。
+Rust 测试代码本身只读取 `TEST_DATABASE_URL`；由脚本负责在 `Full` 环境里把它补齐。
 
 ## 6. 这次实际搭建里踩到的坑
 

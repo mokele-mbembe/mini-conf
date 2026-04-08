@@ -146,11 +146,22 @@ MVP 默认采用 `DeploymentInstance` 作为配置组织模型，因为它最贴
 - 本地调试流程优先针对 Linux / WSL2 编写
 - CI 也应以 Linux 环境为标准
 
+标准工作流规范见 [docs/STANDARD_WORKFLOW.md](./docs/STANDARD_WORKFLOW.md)。
+
+当前约定：
+
+- 所有 Linux 协作者至少满足 `Core` 工作流：`just lint`、`just test`、`just openapi-check`
+- 承担数据库联调和真实 PostgreSQL 集成测试的环境满足 `Full` 工作流：`just db-migrate-up`、`just test-backend-db`、`just dev-server`
+- `~/.config/mini-conf/dev-env.sh` 是唯一推荐的本机环境入口
+- `secret-tool` 只是兼容选项，不是标准前提
+
 ## 测试约定
 
-数据库集成测试统一使用 [`infra::testing`](/home/zjj/Projects/mini-conf/crates/infra/src/testing.rs) 提供的 helper。
+数据库集成测试统一使用 [`infra::testing`](./crates/infra/src/testing.rs) 提供的 helper。
 
-- 新增数据库集成测试时，使用 `test_database_url(...)` 解析测试连接串，不要在测试文件里重复读取 `TEST_DATABASE_URL` / `DATABASE_URL`
+- 新增数据库集成测试时，使用 `test_database_url(...)` 解析测试连接串，不要在测试文件里重复读取环境变量
+- Rust 测试代码只读取 `TEST_DATABASE_URL`
+- `scripts/dev-db-env.sh` 负责在 `Full` 环境里统一生成 `DATABASE_URL` 与 `TEST_DATABASE_URL`
 - 需要隔离 schema 时，使用 `unique_schema_name(...)`
 - 需要按 schema 建连接时，使用 `with_search_path(...)`
 
@@ -158,20 +169,21 @@ MVP 默认采用 `DeploymentInstance` 作为配置组织模型，因为它最贴
 
 ## 文档导航
 
-- 项目启动与里程碑：[KICKOFF.md](c:\Users\zhaoj\Projects\mini-conf\KICKOFF.md)
-- 脚手架与启动规划：[docs/BOOTSTRAP.md](c:\Users\zhaoj\Projects\mini-conf\docs\BOOTSTRAP.md)
-- 数据模型草案：[docs/DB_SCHEMA.md](c:\Users\zhaoj\Projects\mini-conf\docs\DB_SCHEMA.md)
-- 管理端 API 草案：[docs/ADMIN_API.md](c:\Users\zhaoj\Projects\mini-conf\docs\ADMIN_API.md)
-- 部署实例模型与未来 Scope 规划：[docs/SCOPE_RULES.md](c:\Users\zhaoj\Projects\mini-conf\docs\SCOPE_RULES.md)
-- 鉴权与安全草案：[docs/AUTH_AND_SECURITY.md](c:\Users\zhaoj\Projects\mini-conf\docs\AUTH_AND_SECURITY.md)
-- 消费端 HTTP 协议草案：[docs/CLIENT_HTTP_PROTOCOL.md](c:\Users\zhaoj\Projects\mini-conf\docs\CLIENT_HTTP_PROTOCOL.md)
-- 前端 workspace 最小脚手架：[docs/FRONTEND_WORKSPACE.md](c:\Users\zhaoj\Projects\mini-conf\docs\FRONTEND_WORKSPACE.md)
-- 性能测试 scaffold：[docs/PERFORMANCE.md](c:\Users\zhaoj\Projects\mini-conf\docs\PERFORMANCE.md)
-- MVP 之后的版本规划：[docs/POST_MVP_PLAN.md](c:\Users\zhaoj\Projects\mini-conf\docs\POST_MVP_PLAN.md)
-- 仓库初始化清单：[docs/REPO_INIT_CHECKLIST.md](c:\Users\zhaoj\Projects\mini-conf\docs\REPO_INIT_CHECKLIST.md)
-- 提交前 Review 清单：[docs/SUBMISSION_CHECKLIST.md](c:\Users\zhaoj\Projects\mini-conf\docs\SUBMISSION_CHECKLIST.md)
-- 首次提交说明草案：[docs/INITIAL_PR_DRAFT.md](c:\Users\zhaoj\Projects\mini-conf\docs\INITIAL_PR_DRAFT.md)
-- Linux / WSL2 开发环境实录：[docs/DEV_LINUX_WSL2.md](c:\Users\zhaoj\Projects\mini-conf\docs\DEV_LINUX_WSL2.md)
+- 项目启动与里程碑：[KICKOFF.md](./KICKOFF.md)
+- 标准 Linux 开发工作流：[docs/STANDARD_WORKFLOW.md](./docs/STANDARD_WORKFLOW.md)
+- 脚手架与启动规划：[docs/BOOTSTRAP.md](./docs/BOOTSTRAP.md)
+- 数据模型草案：[docs/DB_SCHEMA.md](./docs/DB_SCHEMA.md)
+- 管理端 API 草案：[docs/ADMIN_API.md](./docs/ADMIN_API.md)
+- 部署实例模型与未来 Scope 规划：[docs/SCOPE_RULES.md](./docs/SCOPE_RULES.md)
+- 鉴权与安全草案：[docs/AUTH_AND_SECURITY.md](./docs/AUTH_AND_SECURITY.md)
+- 消费端 HTTP 协议草案：[docs/CLIENT_HTTP_PROTOCOL.md](./docs/CLIENT_HTTP_PROTOCOL.md)
+- 前端 workspace 最小脚手架：[docs/FRONTEND_WORKSPACE.md](./docs/FRONTEND_WORKSPACE.md)
+- 性能测试 scaffold：[docs/PERFORMANCE.md](./docs/PERFORMANCE.md)
+- MVP 之后的版本规划：[docs/POST_MVP_PLAN.md](./docs/POST_MVP_PLAN.md)
+- 仓库初始化清单：[docs/REPO_INIT_CHECKLIST.md](./docs/REPO_INIT_CHECKLIST.md)
+- 提交前 Review 清单：[docs/SUBMISSION_CHECKLIST.md](./docs/SUBMISSION_CHECKLIST.md)
+- 首次提交说明草案：[docs/INITIAL_PR_DRAFT.md](./docs/INITIAL_PR_DRAFT.md)
+- Linux / WSL2 开发环境实录：[docs/DEV_LINUX_WSL2.md](./docs/DEV_LINUX_WSL2.md)
 
 ## 当前状态
 

@@ -149,19 +149,22 @@ OPENAPI_EXPORT_PATH=docs/openapi/openapi.json
 
 当前仓库约定：
 
-- `just dev-server`
-- `just db-migrate-up`
-- `just db-migrate-down`
-- `just test-backend-db`
+- `Core` 工作流：`just lint`、`just test`、`just openapi-check`
+- `Full` 工作流：`just dev-server`、`just db-migrate-up`、`just db-migrate-down`、`just test-backend-db`
 
-会优先使用已设置的 `DATABASE_URL` / `TEST_DATABASE_URL`。
-如果 `TEST_DATABASE_URL` 为空字符串，测试会自动回退到 `DATABASE_URL`。
-如果未设置，则尝试从 `secret-tool lookup service mini-conf env dev role app-db user mini_conf` 读取开发库密码，并自动做 URL 编码后再连接本地 PostgreSQL。
+统一规范见 [docs/STANDARD_WORKFLOW.md](./STANDARD_WORKFLOW.md)。
+
+数据库命令入口约定：
+
+- `scripts/dev-db-env.sh` 负责生成 `DATABASE_URL`
+- 如果 `TEST_DATABASE_URL` 为空字符串，脚本会把它补成与 `DATABASE_URL` 一致
+- Rust 数据库测试代码本身只读取 `TEST_DATABASE_URL`
+- 如果脚本无法从本机环境文件取到密码，才会尝试 `secret-tool lookup service mini-conf env dev role app-db user mini_conf`
 
 数据库集成测试约定：
 
-- 测试文件不要各自重复解析 `TEST_DATABASE_URL` / `DATABASE_URL`
-- 统一复用 [`infra::testing`](/home/zjj/Projects/mini-conf/crates/infra/src/testing.rs) 中的 `test_database_url`、`unique_schema_name`、`with_search_path`
+- 测试文件不要各自重复解析环境变量
+- 统一复用 [`infra::testing`](../crates/infra/src/testing.rs) 中的 `test_database_url`、`unique_schema_name`、`with_search_path`
 - 这样可以把 Linux / WSL2 / 本地 shell 的环境差异收口在一处，避免后续新增测试时再引入分叉
 
 ## 8. 代码质量与 TDD 基线

@@ -10,6 +10,8 @@
 - 减少环境差异导致的返工
 - 让后续执行开发工作的 AI agent 更容易按正确顺序落地
 
+工作流规范以 [docs/STANDARD_WORKFLOW.md](./STANDARD_WORKFLOW.md) 为准；本文只负责初始化顺序。
+
 ## 2. 初始化顺序
 
 ### 1. 拉取仓库
@@ -38,7 +40,8 @@
 
 参考文档：
 
-- [docs/DEV_LINUX_WSL2.md](c:\Users\zhaoj\Projects\mini-conf\docs\DEV_LINUX_WSL2.md)
+- [docs/STANDARD_WORKFLOW.md](./STANDARD_WORKFLOW.md)
+- [docs/DEV_LINUX_WSL2.md](./DEV_LINUX_WSL2.md)
 
 ### 3. 初始化前端工作区
 
@@ -48,7 +51,7 @@
 
 参考文档：
 
-- [docs/FRONTEND_WORKSPACE.md](c:\Users\zhaoj\Projects\mini-conf\docs\FRONTEND_WORKSPACE.md)
+- [docs/FRONTEND_WORKSPACE.md](./FRONTEND_WORKSPACE.md)
 
 ### 4. 初始化 Rust workspace
 
@@ -60,12 +63,12 @@
 
 参考文档：
 
-- [docs/BOOTSTRAP.md](c:\Users\zhaoj\Projects\mini-conf\docs\BOOTSTRAP.md)
+- [docs/BOOTSTRAP.md](./BOOTSTRAP.md)
 
 ### 5. 初始化数据库与迁移
 
 - 优先配置 `~/.config/mini-conf/dev-env.sh`，不要把 WSL 初始化绑定到 `secret-tool`
-- 让 `scripts/dev-db-env.sh` 自动生成 `DATABASE_URL` 和 `TEST_DATABASE_URL`
+- 让 `scripts/dev-db-env.sh` 自动生成 `DATABASE_URL`，并在需要时补齐 `TEST_DATABASE_URL`
 - 初始化 PostgreSQL 16 数据目录
 - 把默认 `pg_hba.conf` 的 `peer` / `ident` 改成 `scram-sha-256`
 - 创建 `mini_conf` 用户和 `mini_conf` 数据库
@@ -73,8 +76,8 @@
 
 参考文档：
 
-- [docs/DB_SCHEMA.md](c:\Users\zhaoj\Projects\mini-conf\docs\DB_SCHEMA.md)
-- [docs/DEV_LINUX_WSL2.md](c:\Users\zhaoj\Projects\mini-conf\docs\DEV_LINUX_WSL2.md)
+- [docs/DB_SCHEMA.md](./DB_SCHEMA.md)
+- [docs/DEV_LINUX_WSL2.md](./DEV_LINUX_WSL2.md)
 
 ### 6. 落地开放消费端最小协议
 
@@ -87,7 +90,7 @@
 
 参考文档：
 
-- [docs/CLIENT_HTTP_PROTOCOL.md](c:\Users\zhaoj\Projects\mini-conf\docs\CLIENT_HTTP_PROTOCOL.md)
+- [docs/CLIENT_HTTP_PROTOCOL.md](./CLIENT_HTTP_PROTOCOL.md)
 
 ### 7. 落地管理端主干接口
 
@@ -104,26 +107,37 @@
 
 参考文档：
 
-- [docs/ADMIN_API.md](c:\Users\zhaoj\Projects\mini-conf\docs\ADMIN_API.md)
+- [docs/ADMIN_API.md](./ADMIN_API.md)
 
 ### 8. 接入质量门槛
 
+先完成 `Core`：
+
 - `just lint`
 - `just test`
+- `just openapi-check`
+
+再补 `Full`：
+
+- `just db-migrate-up`
+- `just test-backend-db`
+
+最后补 CI / 进阶检查：
+
 - `just perf-smoke`
 - `just sqlx-check`
-- `just openapi-check`
 - `pnpm dlx lefthook install`
-- 对需要数据库验证的环境，额外执行 `just test-backend-db`
 
 参考文档：
 
-- [docs/PERFORMANCE.md](c:\Users\zhaoj\Projects\mini-conf\docs\PERFORMANCE.md)
+- [docs/STANDARD_WORKFLOW.md](./STANDARD_WORKFLOW.md)
+- [docs/PERFORMANCE.md](./PERFORMANCE.md)
 
 ### 9. 验证 CI
 
 - 确认 GitHub Actions 工作流语法正确
-- 确认本地 `just ci-local` 可跑
+- 确认本地 `Core` 和 `Full` 命令都可跑
+- 确认 GitHub `quality` 与 `backend-db` 两条工作流职责清晰
 
 ## 3. MVP 初始化完成标准
 

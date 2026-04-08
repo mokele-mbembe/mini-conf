@@ -10,7 +10,19 @@
 
 目标不是把检查堆满，而是在项目阶段合适的时候引入合适的约束。
 
+工作流分层规范见 [docs/STANDARD_WORKFLOW.md](./STANDARD_WORKFLOW.md)；本文只讨论质量门槛收口节奏。
+
 ## 2. 当前已启用的检查
+
+当前工作流分两层：
+
+- `Core`：`just lint`、`just test`、`just openapi-check`
+- `Full`：`just db-migrate-up`、`just test-backend-db`、`just dev-server`
+
+CI 对应关系：
+
+- `quality` job 对应 `Core`
+- `backend-db` job 对应 `Full`
 
 本地与 CI 当前共同依赖这些入口：
 
@@ -221,9 +233,10 @@
 本地在提交前，优先跑：
 
 1. `just lint`
-2. `just openapi-check`
-3. `just test`
-4. 涉及数据库主路径时再跑 `just test-backend-db`
+2. `just test`
+3. `just openapi-check`
+4. 涉及数据库主路径时再跑 `just db-migrate-up`
+5. 涉及数据库主路径时再跑 `just test-backend-db`
 
 在本地要模拟 CI 时，跑：
 
