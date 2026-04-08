@@ -161,7 +161,7 @@ MVP 默认采用 `DeploymentInstance` 作为配置组织模型，因为它最贴
 - 仓库初始化清单：[docs/REPO_INIT_CHECKLIST.md](c:\Users\zhaoj\Projects\mini-conf\docs\REPO_INIT_CHECKLIST.md)
 - 提交前 Review 清单：[docs/SUBMISSION_CHECKLIST.md](c:\Users\zhaoj\Projects\mini-conf\docs\SUBMISSION_CHECKLIST.md)
 - 首次提交说明草案：[docs/INITIAL_PR_DRAFT.md](c:\Users\zhaoj\Projects\mini-conf\docs\INITIAL_PR_DRAFT.md)
-- Linux / WSL2 开发与部署草案：[docs/DEV_LINUX_WSL2.md](c:\Users\zhaoj\Projects\mini-conf\docs\DEV_LINUX_WSL2.md)
+- Linux / WSL2 开发环境实录：[docs/DEV_LINUX_WSL2.md](c:\Users\zhaoj\Projects\mini-conf\docs\DEV_LINUX_WSL2.md)
 
 ## 当前状态
 

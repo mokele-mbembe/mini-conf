@@ -27,6 +27,14 @@
 - `pnpm`
 - `just`
 - PostgreSQL 16+
+- 对 Fedora WSL，额外确认 `openssl` 命令行和 `openssl-devel` 都已安装
+
+对当前已验证的 `Fedora Linux 43 (WSL)`，实际顺序是：
+
+1. 先创建仓库外缓存目录和 `~/.config/mini-conf/dev-env.sh`
+2. 再安装系统包、Rust 和 pnpm
+3. 然后初始化 PostgreSQL，并把 `pg_hba.conf` 改成 `scram-sha-256`
+4. 最后跑 `pnpm install`、`pnpm dlx lefthook install`、`just db-migrate-up`、`just test-backend-db`
 
 参考文档：
 
@@ -56,15 +64,17 @@
 
 ### 5. 初始化数据库与迁移
 
-- 配置 `DATABASE_URL`
-- 配置 `DATABASE_ADMIN_URL`
-- 创建第一批 migrations
-- 明确 `migrate up` / `migrate down` 约定
-- 建立 seed 逻辑
+- 优先配置 `~/.config/mini-conf/dev-env.sh`，不要把 WSL 初始化绑定到 `secret-tool`
+- 让 `scripts/dev-db-env.sh` 自动生成 `DATABASE_URL` 和 `TEST_DATABASE_URL`
+- 初始化 PostgreSQL 16 数据目录
+- 把默认 `pg_hba.conf` 的 `peer` / `ident` 改成 `scram-sha-256`
+- 创建 `mini_conf` 用户和 `mini_conf` 数据库
+- 跑 `just db-migrate-up`
 
 参考文档：
 
 - [docs/DB_SCHEMA.md](c:\Users\zhaoj\Projects\mini-conf\docs\DB_SCHEMA.md)
+- [docs/DEV_LINUX_WSL2.md](c:\Users\zhaoj\Projects\mini-conf\docs\DEV_LINUX_WSL2.md)
 
 ### 6. 落地开放消费端最小协议
 
@@ -103,7 +113,8 @@
 - `just perf-smoke`
 - `just sqlx-check`
 - `just openapi-check`
-- `lefthook install`
+- `pnpm dlx lefthook install`
+- 对需要数据库验证的环境，额外执行 `just test-backend-db`
 
 参考文档：
 
@@ -121,7 +132,9 @@
 - Rust workspace 已建立
 - 前端 workspace 已建立
 - PostgreSQL 迁移可执行
+- WSL 本地环境文件可被 `scripts/load-dev-env.sh` 自动读取
 - PostgreSQL 回滚命令可执行
+- `just test-backend-db` 在至少一套 Linux / WSL 环境里已实际跑通
 - 管理端最小登录可跑
 - 开放消费端最小协议可跑
 - `just lint`、`just test`、`just perf-smoke`、`just openapi-check` 可执行

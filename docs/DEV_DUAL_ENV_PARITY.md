@@ -24,6 +24,13 @@
 
 如果两个环境都要承担完整开发职责，建议两个环境都装齐数据库和 `sqlx-cli`。
 
+截至 2026-04-08，当前这套 `Fedora Linux 43 (WSL)` 已经实际跑通：
+
+- `just db-migrate-up`
+- `just test-backend-db`
+
+因此 WSL 不再只是“轻量写码环境”，它已经可以承担完整后端开发和数据库集成测试。
+
 ## 3. 必装工具
 
 ### 3.1 通用命令行工具
@@ -121,10 +128,11 @@ just dev-server
 
 WSL 下最容易出现的不是编译问题，而是“桌面集成工具不可用”。
 
-当前仓库里，下面这些能力可能依赖桌面环境：
+当前仓库里，下面这些能力在 WSL 下最容易失效：
 
 - `secret-tool`
 - keyring / session bus
+- 从 Windows PATH 透传进来的 `corepack`
 
 如果你的 WSL 环境里 `secret-tool` 不稳定，建议直接显式设置：
 
@@ -146,6 +154,11 @@ export INIT_ADMIN_PASSWORD=...
 
 不要把 WSL 环境是否有桌面 keyring 当成阻塞项。
 
+这次实际验证还确认了两个额外注意点：
+
+- Fedora WSL 默认生成的 `pg_hba.conf` 是 `peer` / `ident`，如果不改成 `scram-sha-256`，`just db-migrate-up` 和 `just test-backend-db` 无法按项目脚本正常连接数据库。
+- 如果 `corepack --version` 报 `/bin/sh^M: bad interpreter`，说明当前拿到的是 Windows 侧脚本；应直接在 WSL 内安装本地 `corepack` 并重新 `corepack prepare pnpm@9.12.3 --activate`。
+
 ## 7. Fedora 特别说明
 
 Fedora 43 这边更适合作为“全量环境”：
@@ -155,7 +168,7 @@ Fedora 43 这边更适合作为“全量环境”：
 - 跑 `just test-backend-db`
 - 跑完整本地联调
 
-如果你只想维护一个能完整跑 DB 集成测试的环境，优先把这台 Fedora 保持为基准环境。
+如果你只想维护一个能完整跑 DB 集成测试的环境，优先保留已经实际跑通的那套环境作为基准。
 
 ## 8. 版本对齐建议
 
@@ -186,13 +199,13 @@ just --version
 
 如果你想减少维护成本，当前比较合理的分工是：
 
-- WSL：写代码、跑 `just lint`、跑无 DB 测试、看文档、做轻量修改
-- Fedora：跑 `just test-backend-db`、本地 PostgreSQL 联调、复现 CI、做性能 smoke
+- WSL：写代码、跑 `just lint`、跑 `just test`、跑 `just db-migrate-up`、跑 `just test-backend-db`
+- Fedora Workstation：作为第二套全量环境，承担本地联调、复现 CI 和性能 smoke
 
 等后面前端和 E2E 成熟后，再决定是否让两个环境都承担全量职责。
 
 ## 10. 关联文档
 
-- [Linux / WSL2 开发与部署草案](./DEV_LINUX_WSL2.md)
+- [Linux / WSL2 开发环境实录](./DEV_LINUX_WSL2.md)
 - [Fedora 43 开发环境与本地 Agent 约定](./DEV_FEDORA43_WORKSTATION.md)
 - [质量检查与测试收口计划](./QUALITY_CHECK_PLAN.md)

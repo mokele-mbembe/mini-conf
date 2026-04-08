@@ -1,163 +1,60 @@
-# Linux / WSL2 开发与部署草案
+# Linux / WSL2 开发环境实录
 
 ## 1. 文档目的
 
-这份文档用于明确 `mini-conf` 的真实开发与运行环境约束。
+这份文档不再记录“打算怎么做”，而是记录一次已经在本仓库真实跑通的 WSL 环境初始化结果。
 
-当前仓库虽然位于 Windows 文件系统中，但现阶段 Windows 仅用于：
+本文基于 2026-04-08 在 `Fedora Linux 43 (WSL)` 上的实际搭建过程整理，目标是让后续重新创建 WSL 环境时可以直接复用，而不是再次从建议性方案里试错。
 
-- 文档设计
-- 产品规划
-- 方案沉淀
+## 2. 当前已验证结果
 
-真正的编码、调试、联调、测试、CI 和部署应以 Linux 或 WSL2 为准。
+这次实际跑通的环境状态：
 
-## 2. 为什么采用 Linux / WSL2 优先
+- 系统：`Fedora Linux 43 (WSL)`
+- 仓库路径：`/home/zjj/Projects/mini-conf`
+- Rust：`rustc 1.94.1`
+- `cargo-nextest`：`0.9.132`
+- `cargo-llvm-cov`：`0.8.5`
+- `sqlx-cli`：`0.8.6`
+- Node.js：`v22.22.0`
+- pnpm：`9.12.3`
+- PostgreSQL：`16.13`
 
-原因主要有这些：
+这套环境已经实际通过下面这些命令：
 
-- 生产环境未来运行在 Linux
-- Rust、PostgreSQL、Node 工具链在 Linux 下更贴近目标环境
-- shell 脚本、CI 和容器工作流更容易与生产一致
-- 可以减少 Windows 专属路径、权限、换行符和脚本兼容问题
-
-## 3. 开发环境原则
-
-- 以 Linux 路径和 shell 命令为主
-- 脚本优先使用 `bash` 和 `just`
-- PowerShell 只作为补充，不作为主入口
-- 所有本地检查命令都要能在 Linux / WSL2 中直接执行
-- CI 以 Linux runner 为基准
-
-## 4. 推荐开发方式
-
-推荐优先级：
-
-1. 独立 Linux 主机
-2. 本机 WSL2 Ubuntu 实例
-3. Windows 仅做文档和非运行态编辑
-
-如果使用 WSL2，建议：
-
-- 把真正要执行构建和测试的仓库放在 WSL2 Linux 文件系统中
-- 尽量避免直接在 `/mnt/c/...` 下进行高频编译和测试
-
-推荐路径示例：
-
-```bash
-~/workspace/mini-conf
-```
-
-不推荐长期作为主开发目录的路径：
-
-```bash
-/mnt/c/Users/zhaoj/Projects/mini-conf
-```
-
-## 5. 建议安装的软件
-
-后端相关：
-
-- Rust stable toolchain
-- `cargo-nextest`
-- `cargo-llvm-cov`
-- `sqlx-cli`
-- PostgreSQL 16+
-
-前端相关：
-
-- Node.js 20+
-- `pnpm`
-
-通用工具：
-
-- `git`
-- `just`
-- `docker`
-- `docker compose`
-- `ripgrep`
-- `jq`
-- `curl`
-
-## 6. WSL2 初始化建议
-
-以 Ubuntu 为例：
-
-```bash
-sudo apt update
-sudo apt install -y \
-  build-essential \
-  pkg-config \
-  libssl-dev \
-  postgresql \
-  postgresql-contrib \
-  postgresql-client \
-  jq \
-  curl \
-  git \
-  ripgrep \
-  just
-```
-
-安装 Rust：
-
-```bash
-curl https://sh.rustup.rs -sSf | sh
-source "$HOME/.cargo/env"
-rustup default stable
-rustup component add rustfmt clippy
-```
-
-安装 cargo 扩展：
-
-```bash
-cargo install cargo-nextest
-cargo install cargo-llvm-cov
-cargo install sqlx-cli --no-default-features --features rustls,postgres
-```
-
-安装 Node 与 pnpm：
-
-```bash
-corepack enable
-corepack prepare pnpm@latest --activate
-```
-
-## 6.1 WSL2 下推荐的 PostgreSQL 初始化方式
-
-WSL2 下不建议把数据库密码管理强绑定到 `secret-tool` 或桌面 keyring。
-
-推荐方式是：
-
-1. 直接在 WSL 内安装并启动 PostgreSQL
-2. 在 WSL 的本地配置脚本里保存开发库连接信息
-3. 让现有 `scripts/load-dev-env.sh` 和 `scripts/dev-db-env.sh` 自动读取
-
-这样：
-
-- `just dev-server`
+- `pnpm install`
+- `pnpm dlx lefthook install`
 - `just db-migrate-up`
 - `just test-backend-db`
 
-都能直接衔接，不需要改仓库脚本。
+其中 `just test-backend-db` 的实际结果是：
 
-### 初始化 PostgreSQL
+- `134 tests run: 134 passed, 0 skipped`
+
+## 3. 当前仓库在 WSL 下的实际约束
+
+- 仓库应放在 WSL Linux 文件系统里，不要长期在 `/mnt/c/...` 下高频编译和测试。
+- WSL 不要把 `secret-tool` 或桌面 keyring 当成前置依赖。
+- 本仓库的 Rust `target/`、pnpm store、Corepack 缓存和浏览器缓存应放在仓库外。
+- 本仓库已经通过 `scripts/load-dev-env.sh` 和 `scripts/dev-db-env.sh` 支持从 `~/.config/mini-conf/dev-env.sh` 自动加载本地配置。
+
+## 4. 已验证的初始化步骤
+
+### 4.1 准备共享缓存和构建目录
 
 ```bash
-sudo service postgresql start
-sudo -u postgres psql <<'SQL'
-CREATE USER mini_conf WITH PASSWORD 'replace-with-a-local-dev-password';
-CREATE DATABASE mini_conf OWNER mini_conf;
-SQL
+sudo mkdir -p /var/cache/codex/shared/{cargo-home,rustup,corepack,npm,xdg,pnpm-store,playwright,sccache}
+sudo mkdir -p /var/cache/codex/build/mini-conf/cargo-target
+sudo chown -R "$USER":"$USER" /var/cache/codex
+mkdir -p "$HOME/.config/mini-conf" "$HOME/.local/share/pnpm"
 ```
 
-如果用户或数据库已存在，就把上面两句改成：
+这样做的目的是：
 
-```sql
-ALTER USER mini_conf WITH PASSWORD 'replace-with-a-local-dev-password';
-```
+- Rust 下载缓存、pnpm store、Corepack 缓存和 `sccache` 不写回仓库
+- Rust `target/` 也不落到仓库根目录
 
-### 推荐的本机配置文件
+### 4.2 写本机环境文件
 
 当前仓库会自动加载：
 
@@ -165,11 +62,25 @@ ALTER USER mini_conf WITH PASSWORD 'replace-with-a-local-dev-password';
 ~/.config/mini-conf/dev-env.sh
 ```
 
-推荐在 WSL 里写这个文件：
+这次实际跑通时使用的是下面这种写法：
 
 ```bash
-mkdir -p ~/.config/mini-conf
 cat > ~/.config/mini-conf/dev-env.sh <<'EOF'
+export CODEX_SHARED_CACHE_ROOT=/var/cache/codex/shared
+export MINI_CONF_BUILD_ROOT=/var/cache/codex/build/mini-conf
+export CARGO_HOME="$CODEX_SHARED_CACHE_ROOT/cargo-home"
+export RUSTUP_HOME="$CODEX_SHARED_CACHE_ROOT/rustup"
+export CARGO_TARGET_DIR="$MINI_CONF_BUILD_ROOT/cargo-target"
+export XDG_CACHE_HOME="$CODEX_SHARED_CACHE_ROOT/xdg"
+export COREPACK_HOME="$CODEX_SHARED_CACHE_ROOT/corepack"
+export NPM_CONFIG_CACHE="$CODEX_SHARED_CACHE_ROOT/npm"
+export PNPM_STORE_DIR="$CODEX_SHARED_CACHE_ROOT/pnpm-store"
+export PLAYWRIGHT_BROWSERS_PATH="$CODEX_SHARED_CACHE_ROOT/playwright"
+export SCCACHE_DIR="$CODEX_SHARED_CACHE_ROOT/sccache"
+export RUSTC_WRAPPER=sccache
+export PNPM_HOME="$HOME/.local/share/pnpm"
+export PATH="$CARGO_HOME/bin:$HOME/.local/bin:$PNPM_HOME:$PATH"
+
 export MINI_CONF_DB_HOST=127.0.0.1
 export MINI_CONF_DB_PORT=5432
 export MINI_CONF_DB_NAME=mini_conf
@@ -178,208 +89,260 @@ export MINI_CONF_DB_PASSWORD='replace-with-a-local-dev-password'
 export TEST_DATABASE_URL=''
 export INIT_DB_ON_BOOT=true
 EOF
+
 chmod 600 ~/.config/mini-conf/dev-env.sh
 ```
 
 说明：
 
-- `scripts/dev-db-env.sh` 现在会优先读取 `MINI_CONF_DB_PASSWORD`
-- 然后自动 URL 编码并拼出 `DATABASE_URL`
-- 如果 `TEST_DATABASE_URL` 为空，会自动回落到 `DATABASE_URL`
+- `scripts/dev-db-env.sh` 会优先读取 `MINI_CONF_DB_PASSWORD`
+- 脚本会自动 URL 编码并生成 `DATABASE_URL`
+- 如果 `TEST_DATABASE_URL` 为空，脚本会自动回落到 `DATABASE_URL`
 
-也就是说，这样配置后，现有测试脚本会自动接上，不需要额外导出完整 URL。
+因此：
 
-### 验证方式
+- `just db-migrate-up`
+- `just db-migrate-down`
+- `just test-backend-db`
+- `just dev-server`
+
+都不需要额外手工拼连接串。
+
+### 4.3 让新 shell 自动加载环境
+
+这次实际环境里，最终采用的是把下面这段加到 `~/.bashrc`：
+
+```bash
+# mini-conf development environment
+if [ -f "$HOME/.config/mini-conf/dev-env.sh" ]; then
+    . "$HOME/.config/mini-conf/dev-env.sh"
+fi
+if [ -n "${CARGO_HOME:-}" ] && [ -f "$CARGO_HOME/env" ]; then
+    . "$CARGO_HOME/env"
+elif [ -f "/var/cache/codex/shared/cargo-home/env" ]; then
+    . "/var/cache/codex/shared/cargo-home/env"
+fi
+```
+
+这样新开 shell 时会自动拿到：
+
+- `CARGO_HOME`
+- `CARGO_TARGET_DIR`
+- `PNPM_STORE_DIR`
+- `MINI_CONF_DB_*`
+
+### 4.4 安装 Fedora 43 WSL 系统依赖
+
+这次实际可用的安装命令是：
+
+```bash
+sudo dnf upgrade --refresh -y
+sudo dnf install -y \
+  git curl jq ripgrep just \
+  gcc gcc-c++ make pkgconf-pkg-config \
+  openssl openssl-devel \
+  nodejs rustup sccache \
+  postgresql16 postgresql16-server postgresql16-contrib
+```
+
+这里有一个实际踩到的坑：
+
+- `openssl-devel` 只提供开发库，不提供 `openssl` 命令行工具
+- 如果你需要本机生成随机密码或调试证书，应该同时装 `openssl` 和 `openssl-devel`
+
+### 4.5 初始化 Rust
 
 ```bash
 source ~/.config/mini-conf/dev-env.sh
+rustup-init -y --default-toolchain stable
+source "$CARGO_HOME/env"
+rustup component add rustfmt clippy llvm-tools-preview
+
+cargo install --locked cargo-nextest
+cargo install --locked cargo-llvm-cov
+cargo install --locked sqlx-cli --no-default-features --features postgres,rustls
+```
+
+### 4.6 初始化 pnpm
+
+先加载环境：
+
+```bash
+source ~/.config/mini-conf/dev-env.sh
+```
+
+如果当前 `corepack` 是从 Windows PATH 透传进来的，可能会报类似错误：
+
+```text
+/bin/sh^M: bad interpreter: No such file or directory
+```
+
+这次实际解决方式是直接安装 Linux 本地 `corepack`：
+
+```bash
+npm install -g corepack --prefix "$HOME/.local"
+corepack --version
+corepack enable
+corepack prepare pnpm@9.12.3 --activate
+```
+
+不要依赖 Windows 那边透传进 WSL 的 `corepack`。
+
+### 4.7 初始化 PostgreSQL
+
+先初始化数据目录：
+
+```bash
+if [ ! -f /var/lib/pgsql/data/PG_VERSION ]; then
+  sudo /usr/bin/postgresql-setup --initdb
+fi
+```
+
+如果 WSL 里的 systemd 正常可用：
+
+```bash
+sudo systemctl enable --now postgresql
+```
+
+如果 systemd 不可用，回退到直接启动：
+
+```bash
+sudo -u postgres /usr/bin/pg_ctl \
+  -D /var/lib/pgsql/data \
+  -l /var/lib/pgsql/data/server.log \
+  start
+```
+
+然后把 Fedora 默认的 `peer` / `ident` 认证改成密码认证。实际验证下来，这一步是必须的；否则 `mini_conf` 用户无法按仓库脚本通过 TCP 正常连接。
+
+把 `pg_hba.conf` 改成：
+
+```bash
+sudo cp /var/lib/pgsql/data/pg_hba.conf /var/lib/pgsql/data/pg_hba.conf.bak
+sudo tee /var/lib/pgsql/data/pg_hba.conf >/dev/null <<'EOF'
+# TYPE  DATABASE        USER            ADDRESS                 METHOD
+
+# local connections
+local   all             all                                     scram-sha-256
+host    all             all             127.0.0.1/32            scram-sha-256
+host    all             all             ::1/128                 scram-sha-256
+
+# replication connections
+local   replication     all                                     scram-sha-256
+host    replication     all             127.0.0.1/32            scram-sha-256
+host    replication     all             ::1/128                 scram-sha-256
+EOF
+
+sudo -u postgres /usr/bin/pg_ctl -D /var/lib/pgsql/data reload
+```
+
+创建或更新本项目数据库用户：
+
+```bash
+source ~/.config/mini-conf/dev-env.sh
+
+sudo -u postgres psql postgres <<SQL
+DO \$\$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'mini_conf') THEN
+    CREATE ROLE mini_conf LOGIN PASSWORD '${MINI_CONF_DB_PASSWORD}';
+  ELSE
+    ALTER ROLE mini_conf WITH LOGIN PASSWORD '${MINI_CONF_DB_PASSWORD}';
+  END IF;
+END
+\$\$;
+SQL
+```
+
+创建数据库：
+
+```bash
+sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='mini_conf'" | grep -q 1 \
+  || sudo -u postgres createdb -O mini_conf mini_conf
+```
+
+### 4.8 初始化仓库依赖
+
+```bash
+source ~/.bashrc
+cd /home/zjj/Projects/mini-conf
+pnpm install
+pnpm dlx lefthook install
+```
+
+当前仓库里 `apps/web` 还没有初始化，所以这里的 `pnpm install` 只会安装根目录依赖，目前主要是 `prettier` 和相关工具。
+
+### 4.9 最终验收
+
+这次真实跑通时使用的是：
+
+```bash
+source ~/.bashrc
+cd /home/zjj/Projects/mini-conf
+
+rustc --version
+cargo nextest --version
+cargo llvm-cov --version
+sqlx --version
+node --version
+pnpm --version
+psql --version
+just --version
+
 just db-migrate-up
 just test-backend-db
 ```
 
-如果你更愿意显式保存完整连接串，也可以直接在这个文件里写：
+实际通过结果：
 
-```bash
-export DATABASE_URL='postgres://mini_conf:...@127.0.0.1:5432/mini_conf'
-export TEST_DATABASE_URL="$DATABASE_URL"
-```
+- `just db-migrate-up` 成功应用了 8 个 migration
+- `just test-backend-db` 成功跑完 134 个测试
 
-但更推荐保留 `MINI_CONF_DB_PASSWORD` 这种写法，让脚本统一处理 URL 编码。
+## 5. 当前仓库脚本在 WSL 下的实际行为
 
-## 7. 仓库约束
+### `scripts/load-dev-env.sh`
 
-仓库中应遵守这些约束：
+优先顺序：
 
-- 脚本优先放在 `scripts/*.sh`
-- 命令统一收敛到 `justfile`
-- 不依赖 Windows 专属批处理脚本作为唯一入口
-- 文档中的示例命令优先使用 bash
-- 所有配置文件统一使用 LF
+1. `MINI_CONF_DEV_ENV_FILE`
+2. `~/.config/mini-conf/dev-env.sh`
+3. `~/.config/mini-conf/activate-fedora43.sh`
 
-建议补充 `.gitattributes`：
+### `scripts/dev-db-env.sh`
 
-```gitattributes
-* text=auto eol=lf
-*.sh text eol=lf
-*.rs text eol=lf
-*.ts text eol=lf
-*.vue text eol=lf
-*.sql text eol=lf
-```
+行为如下：
 
-## 8. 本地运行建议
+- 如果 `DATABASE_URL` 未设置，就根据 `MINI_CONF_DB_*` 变量拼接
+- 如果 `MINI_CONF_DB_PASSWORD` 未设置，才尝试 `MINI_CONF_DB_PASSWORD_FILE`
+- 以上都没有时，才会回退到 `secret-tool`
+- `TEST_DATABASE_URL` 默认为 `DATABASE_URL`
+- `INIT_DB_ON_BOOT` 默认为 `true`
 
-建议开发期最小依赖：
+### `justfile`
 
-- PostgreSQL
-- 后端服务
-- 前端服务
+当前和数据库有关的实际入口是：
 
-推荐方式：
-
-- PostgreSQL 用本机服务或 Docker
-- 后端在 Linux / WSL2 中运行
-- 前端在 Linux / WSL2 中运行
-
-环境变量示例：
-
-```env
-APP_ENV=dev
-HTTP_ADDR=0.0.0.0:8080
-DATABASE_URL=postgres://mini_conf:secret@127.0.0.1:5432/mini_conf
-DATABASE_ADMIN_URL=postgres://postgres:secret@127.0.0.1:5432/postgres
-INIT_DB_ON_BOOT=true
-INIT_ADMIN_USERNAME=admin
-INIT_ADMIN_PASSWORD=admin123456
-STATIC_DIR=apps/web/dist
-```
-
-## 9. 推荐命令入口
-
-建议统一通过 `just` 暴露这些命令：
-
-- `just bootstrap-dev`
-- `just dev-server`
-- `just dev-web`
-- `just lint`
-- `just test`
-- `just test-backend-db`
-- `just test-e2e`
-- `just ci-local`
-- `just db-reset-dev`
-
-命令职责建议：
-
-- `bootstrap-dev` 安装并检查开发依赖
-- `lint` 跑前后端静态检查
-- `test` 跑前后端单测和集成测试
-- `ci-local` 尽量模拟 CI 的完整检查过程
-
-补充说明：
-
-- `just dev-server`
 - `just db-migrate-up`
 - `just db-migrate-down`
 - `just test-backend-db`
+- `just dev-server`
 
-在未显式设置 `DATABASE_URL` / `TEST_DATABASE_URL` 时，会尝试从本机 `secret-tool` 读取 `mini_conf` 开发库密码，并自动做 URL 编码。
+这些命令都会先 `source scripts/dev-db-env.sh`，所以只要 `~/.config/mini-conf/dev-env.sh` 正确，就不需要每次手工导出连接串。
 
-在 WSL2 中，如果没有可用的 `secret-tool` / keyring，推荐在 `~/.config/mini-conf/dev-env.sh` 中提供：
+## 6. 这次实际搭建里踩到的坑
 
-- `MINI_CONF_DB_PASSWORD`
-- 或 `DATABASE_URL`
+- 不要把 WSL 是否有 `secret-tool` 当成前置条件；本仓库已经支持本地环境文件。
+- 不要依赖 Windows 透传进来的 `corepack`；在 WSL 里它可能因为 CRLF 直接不可执行。
+- Fedora 默认初始化出来的 `pg_hba.conf` 是 `peer` / `ident`，不改成 `scram-sha-256` 就无法按项目脚本完成数据库连接。
+- `openssl-devel` 不等于 `openssl` 命令行工具，两者都要装。
 
-这两种方式都能被当前脚本链路识别。
+## 7. 对 Ubuntu / Debian 的迁移原则
 
-## 10. 代码质量基线
+如果后续切回 Ubuntu / Debian，保留下面这些原则即可：
 
-补充说明：
+- 继续使用 `~/.config/mini-conf/dev-env.sh`
+- 继续把 `CARGO_TARGET_DIR`、pnpm store 和缓存放到仓库外
+- 继续让 PostgreSQL 使用密码认证，而不是依赖桌面 keyring
+- 继续使用 `just db-migrate-up` 和 `just test-backend-db` 作为最终验收
 
-- OpenAPI 导出已经是强制检查，改接口定义后必须重新导出并提交 `docs/openapi/openapi.json`
-- `sqlx-check` 当前是条件启用：只有开始使用 compile-time SQLx 查询宏或提交 `.sqlx/` 元数据后，才应恢复为强制检查
-- 更详细的引入时机和测试收口节奏，见 [质量检查与测试收口计划](./QUALITY_CHECK_PLAN.md)
-
-后端：
-
-- `cargo fmt --all --check`
-- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
-- `cargo nextest run --workspace`
-- `cargo llvm-cov --workspace`
-- `cargo sqlx prepare --check`
-- `just openapi-check`
-
-前端：
-
-- `pnpm lint`
-- `pnpm format:check`
-- `pnpm typecheck`
-- `pnpm test`
-- `pnpm test:e2e`
-
-提交前建议：
-
-- 使用 `lefthook` 或 `pre-commit`
-- 至少执行格式化、lint 和快速测试
-
-## 11. TDD 工作流建议
-
-为了避免后续 vibe coding 导致代码质量快速下滑，建议明确采用 TDD / 测试先行：
-
-1. 先为领域逻辑写失败测试
-2. 用最小代码让测试通过
-3. 再做重构
-4. 对 bug 修复先写回归测试
-5. 对开放消费端协议补契约测试
-
-重点必须有测试的模块：
-
-- Scope 匹配
-- Release 发布
-- 版本解析
-- 鉴权
-- 开放接口兼容性
-
-## 12. CI 建议
-
-建议使用 GitHub Actions，并以 Linux runner 为准。
-
-最小 CI 任务建议：
-
-- `lint-backend`
-- `sqlx-check`
-- `openapi-check`
-- `test-backend`
-- `lint-frontend`
-- `test-frontend`
-- `build`
-
-后续可补：
-
-- 覆盖率上传
-- SQL migration 校验
-- 性能趋势对比
-
-## 13. 部署方向
-
-生产部署方向建议：
-
-- Linux 单机部署作为首选
-- 使用 systemd 管理后端服务
-- PostgreSQL 独立部署
-- Caddy 或 Nginx 作为反向代理
-
-首版尽量避免：
-
-- 强依赖 Kubernetes
-- 强依赖外部注册中心
-- 复杂分布式依赖
-
-## 14. 当前阶段的实际建议
-
-结合你当前的计划，最现实的做法是：
-
-- 继续在当前 Windows 仓库里维护产品与设计文档
-- 等文档和模型稳定后，在 Linux 主机或 WSL2 中重新拉取仓库
-- 再开始初始化工程、数据库迁移、测试基线和 CI
-
-这样可以把“设计阶段”和“实现阶段”的环境分离清楚，减少后期返工。
+也就是说，真正需要替换的主要只是系统包管理命令，而不是这套目录布局、环境变量布局和测试入口。

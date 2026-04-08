@@ -14,6 +14,8 @@ pre-commit:
 
 pre-push:
   commands:
+    openapi-check:
+      run: bash -lc 'source scripts/load-dev-env.sh; just openapi-check'
     test:
       run: bash -lc 'source scripts/load-dev-env.sh; just test'
     perf-smoke:
