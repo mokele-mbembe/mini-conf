@@ -392,13 +392,19 @@ Authorization: Bearer <token>
 
 ## 11. curl 最小接入示例
 
+示例里的 base URL 不应被理解成固定端口约束。开发联调或多进程共存时，建议显式参数化：
+
+```bash
+MINI_CONF_BASE_URL="${MINI_CONF_BASE_URL:-http://127.0.0.1:8080}"
+```
+
 ### 1. 查询当前版本
 
 ```bash
 curl -sS \
   -H "Authorization: Bearer ${MINI_CONF_TOKEN}" \
   -H "Accept: application/json" \
-  "http://127.0.0.1:8080/api/open/configs/resolve?project=coffee-legacy&environment=prod&deployment_key=store-001&config=main&process_key=main"
+  "${MINI_CONF_BASE_URL}/api/open/configs/resolve?project=coffee-legacy&environment=prod&deployment_key=store-001&config=main&process_key=main"
 ```
 
 ### 2. 拉取单配置文件正文
@@ -407,7 +413,7 @@ curl -sS \
 curl -sS \
   -H "Authorization: Bearer ${MINI_CONF_TOKEN}" \
   -H "Accept: application/json" \
-  "http://127.0.0.1:8080/api/open/releases/20260405.0001"
+  "${MINI_CONF_BASE_URL}/api/open/releases/20260405.0001"
 ```
 
 ### 3. 拉取整部署实例配置包
@@ -416,7 +422,7 @@ curl -sS \
 curl -sS \
   -H "Authorization: Bearer ${MINI_CONF_TOKEN}" \
   -H "Accept: application/json" \
-  "http://127.0.0.1:8080/api/open/deployments/store-001/config-bundle?project=coffee-legacy&environment=prod"
+  "${MINI_CONF_BASE_URL}/api/open/deployments/store-001/config-bundle?project=coffee-legacy&environment=prod"
 ```
 
 ### 4. 上报应用结果
@@ -437,7 +443,7 @@ curl -sS \
     "status": "success",
     "message": "config applied"
   }' \
-  "http://127.0.0.1:8080/api/open/deployment-sync-records"
+  "${MINI_CONF_BASE_URL}/api/open/deployment-sync-records"
 ```
 
 ## 12. 服务端实现建议

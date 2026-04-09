@@ -156,6 +156,7 @@ MVP 默认采用 `DeploymentInstance` 作为配置组织模型，因为它最贴
 - `~/.config/mini-conf/dev-env.sh` 是唯一推荐的本机环境入口
 - 默认采用 `database-per-instance`，数据库名由部署者按场景自定义；允许同一 PostgreSQL server 承载多套独立 database
 - `secret-tool` 只是兼容选项，不是标准前提
+- 当前后端开发阶段，本机优先恢复 `just test-backend-db-local`；`just run-server-local` 只在确实需要联调时启用
 
 ## 测试约定
 
@@ -166,6 +167,7 @@ MVP 默认采用 `DeploymentInstance` 作为配置组织模型，因为它最贴
 - portable 运行时和迁移命令只读取显式 `DATABASE_URL`
 - 本机 local wrapper 通过 [`scripts/local-db-env.sh`](./scripts/local-db-env.sh) 解析开发机便利变量
 - `TEST_DATABASE_URL` 不再由 `DATABASE_URL` 隐式补齐
+- 当前 Rust 后端集成测试主要通过 in-process router `oneshot(...)` 执行，不依赖 `HTTP_ADDR` 或固定 `8080`
 - 需要隔离 schema 时，使用 `unique_schema_name(...)`
 - 需要按 schema 建连接时，使用 `with_search_path(...)`
 

@@ -157,6 +157,19 @@
 
 - `just dev-server` 等价于 `just run-server-local`
 
+### 5.3 当前阶段建议
+
+当前后端开发仍以数据库集成测试为主时，本机最小适配优先恢复：
+
+- `just test-backend-db-local`
+
+此时推荐：
+
+- 只设置 `MINI_CONF_LOCAL_TEST_DB_*`
+- 继续通过 `secret-tool` 解析本机测试库密码
+- 暂不要求同时补齐 `MINI_CONF_LOCAL_DB_*`
+- `just run-server-local` 只在需要手工联调时再启用
+
 ## 6. 数据库连接与测试契约
 
 ### 6.1 脚本层
@@ -182,6 +195,16 @@
 - 每个数据库集成测试使用隔离 schema
 - `setup_*` 返回 `Result<Option<...>>`
 - `teardown_*` 返回 `Result`
+- 当前 Rust 后端集成测试通过 in-process router 调用执行，不绑定真实 TCP 端口
+- `HTTP_ADDR` 只影响显式运行的 server 进程，不影响现有 Rust 集成测试
+
+### 6.3 端口与多进程共存
+
+- `run-server` / `run-server-local` 只通过 `HTTP_ADDR` 绑定监听地址
+- 默认端口是 `0.0.0.0:8080`
+- 当前没有自动探测空闲端口，也没有端口冲突回退
+- 如果需要同机并存多个后端进程，必须为每个进程显式设置不同 `HTTP_ADDR`
+- 推荐使用 `127.0.0.1:18080`、`127.0.0.1:18081` 这类高位端口
 
 ## 7. 提交前执行顺序
 

@@ -9,14 +9,11 @@
 3. 把数据库相关变量整理成下面这种最小形态：
 
 ```bash
-export MINI_CONF_LOCAL_DB_HOST=127.0.0.1
-export MINI_CONF_LOCAL_DB_PORT=5432
-export MINI_CONF_LOCAL_DB_NAME=mini_conf
-export MINI_CONF_LOCAL_DB_USER=mini_conf
-export MINI_CONF_LOCAL_DB_PASSWORD='...'
-
-export MINI_CONF_LOCAL_TEST_USE_RUNTIME_DB=true
-export INIT_DB_ON_BOOT=true
+export MINI_CONF_LOCAL_TEST_DB_HOST=127.0.0.1
+export MINI_CONF_LOCAL_TEST_DB_PORT=5432
+export MINI_CONF_LOCAL_TEST_DB_NAME=mini_conf
+export MINI_CONF_LOCAL_TEST_DB_USER=mini_conf
+export MINI_CONF_LOCAL_TEST_SECRET_ENV=dev
 ```
 
 4. 重新加载 shell 环境：
@@ -30,11 +27,10 @@ source ~/.config/mini-conf/dev-env.sh
 ```bash
 just lint
 just test
-just db-migrate-up-local
 just test-backend-db-local
 ```
 
-6. 如果要临时启动后端联调：
+6. 如果之后确实需要临时启动后端联调，再额外补运行库变量并使用：
 
 ```bash
 just run-server-local
@@ -180,8 +176,8 @@ local wrapper：
 对你当前这个项目阶段，最实际、最省事、也足够合理的做法是：
 
 - 两台 Fedora 机器先继续保留各自已经存在的本机测试库
-- 当前开发阶段先把“本机运行”和“本机 DB 集成测试”都落在这一个现有本机库上
-- 等后端主路径稳定、开始前端联调或共享黑盒环境时，再新建新的运行库 / staging 库
+- 当前开发阶段优先恢复本机 DB 集成测试，不把本机 runtime 当作今晚必须恢复的链路
+- 等后端主路径稳定、开始前端联调或共享黑盒环境时，再单独补运行库 / staging 库
 
 这不是最终长期生产形态，但对“今晚快速恢复统一工作流”是最合适的折中。
 
@@ -189,6 +185,7 @@ local wrapper：
 
 - 当前现有测试主要还是开发阶段自测
 - 后端路由、SQL、迁移、OpenAPI 和真实 PostgreSQL 行为仍然是当前最重要的验证对象
+- 当前 Rust 集成测试不依赖真实监听端口，所以没必要先为了 runtime 把本机联调链路补齐
 - 现在就强行把每台机器拆成运行库 + 测试库两套，会增加适配成本，但短期收益有限
 
 ### 5.2 今晚建议的本机变量写法
@@ -196,14 +193,11 @@ local wrapper：
 如果你要最快适配，建议两台 Fedora 的 `~/.config/mini-conf/dev-env.sh` 都先采用下面这组思路：
 
 ```bash
-export MINI_CONF_LOCAL_DB_HOST=127.0.0.1
-export MINI_CONF_LOCAL_DB_PORT=5432
-export MINI_CONF_LOCAL_DB_NAME=<existing-local-mini-conf-db-name>
-export MINI_CONF_LOCAL_DB_USER=mini_conf
-export MINI_CONF_LOCAL_DB_PASSWORD='...'
-
-export MINI_CONF_LOCAL_TEST_USE_RUNTIME_DB=true
-export INIT_DB_ON_BOOT=true
+export MINI_CONF_LOCAL_TEST_DB_HOST=127.0.0.1
+export MINI_CONF_LOCAL_TEST_DB_PORT=5432
+export MINI_CONF_LOCAL_TEST_DB_NAME=<existing-local-mini-conf-db-name>
+export MINI_CONF_LOCAL_TEST_DB_USER=mini_conf
+export MINI_CONF_LOCAL_TEST_SECRET_ENV=dev
 ```
 
 说明：
@@ -212,9 +206,9 @@ export INIT_DB_ON_BOOT=true
 - 如果你现在本机实际库名就是 `mini_conf`，那就直接写 `mini_conf`
 - 当前阶段不必今晚就再新建 `mini_conf_dev`
 - 这组配置的含义是：
-  - 本机 local runtime 使用现有库
-  - 本机 local test 也显式复用这个库
-  - 但这种复用是你主动声明的，不再是脚本偷偷兜底
+  - 当前机器先只恢复 local test
+  - 密码继续走 `secret-tool`
+  - runtime 变量等确实需要手工联调时再单独补
 
 ### 5.3 今晚建议你在 Fedora 43 桌面机上这样验收
 
@@ -229,11 +223,10 @@ source ~/.config/mini-conf/dev-env.sh
 ```bash
 just lint
 just test
-just db-migrate-up-local
 just test-backend-db-local
 ```
 
-如果你要临时启动后端联调：
+如果你之后要临时启动后端联调：
 
 ```bash
 just run-server-local
@@ -246,22 +239,20 @@ just run-server-local
 建议：
 
 - 继续保留现有本机 `mini-conf` 同名测试库
-- 当前阶段通过 `MINI_CONF_LOCAL_TEST_USE_RUNTIME_DB=true` 显式复用它
-- 本机 DB 工作流使用 local wrapper
+- 当前阶段先只配置 `MINI_CONF_LOCAL_TEST_DB_*`
+- 本机 DB 工作流优先使用 `just test-backend-db-local`
 
 即：
 
-- `just db-migrate-up-local`
 - `just test-backend-db-local`
-- `just run-server-local`
 
 ### 5.2 Fedora 43 桌面机
 
 建议完全跟当前机器保持同样口径：
 
 - 继续使用它本机现有的同名测试库
-- 也设置 `MINI_CONF_LOCAL_TEST_USE_RUNTIME_DB=true`
-- 也用 local wrapper 做开发期 DB 工作流
+- 也只先设置 `MINI_CONF_LOCAL_TEST_DB_*`
+- 也先用 local wrapper 恢复数据库测试链路
 
 这样今晚最省事：
 
@@ -326,6 +317,13 @@ CI 仍建议保持现在这类模式：
 - 已有测试 = 开发阶段自测 + PR 级后端集成验证
 - 还不是产品级 alpha / beta / gamma 验证
 
+补充一个和多进程共存相关的事实：
+
+- 当前 Rust 后端集成测试主要通过 in-process router `oneshot(...)` 执行
+- 它们不依赖 `HTTP_ADDR`
+- 它们不依赖固定 `8080`
+- 所以本机 `8080` 被占不会导致现有 Rust 集成测试失败
+
 ## 9. 是否可以等后端开发完成再加运行库
 
 可以。
@@ -355,9 +353,12 @@ CI 仍建议保持现在这类模式：
 - 今天真正要做的是把契约理顺：
   - portable 命令只认显式 DSN
   - local wrapper 才读本机开发便利变量
-  - 测试库复用运行库必须显式声明
+  - 当前阶段本机先恢复测试库即可
 - 对当前机器和 Fedora 43 桌面机，今晚最合理的做法是：
   - 继续使用各自已经存在的本机 `mini-conf` 测试库
-  - 显式设置 `MINI_CONF_LOCAL_TEST_USE_RUNTIME_DB=true`
-  - 用 local wrapper 继续开发
+  - 只先设置 `MINI_CONF_LOCAL_TEST_DB_*`
+  - 用 `just test-backend-db-local` 恢复开发期 DB 验证
+- 如果以后需要同机并存多个后端进程：
+  - 为每个进程显式设置不同 `HTTP_ADDR`
+  - 不再把 `8080` 当成唯一联调端口
 - 产品级 alpha / beta / gamma 还没真正开始；那一层可以等后端主路径完成后，再新增长期运行库和黑盒环境
