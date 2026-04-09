@@ -8,7 +8,7 @@
 
 - 按页面和流程组织，而不是按接口组织
 - 只记录 MVP 要求，不展开未来增强方案
-- 与 `docs/product-qa/` 的规则澄清保持一致
+- 与 `docs/constraints/product-qa/` 的规则澄清保持一致
 
 ## 2. 全局前提
 

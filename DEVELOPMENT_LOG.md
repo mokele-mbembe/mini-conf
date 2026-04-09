@@ -20,12 +20,14 @@
 - 新增 `GET /api/deployment-sync-records` 与 `GET /api/audit-logs`
 - 现有项目、配置文件、部署实例、Draft、Release、token reset、登录流程已补审计日志
 - OpenAPI、数据库文档、鉴权文档、产品澄清文档已经同步
+- `docs/` 已按受众重组为 `public / constraints / agents / collaboration / artifacts`
+- OpenAPI 导出产物已从 markdown 叙述目录中分离到 `docs/artifacts/openapi.json`
 
 本轮本地验证结果：
 
 - `cargo test --workspace` 通过
 - `just lint-backend` 通过
-- `docs/openapi/openapi.json` 已重新导出
+- `docs/artifacts/openapi.json` 已重新导出
 
 ## 2. 当前进度 Checklist
 
@@ -117,6 +119,9 @@
 
 - [x] 管理端查看 deployment sync records
 - [x] 更完整的 OpenAPI 文档说明与示例
+- [ ] `alpha-full` 补 `project_members / audit_logs / deployment-sync-records` 的黑盒闭环
+- [ ] `alpha-full` 补模板 clone、二次发布 diff、旧 token 失效回归
+- [ ] 评估多用户 alpha seed / setup 方案，支撑项目级权限黑盒回归
 - [ ] `sqlx-check` 恢复为强制检查的时机评估
 
 ### 3.3 前端未来主路径
@@ -137,13 +142,14 @@
 
 1. 前端管理台主路径
 2. 覆盖率基线
-3. `sqlx-check` 恢复为强制检查的时机评估
-4. 更完整的 E2E 回归
+3. `alpha-full` 黑盒回归补强
+4. `sqlx-check` 恢复为强制检查的时机评估
 
 理由：
 
 - 后端主路径、项目级权限、审计日志和管理端同步记录查询已经完成
 - 当前更大的风险已从“后端功能缺失”转向“前端接线、覆盖率和持续质量基线”
+- 当前 alpha 黑盒回归还没有覆盖新成员权限链路与审计查询链路
 
 ## 5. 下一个会话建议先跑的命令
 
@@ -173,29 +179,29 @@ just test-backend-db
 
 ### 必读
 
-- [项目脚手架与启动清单](./docs/BOOTSTRAP.md)
-- [质量检查与测试收口计划](./docs/QUALITY_CHECK_PLAN.md)
-- [产品澄清目录](./docs/product-qa/README.md)
-- [必选配置与预览澄清](./docs/product-qa/0002-required-configs-and-preview.md)
-- [部署实例 Token 重置澄清](./docs/product-qa/0004-token-reset.md)
-- [项目成员、项目级权限与审计日志澄清](./docs/product-qa/0005-project-members-permissions-audit.md)
-- [前端 MVP 蓝图](./docs/FRONTEND_MVP_BLUEPRINT.md)
+- [项目脚手架与启动清单](./docs/public/BOOTSTRAP.md)
+- [质量检查与测试收口计划](./docs/collaboration/QUALITY_CHECK_PLAN.md)
+- [产品澄清目录](./docs/constraints/product-qa/README.md)
+- [必选配置与预览澄清](./docs/constraints/product-qa/0002-required-configs-and-preview.md)
+- [部署实例 Token 重置澄清](./docs/constraints/product-qa/0004-token-reset.md)
+- [项目成员、项目级权限与审计日志澄清](./docs/constraints/product-qa/0005-project-members-permissions-audit.md)
+- [前端 MVP 蓝图](./docs/constraints/FRONTEND_MVP_BLUEPRINT.md)
 
 ### 与环境相关
 
-- [Linux / WSL2 开发与部署草案](./docs/DEV_LINUX_WSL2.md)
-- [Fedora 43 开发环境与本地 Agent 约定](./docs/DEV_FEDORA43_WORKSTATION.md)
-- [WSL 与 Fedora 双环境并列开发清单](./docs/DEV_DUAL_ENV_PARITY.md)
+- [Linux / WSL2 开发与部署草案](./docs/agents/DEV_LINUX_WSL2.md)
+- [Fedora 43 开发环境与本地 Agent 约定](./docs/agents/DEV_FEDORA43_WORKSTATION.md)
+- [WSL 与 Fedora 双环境并列开发清单](./docs/agents/DEV_DUAL_ENV_PARITY.md)
 
 ### 与当前已实现接口相关
 
-- [管理端 API 草案](./docs/ADMIN_API.md)
-- [开放消费端协议](./docs/CLIENT_HTTP_PROTOCOL.md)
-- [数据库模型草案](./docs/DB_SCHEMA.md)
+- [管理端 API 草案](./docs/constraints/ADMIN_API.md)
+- [开放消费端协议](./docs/public/CLIENT_HTTP_PROTOCOL.md)
+- [数据库模型草案](./docs/constraints/DB_SCHEMA.md)
 
 ## 7. 当前会话结束前的注意事项
 
-- OpenAPI 导出现在是强制检查项；接口或 schema 改动后，需要同步更新 `docs/openapi/openapi.json`
+- OpenAPI 导出现在是强制检查项；接口或 schema 改动后，需要同步更新 `docs/artifacts/openapi.json`
 - `sqlx-check` 当前是条件启用，不是 CI runner 不支持，而是当前仓库尚未进入 compile-time SQLx metadata 阶段
 - 当前工作区还有未提交改动时，不要只提交代码不提交 OpenAPI 产物
 
@@ -204,5 +210,5 @@ just test-backend-db
 如果下一个会话需要快速恢复上下文，可以直接从这里开始：
 
 ```text
-先阅读 DEVELOPMENT_LOG.md、docs/QUALITY_CHECK_PLAN.md、docs/product-qa/0005-project-members-permissions-audit.md，然后转入前端管理台主路径或补覆盖率与 E2E。
+先阅读 DEVELOPMENT_LOG.md、docs/collaboration/QUALITY_CHECK_PLAN.md、docs/constraints/product-qa/0005-project-members-permissions-audit.md，然后继续补 alpha-full 黑盒回归或转入前端管理台主路径。
 ```

@@ -146,7 +146,7 @@ MVP 默认采用 `DeploymentInstance` 作为配置组织模型，因为它最贴
 - 本地调试流程优先针对 Linux / WSL2 编写
 - CI 也应以 Linux 环境为标准
 
-标准工作流规范见 [docs/STANDARD_WORKFLOW.md](./docs/STANDARD_WORKFLOW.md)。
+标准工作流规范见 [docs/agents/STANDARD_WORKFLOW.md](./docs/agents/STANDARD_WORKFLOW.md)。
 
 当前约定：
 
@@ -175,31 +175,22 @@ MVP 默认采用 `DeploymentInstance` 作为配置组织模型，因为它最贴
 
 ## 文档导航
 
+- 文档总索引与分类说明：[docs/README.md](./docs/README.md)
 - 项目启动与里程碑：[KICKOFF.md](./KICKOFF.md)
-- 标准 Linux 开发工作流：[docs/STANDARD_WORKFLOW.md](./docs/STANDARD_WORKFLOW.md)
-- 脚手架与启动规划：[docs/BOOTSTRAP.md](./docs/BOOTSTRAP.md)
-- 数据模型草案：[docs/DB_SCHEMA.md](./docs/DB_SCHEMA.md)
-- 管理端 API 草案：[docs/ADMIN_API.md](./docs/ADMIN_API.md)
-- 部署实例模型与未来 Scope 规划：[docs/SCOPE_RULES.md](./docs/SCOPE_RULES.md)
-- 鉴权与安全草案：[docs/AUTH_AND_SECURITY.md](./docs/AUTH_AND_SECURITY.md)
-- 消费端 HTTP 协议草案：[docs/CLIENT_HTTP_PROTOCOL.md](./docs/CLIENT_HTTP_PROTOCOL.md)
-- 前端 workspace 最小脚手架：[docs/FRONTEND_WORKSPACE.md](./docs/FRONTEND_WORKSPACE.md)
-- 性能测试 scaffold：[docs/PERFORMANCE.md](./docs/PERFORMANCE.md)
-- MVP 之后的版本规划：[docs/POST_MVP_PLAN.md](./docs/POST_MVP_PLAN.md)
-- 仓库初始化清单：[docs/REPO_INIT_CHECKLIST.md](./docs/REPO_INIT_CHECKLIST.md)
-- 提交前 Review 清单：[docs/SUBMISSION_CHECKLIST.md](./docs/SUBMISSION_CHECKLIST.md)
-- 首次提交说明草案：[docs/INITIAL_PR_DRAFT.md](./docs/INITIAL_PR_DRAFT.md)
-- Linux / WSL2 开发环境实录：[docs/DEV_LINUX_WSL2.md](./docs/DEV_LINUX_WSL2.md)
-- 2026-04-09 工作流迁移说明：[docs/WORKFLOW_MIGRATION_2026-04-09.md](./docs/WORKFLOW_MIGRATION_2026-04-09.md)
+- 对外公开与使用侧文档：[docs/public/README.md](./docs/public/README.md)
+- 项目约束与产品边界：[docs/constraints/README.md](./docs/constraints/README.md)
+- AI agent 工作流与环境约定：[docs/agents/README.md](./docs/agents/README.md)
+- 协作者与贡献流程文档：[docs/collaboration/README.md](./docs/collaboration/README.md)
+- 生成产物与 OpenAPI 文件：[docs/artifacts/README.md](./docs/artifacts/README.md)
 
 ## 当前状态
 
-项目目前处于设计 / 规划阶段，当前仓库重点是：
+项目目前已经完成后端 MVP 主链路，当前仓库重点转为：
 
-- 明确产品边界
-- 固化领域模型
-- 完成数据库和 API 设计
-- 提前建立代码质量和 TDD 工作流
+- 保持后端权限、审计与开放接口主链路稳定
+- 推进前端管理台主路径
+- 补齐 alpha 黑盒回归、覆盖率与后续工程收口
+- 继续固化产品边界、协作流程与部署约定
 
 ## 后续优先事项
 

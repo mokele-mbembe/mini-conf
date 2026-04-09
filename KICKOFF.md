@@ -168,7 +168,7 @@ mini-conf/
 当出现产品细节澄清、规则调整、接口语义收敛时，统一遵循：
 
 1. 先更新 `KICKOFF.md` / 相关计划文档
-2. 在 `docs/product-qa/` 记录本次澄清 Q&A 和当前实现选择
+2. 在 `docs/constraints/product-qa/` 记录本次澄清 Q&A 和当前实现选择
 3. 单独提交一条“文档澄清/计划更新” commit
 4. 再开始代码修改
 

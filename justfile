@@ -123,14 +123,14 @@ sqlx-check:
 openapi-check:
   @if [ -f scripts/export-openapi.sh ]; then \
     bash scripts/export-openapi.sh; \
-    if [ -f docs/openapi/openapi.json ]; then \
-      if ! git diff --quiet -- docs/openapi/openapi.json; then \
+    if [ -f docs/artifacts/openapi.json ]; then \
+      if ! git diff --quiet -- docs/artifacts/openapi.json; then \
         echo "OpenAPI spec changed:"; \
-        git status --short -- docs/openapi/openapi.json || true; \
+        git status --short -- docs/artifacts/openapi.json || true; \
         exit 1; \
       fi; \
     else \
-      echo "Skipping OpenAPI diff check: docs/openapi/openapi.json not found after export"; \
+      echo "Skipping OpenAPI diff check: docs/artifacts/openapi.json not found after export"; \
     fi \
   ; else echo "Skipping OpenAPI check: scripts/export-openapi.sh not found"; fi
 

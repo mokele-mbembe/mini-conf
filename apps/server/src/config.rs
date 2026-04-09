@@ -6,7 +6,7 @@ use std::{
 const DEFAULT_HTTP_ADDR: &str = "0.0.0.0:8080";
 const DEFAULT_DATABASE_URL: &str = "postgres://127.0.0.1:5432/postgres";
 const DEFAULT_STATIC_DIR: &str = "apps/web/dist";
-const DEFAULT_OPENAPI_EXPORT_PATH: &str = "docs/openapi/openapi.json";
+const DEFAULT_OPENAPI_EXPORT_PATH: &str = "docs/artifacts/openapi.json";
 const DEFAULT_INIT_DB_ON_BOOT: bool = false;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -226,7 +226,7 @@ mod tests {
                 init_admin_username: None,
                 init_admin_password: None,
                 static_dir: PathBuf::from("apps/web/dist"),
-                openapi_export_path: PathBuf::from("docs/openapi/openapi.json"),
+                openapi_export_path: PathBuf::from("docs/artifacts/openapi.json"),
             }
         );
     }

@@ -230,4 +230,4 @@ just --version
 - [标准 Linux 开发工作流](./STANDARD_WORKFLOW.md)
 - [Linux / WSL2 开发环境实录](./DEV_LINUX_WSL2.md)
 - [Fedora 43 开发环境与本地 Agent 约定](./DEV_FEDORA43_WORKSTATION.md)
-- [质量检查与测试收口计划](./QUALITY_CHECK_PLAN.md)
+- [质量检查与测试收口计划](../collaboration/QUALITY_CHECK_PLAN.md)

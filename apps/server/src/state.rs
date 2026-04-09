@@ -70,7 +70,7 @@ mod tests {
                 init_admin_username: None,
                 init_admin_password: None,
                 static_dir: PathBuf::from("apps/web/dist"),
-                openapi_export_path: PathBuf::from("docs/openapi/openapi.json"),
+                openapi_export_path: PathBuf::from("docs/artifacts/openapi.json"),
             }
         );
     }

@@ -10,7 +10,7 @@
 - 减少环境差异导致的返工
 - 让后续执行开发工作的 AI agent 更容易按正确顺序落地
 
-工作流规范以 [docs/STANDARD_WORKFLOW.md](./STANDARD_WORKFLOW.md) 为准；本文只负责初始化顺序。
+工作流规范以 [标准 Linux 开发工作流](../agents/STANDARD_WORKFLOW.md) 为准；本文只负责初始化顺序。
 
 ## 2. 初始化顺序
 
@@ -40,8 +40,8 @@
 
 参考文档：
 
-- [docs/STANDARD_WORKFLOW.md](./STANDARD_WORKFLOW.md)
-- [docs/DEV_LINUX_WSL2.md](./DEV_LINUX_WSL2.md)
+- [docs/agents/STANDARD_WORKFLOW.md](../agents/STANDARD_WORKFLOW.md)
+- [docs/agents/DEV_LINUX_WSL2.md](../agents/DEV_LINUX_WSL2.md)
 
 ### 3. 初始化前端工作区
 
@@ -51,7 +51,7 @@
 
 参考文档：
 
-- [docs/FRONTEND_WORKSPACE.md](./FRONTEND_WORKSPACE.md)
+- [docs/collaboration/FRONTEND_WORKSPACE.md](./FRONTEND_WORKSPACE.md)
 
 ### 4. 初始化 Rust workspace
 
@@ -63,7 +63,7 @@
 
 参考文档：
 
-- [docs/BOOTSTRAP.md](./BOOTSTRAP.md)
+- [docs/public/BOOTSTRAP.md](../public/BOOTSTRAP.md)
 
 ### 5. 初始化数据库与迁移
 
@@ -79,8 +79,8 @@
 
 参考文档：
 
-- [docs/DB_SCHEMA.md](./DB_SCHEMA.md)
-- [docs/DEV_LINUX_WSL2.md](./DEV_LINUX_WSL2.md)
+- [docs/constraints/DB_SCHEMA.md](../constraints/DB_SCHEMA.md)
+- [docs/agents/DEV_LINUX_WSL2.md](../agents/DEV_LINUX_WSL2.md)
 
 ### 6. 落地开放消费端最小协议
 
@@ -93,7 +93,7 @@
 
 参考文档：
 
-- [docs/CLIENT_HTTP_PROTOCOL.md](./CLIENT_HTTP_PROTOCOL.md)
+- [docs/public/CLIENT_HTTP_PROTOCOL.md](../public/CLIENT_HTTP_PROTOCOL.md)
 
 ### 7. 落地管理端主干接口
 
@@ -110,7 +110,7 @@
 
 参考文档：
 
-- [docs/ADMIN_API.md](./ADMIN_API.md)
+- [docs/constraints/ADMIN_API.md](../constraints/ADMIN_API.md)
 
 ### 8. 接入质量门槛
 
@@ -133,8 +133,8 @@
 
 参考文档：
 
-- [docs/STANDARD_WORKFLOW.md](./STANDARD_WORKFLOW.md)
-- [docs/PERFORMANCE.md](./PERFORMANCE.md)
+- [docs/agents/STANDARD_WORKFLOW.md](../agents/STANDARD_WORKFLOW.md)
+- [docs/public/PERFORMANCE.md](../public/PERFORMANCE.md)
 
 ### 9. 验证 CI
 

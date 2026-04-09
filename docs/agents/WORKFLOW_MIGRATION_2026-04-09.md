@@ -120,13 +120,13 @@ local wrapper：
 
 新增：
 
-- [`scripts/local-db-env.sh`](../scripts/local-db-env.sh)
+- [`scripts/local-db-env.sh`](../../scripts/local-db-env.sh)
 
 现在它负责本机 local wrapper 的数据库变量解析。
 
 旧脚本：
 
-- [`scripts/dev-db-env.sh`](../scripts/dev-db-env.sh)
+- [`scripts/dev-db-env.sh`](../../scripts/dev-db-env.sh)
 
 现在只保留为兼容壳，避免旧习惯立刻失效。
 

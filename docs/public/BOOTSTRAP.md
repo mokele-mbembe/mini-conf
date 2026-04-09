@@ -82,7 +82,7 @@ INIT_ADMIN_PASSWORD=admin123456
 STATIC_DIR=apps/web/dist
 ADMIN_AUTH_MODE=session
 JWT_ENABLED=false
-OPENAPI_EXPORT_PATH=docs/openapi/openapi.json
+OPENAPI_EXPORT_PATH=docs/artifacts/openapi.json
 ```
 
 ## 5. 首批 API 路由
@@ -153,7 +153,7 @@ OPENAPI_EXPORT_PATH=docs/openapi/openapi.json
 - `Isolated DB` 工作流：`just db-migrate-up`、`just db-migrate-down`、`just test-backend-db`
 - 本机 local wrapper：`just run-server-local`、`just db-migrate-up-local`、`just db-migrate-down-local`、`just test-backend-db-local`
 
-统一规范见 [docs/STANDARD_WORKFLOW.md](./STANDARD_WORKFLOW.md)。
+统一规范见 [docs/agents/STANDARD_WORKFLOW.md](../agents/STANDARD_WORKFLOW.md)。
 
 数据库命令入口约定：
 
@@ -166,7 +166,7 @@ OPENAPI_EXPORT_PATH=docs/openapi/openapi.json
 数据库集成测试约定：
 
 - 测试文件不要各自重复解析环境变量
-- 统一复用 [`infra::testing`](../crates/infra/src/testing.rs) 中的 `test_database_url`、`unique_schema_name`、`with_search_path`
+- 统一复用 [`infra::testing`](../../crates/infra/src/testing.rs) 中的 `test_database_url`、`unique_schema_name`、`with_search_path`
 - 这样可以把 Linux / WSL2 / 本地 shell 的环境差异收口在一处，避免后续新增测试时再引入分叉
 
 ## 8. 代码质量与 TDD 基线

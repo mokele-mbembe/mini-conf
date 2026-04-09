@@ -10,7 +10,7 @@
 
 目标不是把检查堆满，而是在项目阶段合适的时候引入合适的约束。
 
-工作流分层规范见 [docs/STANDARD_WORKFLOW.md](./STANDARD_WORKFLOW.md)；本文只讨论质量门槛收口节奏。
+工作流分层规范见 [标准 Linux 开发工作流](../agents/STANDARD_WORKFLOW.md)；本文只讨论质量门槛收口节奏。
 
 ## 2. 当前已启用的检查
 
@@ -156,7 +156,7 @@ CI 对应关系：
 当前状态：
 
 - 已经是强制检查
-- 任何 handler/schema 变更，只要影响 OpenAPI，都必须同步更新 `docs/openapi/openapi.json`
+- 任何 handler/schema 变更，只要影响 OpenAPI，都必须同步更新 `docs/artifacts/openapi.json`
 
 特别说明：
 

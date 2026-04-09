@@ -174,17 +174,17 @@
 
 ### 6.1 脚本层
 
-[`scripts/local-db-env.sh`](../scripts/local-db-env.sh) 负责：
+[`scripts/local-db-env.sh`](../../scripts/local-db-env.sh) 负责：
 
 - 从本机便利变量生成 `DATABASE_URL`
 - 从独立的本机测试变量生成 `TEST_DATABASE_URL`
 - 仅在显式设置 `MINI_CONF_LOCAL_TEST_USE_RUNTIME_DB=true` 时，允许本机测试库复用本机运行库
 
-[`scripts/dev-db-env.sh`](../scripts/dev-db-env.sh) 仅保留为旧脚本名的兼容壳。
+[`scripts/dev-db-env.sh`](../../scripts/dev-db-env.sh) 仅保留为旧脚本名的兼容壳。
 
 ### 6.2 Rust 测试层
 
-数据库集成测试统一复用 [`infra::testing`](../crates/infra/src/testing.rs)：
+数据库集成测试统一复用 [`infra::testing`](../../crates/infra/src/testing.rs)：
 
 - `test_database_url(...)`
 - `unique_schema_name(...)`
@@ -221,7 +221,7 @@
 
 说明：
 
-- `just openapi-check` 失败通常表示接口定义已变化，但 `docs/openapi/openapi.json` 没有同步提交
+- `just openapi-check` 失败通常表示接口定义已变化，但 `docs/artifacts/openapi.json` 没有同步提交
 - 不接受“单独补一个 refresh generated spec 空提交”作为标准做法
 - OpenAPI 生成物应和功能改动处于同一个提交序列中
 
@@ -249,5 +249,5 @@ GitHub Actions 与工作流层级对应关系：
 - [WSL 与 Fedora 平台并行对齐说明](./DEV_DUAL_ENV_PARITY.md)
 - [Linux / WSL2 开发环境实录](./DEV_LINUX_WSL2.md)
 - [Fedora 43 开发环境与本地 Agent 约定](./DEV_FEDORA43_WORKSTATION.md)
-- [质量检查与测试收口计划](./QUALITY_CHECK_PLAN.md)
-- [仓库初始化清单](./REPO_INIT_CHECKLIST.md)
+- [质量检查与测试收口计划](../collaboration/QUALITY_CHECK_PLAN.md)
+- [仓库初始化清单](../collaboration/REPO_INIT_CHECKLIST.md)

@@ -658,7 +658,7 @@ INIT_ADMIN_PASSWORD=admin123456
 STATIC_DIR=apps/web/dist
 ADMIN_AUTH_MODE=session
 JWT_ENABLED=false
-OPENAPI_EXPORT_PATH=docs/openapi/openapi.json
+OPENAPI_EXPORT_PATH=docs/artifacts/openapi.json
 ```
 
 当前代码还没落地，所以这一步先不用急着创建。
@@ -674,7 +674,7 @@ source "${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/dev-env.sh"
 
 再从这个 shell 启动你的 IDE、终端会话或本地 agent。
 
-仓库内的 Git hooks 会先执行 [scripts/load-dev-env.sh](../scripts/load-dev-env.sh)，它会按这个顺序寻找本地环境脚本：
+仓库内的 Git hooks 会先执行 [scripts/load-dev-env.sh](../../scripts/load-dev-env.sh)，它会按这个顺序寻找本地环境脚本：
 
 - `MINI_CONF_DEV_ENV_FILE` 指向的文件
 - `${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/dev-env.sh`
@@ -723,10 +723,10 @@ source "${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/dev-env.sh"
 
 - `README.md`
 - `KICKOFF.md`
-- `docs/BOOTSTRAP.md`
-- `docs/DEV_LINUX_WSL2.md`
-- `docs/REPO_INIT_CHECKLIST.md`
-- `docs/FRONTEND_WORKSPACE.md`
+- `docs/public/BOOTSTRAP.md`
+- `docs/agents/DEV_LINUX_WSL2.md`
+- `docs/collaboration/REPO_INIT_CHECKLIST.md`
+- `docs/collaboration/FRONTEND_WORKSPACE.md`
 
 外部资料：
 
