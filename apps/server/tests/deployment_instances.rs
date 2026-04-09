@@ -38,6 +38,13 @@ async fn install_admin_project_membership_trigger(pool: &PgPool) -> TestResult {
     sqlx::query(
         r#"
         DROP TRIGGER IF EXISTS trg_auto_grant_test_admin_project_member ON projects;
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
         CREATE TRIGGER trg_auto_grant_test_admin_project_member
         AFTER INSERT ON projects
         FOR EACH ROW
