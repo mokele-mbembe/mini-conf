@@ -1,5 +1,8 @@
 name: CI
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 on:
   push:
     branches:
@@ -211,6 +214,9 @@ jobs:
             | tar xz -C "${RUNNER_TEMP}"
           echo "${RUNNER_TEMP}/hurl-${VERSION}-x86_64-unknown-linux-gnu/bin" >> "${GITHUB_PATH}"
 
+      - name: Build server
+        run: cargo build --bin server
+
       - name: Run migrations
         run: just db-migrate-up
 
@@ -262,6 +268,9 @@ jobs:
             "https://github.com/Orange-OpenSource/hurl/releases/download/${VERSION}/hurl-${VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
             | tar xz -C "${RUNNER_TEMP}"
           echo "${RUNNER_TEMP}/hurl-${VERSION}-x86_64-unknown-linux-gnu/bin" >> "${GITHUB_PATH}"
+
+      - name: Build server
+        run: cargo build --bin server
 
       - name: Run migrations
         run: just db-migrate-up

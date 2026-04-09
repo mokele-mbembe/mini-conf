@@ -55,6 +55,7 @@ init_db_on_boot="${INIT_DB_ON_BOOT:-true}"
 admin_username="${ALPHA_ADMIN_USERNAME:-admin}"
 admin_password="${ALPHA_ADMIN_PASSWORD:-admin123456}"
 suite_id="${ALPHA_SUITE_ID:-$(date +%s%N)}"
+ready_timeout_sec="${ALPHA_HTTP_READY_TIMEOUT_SEC:-180}"
 
 work_dir="$(mktemp -d)"
 server_log="${work_dir}/server.log"
@@ -92,7 +93,7 @@ env \
   cargo run --bin server >"${server_log}" 2>&1 &
 server_pid=$!
 
-for _ in $(seq 1 60); do
+for _ in $(seq 1 "${ready_timeout_sec}"); do
   if curl --silent --show-error --fail "${base_url}/api/healthz" >/dev/null 2>&1; then
     break
   fi
@@ -106,7 +107,7 @@ for _ in $(seq 1 60); do
 done
 
 if ! curl --silent --show-error --fail "${base_url}/api/healthz" >/dev/null 2>&1; then
-  echo "alpha HTTP server did not become ready at ${base_url}/api/healthz" >&2
+  echo "alpha HTTP server did not become ready within ${ready_timeout_sec}s at ${base_url}/api/healthz" >&2
   exit 1
 fi
 
