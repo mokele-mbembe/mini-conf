@@ -12,7 +12,9 @@
   "paths": {
     "/api/audit-logs": {
       "get": {
-        "tags": ["admin"],
+        "tags": [
+          "admin"
+        ],
         "operationId": "list_audit_logs",
         "parameters": [
           {
@@ -121,7 +123,9 @@
     },
     "/api/auth/login": {
       "post": {
-        "tags": ["auth"],
+        "tags": [
+          "auth"
+        ],
         "operationId": "login",
         "requestBody": {
           "content": {
@@ -197,7 +201,9 @@
     },
     "/api/auth/logout": {
       "post": {
-        "tags": ["auth"],
+        "tags": [
+          "auth"
+        ],
         "operationId": "logout",
         "responses": {
           "204": {
@@ -241,7 +247,9 @@
     },
     "/api/auth/me": {
       "get": {
-        "tags": ["auth"],
+        "tags": [
+          "auth"
+        ],
         "operationId": "me",
         "responses": {
           "200": {
@@ -294,7 +302,9 @@
     },
     "/api/config-files": {
       "get": {
-        "tags": ["admin"],
+        "tags": [
+          "admin"
+        ],
         "operationId": "list_config_files",
         "parameters": [
           {
@@ -356,7 +366,9 @@
         ]
       },
       "post": {
-        "tags": ["admin"],
+        "tags": [
+          "admin"
+        ],
         "operationId": "create_config_file",
         "requestBody": {
           "content": {
@@ -449,7 +461,9 @@
     },
     "/api/config-files/{id}": {
       "get": {
-        "tags": ["admin"],
+        "tags": [
+          "admin"
+        ],
         "operationId": "get_config_file",
         "parameters": [
           {
@@ -522,7 +536,9 @@
         ]
       },
       "put": {
-        "tags": ["admin"],
+        "tags": [
+          "admin"
+        ],
         "operationId": "update_config_file",
         "parameters": [
           {
@@ -627,7 +643,9 @@
     },
     "/api/deployment-instances": {
       "get": {
-        "tags": ["admin"],
+        "tags": [
+          "admin"
+        ],
         "operationId": "list_deployment_instances",
         "parameters": [
           {
@@ -705,7 +723,9 @@
         ]
       },
       "post": {
-        "tags": ["admin"],
+        "tags": [
+          "admin"
+        ],
         "operationId": "create_deployment_instance",
         "requestBody": {
           "content": {
@@ -798,7 +818,9 @@
     },
     "/api/deployment-instances/{id}": {
       "get": {
-        "tags": ["admin"],
+        "tags": [
+          "admin"
+        ],
         "operationId": "get_deployment_instance",
         "parameters": [
           {
@@ -871,7 +893,9 @@
         ]
       },
       "put": {
-        "tags": ["admin"],
+        "tags": [
+          "admin"
+        ],
         "operationId": "update_deployment_instance",
         "parameters": [
           {
@@ -976,7 +1000,9 @@
     },
     "/api/deployment-instances/{id}/clone": {
       "post": {
-        "tags": ["admin"],
+        "tags": [
+          "admin"
+        ],
         "operationId": "clone_deployment_instance",
         "parameters": [
           {
@@ -1081,7 +1107,9 @@
     },
     "/api/deployment-instances/{id}/preview-bundle": {
       "get": {
-        "tags": ["admin"],
+        "tags": [
+          "admin"
+        ],
         "operationId": "preview_deployment_bundle",
         "parameters": [
           {
@@ -1156,7 +1184,9 @@
     },
     "/api/deployment-instances/{id}/token/reset": {
       "post": {
-        "tags": ["admin"],
+        "tags": [
+          "admin"
+        ],
         "operationId": "reset_deployment_token",
         "parameters": [
           {
@@ -1231,7 +1261,9 @@
     },
     "/api/deployment-sync-records": {
       "get": {
-        "tags": ["admin"],
+        "tags": [
+          "admin"
+        ],
         "operationId": "list_deployment_sync_records",
         "parameters": [
           {
@@ -1337,7 +1369,9 @@
     },
     "/api/drafts/{deployment_id}/{config_file_id}": {
       "get": {
-        "tags": ["admin"],
+        "tags": [
+          "admin"
+        ],
         "operationId": "get_draft",
         "parameters": [
           {
@@ -1420,7 +1454,9 @@
         ]
       },
       "put": {
-        "tags": ["admin"],
+        "tags": [
+          "admin"
+        ],
         "operationId": "put_draft",
         "parameters": [
           {
@@ -1545,7 +1581,9 @@
     },
     "/api/drafts/{target_deployment_id}/{config_file_id}/clone": {
       "post": {
-        "tags": ["admin"],
+        "tags": [
+          "admin"
+        ],
         "operationId": "clone_draft",
         "parameters": [
           {
@@ -1670,7 +1708,9 @@
     },
     "/api/healthz": {
       "get": {
-        "tags": ["system"],
+        "tags": [
+          "system"
+        ],
         "operationId": "get_healthz",
         "responses": {
           "200": {
@@ -1688,7 +1728,9 @@
     },
     "/api/open/configs/resolve": {
       "get": {
-        "tags": ["open"],
+        "tags": [
+          "open"
+        ],
         "operationId": "resolve_config",
         "parameters": [
           {
@@ -1840,7 +1882,9 @@
     },
     "/api/open/deployment-sync-records": {
       "post": {
-        "tags": ["open"],
+        "tags": [
+          "open"
+        ],
         "operationId": "create_sync_record",
         "requestBody": {
           "content": {
@@ -1933,7 +1977,9 @@
     },
     "/api/open/deployments/{deployment_key}/config-bundle": {
       "get": {
-        "tags": ["open"],
+        "tags": [
+          "open"
+        ],
         "operationId": "get_config_bundle",
         "parameters": [
           {
@@ -2043,7 +2089,9 @@
     },
     "/api/open/heartbeats": {
       "post": {
-        "tags": ["open"],
+        "tags": [
+          "open"
+        ],
         "operationId": "report_heartbeat",
         "requestBody": {
           "content": {
@@ -2136,7 +2184,9 @@
     },
     "/api/open/releases/{revision}": {
       "get": {
-        "tags": ["open"],
+        "tags": [
+          "open"
+        ],
         "operationId": "get_release",
         "parameters": [
           {
@@ -2251,7 +2301,9 @@
     },
     "/api/projects": {
       "get": {
-        "tags": ["admin"],
+        "tags": [
+          "admin"
+        ],
         "operationId": "list_projects",
         "responses": {
           "200": {
@@ -2302,7 +2354,9 @@
         ]
       },
       "post": {
-        "tags": ["admin"],
+        "tags": [
+          "admin"
+        ],
         "operationId": "create_project",
         "requestBody": {
           "content": {
@@ -2385,7 +2439,9 @@
     },
     "/api/projects/{id}": {
       "get": {
-        "tags": ["admin"],
+        "tags": [
+          "admin"
+        ],
         "operationId": "get_project",
         "parameters": [
           {
@@ -2458,7 +2514,9 @@
         ]
       },
       "put": {
-        "tags": ["admin"],
+        "tags": [
+          "admin"
+        ],
         "operationId": "update_project",
         "parameters": [
           {
@@ -2573,7 +2631,9 @@
     },
     "/api/projects/{id}/members": {
       "get": {
-        "tags": ["admin"],
+        "tags": [
+          "admin"
+        ],
         "operationId": "list_project_members",
         "parameters": [
           {
@@ -2656,7 +2716,9 @@
         ]
       },
       "post": {
-        "tags": ["admin"],
+        "tags": [
+          "admin"
+        ],
         "operationId": "create_project_member",
         "parameters": [
           {
@@ -2771,7 +2833,9 @@
     },
     "/api/projects/{id}/members/{member_id}": {
       "put": {
-        "tags": ["admin"],
+        "tags": [
+          "admin"
+        ],
         "operationId": "update_project_member",
         "parameters": [
           {
@@ -2894,7 +2958,9 @@
         ]
       },
       "delete": {
-        "tags": ["admin"],
+        "tags": [
+          "admin"
+        ],
         "operationId": "delete_project_member",
         "parameters": [
           {
@@ -2992,7 +3058,9 @@
     },
     "/api/releases": {
       "get": {
-        "tags": ["admin"],
+        "tags": [
+          "admin"
+        ],
         "operationId": "list_releases",
         "parameters": [
           {
@@ -3074,7 +3142,9 @@
     },
     "/api/releases/publish": {
       "post": {
-        "tags": ["admin"],
+        "tags": [
+          "admin"
+        ],
         "operationId": "publish_release",
         "requestBody": {
           "content": {
@@ -3157,7 +3227,9 @@
     },
     "/api/releases/{id}": {
       "get": {
-        "tags": ["admin"],
+        "tags": [
+          "admin"
+        ],
         "operationId": "get_release_detail",
         "parameters": [
           {
@@ -3232,7 +3304,9 @@
     },
     "/api/releases/{id}/diff": {
       "get": {
-        "tags": ["admin"],
+        "tags": [
+          "admin"
+        ],
         "operationId": "get_release_diff",
         "parameters": [
           {
@@ -3310,7 +3384,9 @@
     "schemas": {
       "AuditLogListResponse": {
         "type": "object",
-        "required": ["items"],
+        "required": [
+          "items"
+        ],
         "properties": {
           "items": {
             "type": "array",
@@ -3359,7 +3435,10 @@
             "format": "int64"
           },
           "project_id": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64"
           },
           "resource_id": {
@@ -3369,7 +3448,10 @@
             "type": "string"
           },
           "user_id": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64"
           }
         },
@@ -3389,7 +3471,10 @@
       },
       "AuthSessionResponse": {
         "type": "object",
-        "required": ["user", "auth_mode"],
+        "required": [
+          "user",
+          "auth_mode"
+        ],
         "properties": {
           "auth_mode": {
             "type": "string"
@@ -3401,7 +3486,10 @@
       },
       "AuthUser": {
         "type": "object",
-        "required": ["id", "username"],
+        "required": [
+          "id",
+          "username"
+        ],
         "properties": {
           "id": {
             "type": "integer",
@@ -3414,7 +3502,12 @@
       },
       "CloneDeploymentInstanceRequestBody": {
         "type": "object",
-        "required": ["deployment_key", "name", "environment", "clone_source"],
+        "required": [
+          "deployment_key",
+          "name",
+          "environment",
+          "clone_source"
+        ],
         "properties": {
           "clone_source": {
             "type": "string"
@@ -3423,7 +3516,10 @@
             "type": "string"
           },
           "description": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "environment": {
             "type": "string"
@@ -3435,7 +3531,10 @@
       },
       "CloneDraftRequestBody": {
         "type": "object",
-        "required": ["source_deployment_instance_id", "source_kind"],
+        "required": [
+          "source_deployment_instance_id",
+          "source_kind"
+        ],
         "properties": {
           "source_deployment_instance_id": {
             "type": "integer",
@@ -3448,7 +3547,13 @@
       },
       "ConfigBundleItem": {
         "type": "object",
-        "required": ["config", "revision", "content_hash", "format", "content"],
+        "required": [
+          "config",
+          "revision",
+          "content_hash",
+          "format",
+          "content"
+        ],
         "properties": {
           "config": {
             "type": "string"
@@ -3469,7 +3574,10 @@
       },
       "ConfigBundleParams": {
         "type": "object",
-        "required": ["project", "environment"],
+        "required": [
+          "project",
+          "environment"
+        ],
         "properties": {
           "environment": {
             "type": "string"
@@ -3481,7 +3589,12 @@
       },
       "ConfigBundleResponse": {
         "type": "object",
-        "required": ["project", "environment", "deployment", "configs"],
+        "required": [
+          "project",
+          "environment",
+          "deployment",
+          "configs"
+        ],
         "properties": {
           "configs": {
             "type": "array",
@@ -3502,7 +3615,9 @@
       },
       "ConfigFileListResponse": {
         "type": "object",
-        "required": ["items"],
+        "required": [
+          "items"
+        ],
         "properties": {
           "items": {
             "type": "array",
@@ -3529,7 +3644,10 @@
             "type": "string"
           },
           "description": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "format": {
             "type": "string"
@@ -3549,13 +3667,22 @@
             "format": "int64"
           },
           "schema_name": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "schema_version": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "secret_paths": {
-            "type": ["array", "null"],
+            "type": [
+              "array",
+              "null"
+            ],
             "items": {
               "type": "string"
             }
@@ -3570,19 +3697,30 @@
       },
       "CreateConfigFileRequestBody": {
         "type": "object",
-        "required": ["project_id", "code", "name", "format"],
+        "required": [
+          "project_id",
+          "code",
+          "name",
+          "format"
+        ],
         "properties": {
           "code": {
             "type": "string"
           },
           "description": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "format": {
             "type": "string"
           },
           "is_required": {
-            "type": ["boolean", "null"]
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "name": {
             "type": "string"
@@ -3592,37 +3730,60 @@
             "format": "int64"
           },
           "schema_name": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "schema_version": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "secret_paths": {
-            "type": ["array", "null"],
+            "type": [
+              "array",
+              "null"
+            ],
             "items": {
               "type": "string"
             }
           },
           "sensitivity": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
       "CreateDeploymentInstanceRequestBody": {
         "type": "object",
-        "required": ["project_id", "environment", "deployment_key", "name"],
+        "required": [
+          "project_id",
+          "environment",
+          "deployment_key",
+          "name"
+        ],
         "properties": {
           "deployment_key": {
             "type": "string"
           },
           "description": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "environment": {
             "type": "string"
           },
           "is_template": {
-            "type": ["boolean", "null"]
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "name": {
             "type": "string"
@@ -3635,7 +3796,10 @@
       },
       "CreateProjectMemberRequestBody": {
         "type": "object",
-        "required": ["username", "role"],
+        "required": [
+          "username",
+          "role"
+        ],
         "properties": {
           "role": {
             "type": "string"
@@ -3651,13 +3815,19 @@
       },
       "CreateProjectRequestBody": {
         "type": "object",
-        "required": ["code", "name"],
+        "required": [
+          "code",
+          "name"
+        ],
         "properties": {
           "code": {
             "type": "string"
           },
           "description": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "name": {
             "type": "string"
@@ -3666,7 +3836,11 @@
       },
       "DeploymentBundlePreviewResponse": {
         "type": "object",
-        "required": ["deployment_instance_id", "items", "open_bundle_preview"],
+        "required": [
+          "deployment_instance_id",
+          "items",
+          "open_bundle_preview"
+        ],
         "properties": {
           "deployment_instance_id": {
             "type": "integer",
@@ -3685,7 +3859,9 @@
       },
       "DeploymentInstanceListResponse": {
         "type": "object",
-        "required": ["items"],
+        "required": [
+          "items"
+        ],
         "properties": {
           "items": {
             "type": "array",
@@ -3711,7 +3887,10 @@
             "type": "string"
           },
           "description": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "environment": {
             "type": "string"
@@ -3734,7 +3913,10 @@
             "type": "string"
           },
           "template_source_id": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64"
           }
         }
@@ -3759,7 +3941,10 @@
             "format": "int64"
           },
           "content": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "format": {
             "type": "string"
@@ -3771,7 +3956,10 @@
             "type": "string"
           },
           "revision": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "source": {
             "type": "string"
@@ -3783,7 +3971,9 @@
       },
       "DeploymentSyncRecordListResponse": {
         "type": "object",
-        "required": ["items"],
+        "required": [
+          "items"
+        ],
         "properties": {
           "items": {
             "type": "array",
@@ -3835,25 +4025,40 @@
             "type": "string"
           },
           "detail": {
-            "type": ["object", "null"]
+            "type": [
+              "object",
+              "null"
+            ]
           },
           "environment": {
             "type": "string"
           },
           "message": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "process_key": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "project": {
             "type": "string"
           },
           "reported_at": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "revision": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "status": {
             "type": "string"
@@ -3875,7 +4080,10 @@
             "type": "string"
           },
           "config_file_id": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64"
           },
           "deployment_instance_id": {
@@ -3888,24 +4096,36 @@
             "format": "int64"
           },
           "message": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "process_key": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "project_id": {
             "type": "integer",
             "format": "int64"
           },
           "release_id": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64"
           },
           "reported_at": {
             "type": "string"
           },
           "revision": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "status": {
             "type": "string"
@@ -3930,7 +4150,9 @@
       },
       "DeploymentSyncResponse": {
         "type": "object",
-        "required": ["ok"],
+        "required": [
+          "ok"
+        ],
         "properties": {
           "ok": {
             "type": "boolean"
@@ -3963,7 +4185,11 @@
       },
       "DraftCloneResponse": {
         "type": "object",
-        "required": ["draft", "source_deployment_instance_id", "source_kind"],
+        "required": [
+          "draft",
+          "source_deployment_instance_id",
+          "source_kind"
+        ],
         "properties": {
           "draft": {
             "$ref": "#/components/schemas/DraftResponse"
@@ -4003,7 +4229,10 @@
             "type": "string"
           },
           "schema_version": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "updated_at": {
             "type": "string"
@@ -4016,7 +4245,10 @@
       },
       "ErrorResponse": {
         "type": "object",
-        "required": ["code", "message"],
+        "required": [
+          "code",
+          "message"
+        ],
         "properties": {
           "code": {
             "type": "string"
@@ -4028,7 +4260,11 @@
       },
       "HealthzResponse": {
         "type": "object",
-        "required": ["status", "service", "version"],
+        "required": [
+          "status",
+          "service",
+          "version"
+        ],
         "properties": {
           "service": {
             "type": "string"
@@ -4058,7 +4294,10 @@
             "type": "string"
           },
           "metadata": {
-            "type": ["object", "null"]
+            "type": [
+              "object",
+              "null"
+            ]
           },
           "process_key": {
             "type": "string"
@@ -4067,7 +4306,10 @@
             "type": "string"
           },
           "reported_at": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -4075,17 +4317,29 @@
         "type": "object",
         "properties": {
           "action": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "project_id": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64"
           },
           "resource_type": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "user_id": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64"
           }
         }
@@ -4094,7 +4348,10 @@
         "type": "object",
         "properties": {
           "project_id": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64"
           }
         }
@@ -4103,14 +4360,23 @@
         "type": "object",
         "properties": {
           "environment": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "project_id": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64"
           },
           "status": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -4118,25 +4384,43 @@
         "type": "object",
         "properties": {
           "action": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "config_file_id": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64"
           },
           "deployment_instance_id": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64"
           },
           "process_key": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "project_id": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64"
           },
           "status": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -4144,22 +4428,34 @@
         "type": "object",
         "properties": {
           "config_file_id": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64"
           },
           "deployment_instance_id": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64"
           },
           "project_id": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64"
           }
         }
       },
       "LoginRequestBody": {
         "type": "object",
-        "required": ["username", "password"],
+        "required": [
+          "username",
+          "password"
+        ],
         "properties": {
           "password": {
             "type": "string"
@@ -4171,7 +4467,9 @@
       },
       "ProjectListResponse": {
         "type": "object",
-        "required": ["items"],
+        "required": [
+          "items"
+        ],
         "properties": {
           "items": {
             "type": "array",
@@ -4183,7 +4481,9 @@
       },
       "ProjectMemberListResponse": {
         "type": "object",
-        "required": ["items"],
+        "required": [
+          "items"
+        ],
         "properties": {
           "items": {
             "type": "array",
@@ -4249,13 +4549,21 @@
       },
       "ProjectSummary": {
         "type": "object",
-        "required": ["id", "code", "name", "status"],
+        "required": [
+          "id",
+          "code",
+          "name",
+          "status"
+        ],
         "properties": {
           "code": {
             "type": "string"
           },
           "description": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "id": {
             "type": "integer",
@@ -4271,10 +4579,17 @@
       },
       "PublishReleaseRequestBody": {
         "type": "object",
-        "required": ["project_id", "deployment_instance_id", "config_file_id"],
+        "required": [
+          "project_id",
+          "deployment_instance_id",
+          "config_file_id"
+        ],
         "properties": {
           "change_summary": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "config_file_id": {
             "type": "integer",
@@ -4292,7 +4607,9 @@
       },
       "ReleaseConfig": {
         "type": "object",
-        "required": ["name"],
+        "required": [
+          "name"
+        ],
         "properties": {
           "name": {
             "type": "string"
@@ -4301,7 +4618,13 @@
       },
       "ReleaseContentResponse": {
         "type": "object",
-        "required": ["release", "deployment", "config", "content", "metadata"],
+        "required": [
+          "release",
+          "deployment",
+          "config",
+          "content",
+          "metadata"
+        ],
         "properties": {
           "config": {
             "$ref": "#/components/schemas/ReleaseConfig"
@@ -4322,7 +4645,11 @@
       },
       "ReleaseDeployment": {
         "type": "object",
-        "required": ["project", "environment", "deployment_key"],
+        "required": [
+          "project",
+          "environment",
+          "deployment_key"
+        ],
         "properties": {
           "deployment_key": {
             "type": "string"
@@ -4337,7 +4664,10 @@
       },
       "ReleaseDetailResponse": {
         "type": "object",
-        "required": ["release", "content"],
+        "required": [
+          "release",
+          "content"
+        ],
         "properties": {
           "content": {
             "type": "string"
@@ -4359,7 +4689,11 @@
       },
       "ReleaseDiffResponse": {
         "type": "object",
-        "required": ["release", "after_content", "diff_summary"],
+        "required": [
+          "release",
+          "after_content",
+          "diff_summary"
+        ],
         "properties": {
           "after_content": {
             "type": "string"
@@ -4375,7 +4709,10 @@
             ]
           },
           "before_content": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "diff_summary": {
             "$ref": "#/components/schemas/ReleaseDiffSummary"
@@ -4414,7 +4751,9 @@
       },
       "ReleaseListResponse": {
         "type": "object",
-        "required": ["items"],
+        "required": [
+          "items"
+        ],
         "properties": {
           "items": {
             "type": "array",
@@ -4428,10 +4767,16 @@
         "type": "object",
         "properties": {
           "change_summary": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "schema_version": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -4454,7 +4799,10 @@
             "type": "string"
           },
           "change_summary": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "config_file_id": {
             "type": "integer",
@@ -4492,13 +4840,21 @@
       },
       "ResolveConfigParams": {
         "type": "object",
-        "required": ["project", "environment", "deployment_key", "config"],
+        "required": [
+          "project",
+          "environment",
+          "deployment_key",
+          "config"
+        ],
         "properties": {
           "config": {
             "type": "string"
           },
           "current_revision": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "deployment_key": {
             "type": "string"
@@ -4507,7 +4863,10 @@
             "type": "string"
           },
           "process_key": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "project": {
             "type": "string"
@@ -4547,7 +4906,10 @@
       },
       "ResolveDeployment": {
         "type": "object",
-        "required": ["key", "name"],
+        "required": [
+          "key",
+          "name"
+        ],
         "properties": {
           "key": {
             "type": "string"
@@ -4559,7 +4921,9 @@
       },
       "ResolveFetch": {
         "type": "object",
-        "required": ["url"],
+        "required": [
+          "url"
+        ],
         "properties": {
           "url": {
             "type": "string"
@@ -4595,19 +4959,31 @@
       },
       "UpdateConfigFileRequestBody": {
         "type": "object",
-        "required": ["project_id", "code", "name", "format", "status"],
+        "required": [
+          "project_id",
+          "code",
+          "name",
+          "format",
+          "status"
+        ],
         "properties": {
           "code": {
             "type": "string"
           },
           "description": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "format": {
             "type": "string"
           },
           "is_required": {
-            "type": ["boolean", "null"]
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "name": {
             "type": "string"
@@ -4617,19 +4993,31 @@
             "format": "int64"
           },
           "schema_name": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "schema_version": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "secret_paths": {
-            "type": ["array", "null"],
+            "type": [
+              "array",
+              "null"
+            ],
             "items": {
               "type": "string"
             }
           },
           "sensitivity": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "status": {
             "type": "string"
@@ -4650,13 +5038,19 @@
             "type": "string"
           },
           "description": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "environment": {
             "type": "string"
           },
           "is_template": {
-            "type": ["boolean", "null"]
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "name": {
             "type": "string"
@@ -4672,10 +5066,16 @@
       },
       "UpdateDraftRequestBody": {
         "type": "object",
-        "required": ["content", "format"],
+        "required": [
+          "content",
+          "format"
+        ],
         "properties": {
           "base_version": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64"
           },
           "content": {
@@ -4688,7 +5088,9 @@
       },
       "UpdateProjectMemberRequestBody": {
         "type": "object",
-        "required": ["role"],
+        "required": [
+          "role"
+        ],
         "properties": {
           "role": {
             "type": "string"
@@ -4700,13 +5102,20 @@
       },
       "UpdateProjectRequestBody": {
         "type": "object",
-        "required": ["code", "name", "status"],
+        "required": [
+          "code",
+          "name",
+          "status"
+        ],
         "properties": {
           "code": {
             "type": "string"
           },
           "description": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "name": {
             "type": "string"
