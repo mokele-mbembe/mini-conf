@@ -11,6 +11,8 @@
 
 标准工作流以 [docs/STANDARD_WORKFLOW.md](./STANDARD_WORKFLOW.md) 为准；本文只负责回答 WSL 与 Fedora 两个平台如何保持同一套规范实现。
 
+如果你需要按 2026-04-09 这次调整快速把另一台 Fedora 机器跟上，直接看 [2026-04-09 工作流迁移说明](./WORKFLOW_MIGRATION_2026-04-09.md)。
+
 目标是避免出现：
 
 - 一边能编译，一边不能
@@ -22,7 +24,7 @@
 两个环境都应按标准工作流对齐：
 
 - 两边都满足 `Core`
-- 你的两台 Fedora 43 都满足 `Full`
+- 你的两台 Fedora 43 都满足 `Isolated DB`
 - 两边都使用 `~/.config/mini-conf/dev-env.sh`
 - 两边都通过 `just` 命令入口，而不是平台专用旁路脚本
 
@@ -31,7 +33,8 @@
 - 都能运行 `cargo fmt`、`cargo clippy`、`cargo nextest`
 - 都能运行 `bash scripts/export-openapi.sh`
 - 都能运行 `just lint`、`just test`、`just openapi-check`
-- 两台 Fedora 43 都能运行 `just db-migrate-up`、`just test-backend-db`、`just dev-server`
+- 两台 Fedora 43 都能运行 `just db-migrate-up`、`just test-backend-db`
+- 至少一台本机开发环境能运行 `just run-server-local`
 
 截至 2026-04-08，当前这套 `Fedora Linux 43 (WSL)` 已经实际跑通：
 
@@ -108,12 +111,12 @@ just test
 just openapi-check
 ```
 
-再对齐 `Full`：
+再对齐 `Isolated DB` / 本机 local wrapper：
 
 ```bash
 just test-backend-db
 just db-migrate-up
-just dev-server
+just run-server-local
 ```
 
 OpenAPI 导出命令仍然应一致可用：
@@ -153,7 +156,7 @@ WSL 下最容易出现的不是编译问题，而是“桌面集成工具不可�
 如果你的 WSL 环境里 `secret-tool` 不稳定，建议把数据库配置直接写入：
 
 ```bash
-export MINI_CONF_DB_PASSWORD='...'
+export MINI_CONF_LOCAL_DB_PASSWORD='...'
 export INIT_ADMIN_USERNAME=...
 export INIT_ADMIN_PASSWORD=...
 ```
@@ -164,7 +167,7 @@ export INIT_ADMIN_PASSWORD=...
 ~/.config/mini-conf/dev-env.sh
 ```
 
-这样现有 `scripts/load-dev-env.sh` 和 `scripts/dev-db-env.sh` 会自动接上，`Full` 工作流所需的 `DATABASE_URL` 和 `TEST_DATABASE_URL` 也会由脚本统一补齐。
+这样现有 `scripts/load-dev-env.sh` 和 `scripts/local-db-env.sh` 会自动接上；本机 local wrapper 会按显式 local 变量生成 `DATABASE_URL` 和 `TEST_DATABASE_URL`。
 
 不要把 WSL 环境是否有桌面 keyring 当成阻塞项。
 如果这台 WSL 会长期承担开发，建议把 `dev-env.sh` 和 `$CARGO_HOME/env` 的自动加载片段写进 `~/.bashrc`。

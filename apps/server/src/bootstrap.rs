@@ -158,7 +158,7 @@ mod tests {
     #[test]
     fn startup_error_wraps_configuration_failures() {
         let error = AppConfig::from_lookup(|key| match key {
-            "APP_ENV" => Some("staging".to_owned()),
+            "APP_ENV" => Some("qa".to_owned()),
             _ => None,
         })
         .map_err(StartupError::from)
@@ -166,7 +166,7 @@ mod tests {
 
         assert_eq!(
             error.to_string(),
-            "configuration error: APP_ENV: unsupported APP_ENV value: staging"
+            "configuration error: APP_ENV: unsupported APP_ENV value: qa"
         );
     }
 

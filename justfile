@@ -44,7 +44,17 @@ test-backend:
   @if [ -f Cargo.toml ]; then cargo nextest run --workspace; else echo "Skipping backend tests: Cargo.toml not found"; fi
 
 test-backend-db:
-  @if [ -f Cargo.toml ]; then source scripts/dev-db-env.sh && cargo nextest run --workspace; else echo "Skipping backend db tests: Cargo.toml not found"; fi
+  @if [ ! -f Cargo.toml ]; then \
+    echo "Skipping backend db tests: Cargo.toml not found"; \
+  elif [ -z "${TEST_DATABASE_URL:-}" ]; then \
+    echo "TEST_DATABASE_URL is required; use just test-backend-db-local for developer-local resolution" >&2; \
+    exit 1; \
+  else \
+    cargo nextest run --workspace; \
+  fi
+
+test-backend-db-local:
+  @if [ -f Cargo.toml ]; then source scripts/local-db-env.sh && just test-backend-db; else echo "Skipping backend db tests: Cargo.toml not found"; fi
 
 test-frontend:
   @if [ -f apps/web/package.json ]; then pnpm --dir apps/web test; \
@@ -84,13 +94,35 @@ openapi-check:
 
 db-migrate-up:
   @if [ -d migrations ]; then \
-    if command -v sqlx >/dev/null 2>&1; then source scripts/dev-db-env.sh && sqlx migrate run; \
+    if command -v sqlx >/dev/null 2>&1; then \
+      if [ -z "${DATABASE_URL:-}" ]; then \
+        echo "DATABASE_URL is required; use just db-migrate-up-local for developer-local resolution" >&2; \
+        exit 1; \
+      fi; \
+      sqlx migrate run; \
+    else echo "Skipping db migrate up: sqlx CLI not installed"; fi \
+  ; else echo "Skipping db migrate up: migrations directory not found"; fi
+
+db-migrate-up-local:
+  @if [ -d migrations ]; then \
+    if command -v sqlx >/dev/null 2>&1; then source scripts/local-db-env.sh && just db-migrate-up; \
     else echo "Skipping db migrate up: sqlx CLI not installed"; fi \
   ; else echo "Skipping db migrate up: migrations directory not found"; fi
 
 db-migrate-down:
   @if [ -d migrations ]; then \
-    if command -v sqlx >/dev/null 2>&1; then source scripts/dev-db-env.sh && sqlx migrate revert; \
+    if command -v sqlx >/dev/null 2>&1; then \
+      if [ -z "${DATABASE_URL:-}" ]; then \
+        echo "DATABASE_URL is required; use just db-migrate-down-local for developer-local resolution" >&2; \
+        exit 1; \
+      fi; \
+      sqlx migrate revert; \
+    else echo "Skipping db migrate down: sqlx CLI not installed"; fi \
+  ; else echo "Skipping db migrate down: migrations directory not found"; fi
+
+db-migrate-down-local:
+  @if [ -d migrations ]; then \
+    if command -v sqlx >/dev/null 2>&1; then source scripts/local-db-env.sh && just db-migrate-down; \
     else echo "Skipping db migrate down: sqlx CLI not installed"; fi \
   ; else echo "Skipping db migrate down: migrations directory not found"; fi
 
@@ -107,8 +139,14 @@ ci-local:
   @just test
   @just perf-smoke
 
+run-server:
+  @if [ -f Cargo.toml ]; then cargo run --bin server; else echo "Skipping run-server: Cargo workspace not initialized"; fi
+
+run-server-local:
+  @if [ -f Cargo.toml ]; then source scripts/local-db-env.sh && just run-server; else echo "Skipping run-server: Cargo workspace not initialized"; fi
+
 dev-server:
-  @if [ -f Cargo.toml ]; then source scripts/dev-db-env.sh && cargo run --bin server; else echo "Skipping dev-server: Cargo workspace not initialized"; fi
+  @just run-server-local
 
 dev-web:
   @if [ -f apps/web/package.json ]; then pnpm --dir apps/web dev; \

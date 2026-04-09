@@ -14,15 +14,17 @@
 
 ## 2. 当前已启用的检查
 
-当前工作流分两层：
+当前工作流分四层：
 
 - `Core`：`just lint`、`just test`、`just openapi-check`
-- `Full`：`just db-migrate-up`、`just test-backend-db`、`just dev-server`
+- `Isolated DB`：`just db-migrate-up`、`just test-backend-db`
+- `Blackbox / Staging`：长期共享环境上的 HTTP 黑盒验证与未来前端 E2E
+- `Production`：显式迁移、启动、健康检查与回滚流程
 
 CI 对应关系：
 
 - `quality` job 对应 `Core`
-- `backend-db` job 对应 `Full`
+- `backend-db` job 对应 `Isolated DB`
 
 本地与 CI 当前共同依赖这些入口：
 
@@ -62,6 +64,7 @@ CI 对应关系：
 
 - 已经是稳定基线
 - Open API、管理端 CRUD、Draft、Release、Preview 这些主路径都已经开始用真实 PostgreSQL 测
+- 这层测试属于 `Isolated DB`，不是共享黑盒环境测试
 
 ### 2.3 OpenAPI 检查
 

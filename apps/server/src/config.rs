@@ -4,7 +4,7 @@ use std::{
 };
 
 const DEFAULT_HTTP_ADDR: &str = "0.0.0.0:8080";
-const DEFAULT_DATABASE_URL: &str = "postgres://mini_conf:secret@127.0.0.1:5432/mini_conf";
+const DEFAULT_DATABASE_URL: &str = "postgres://127.0.0.1:5432/postgres";
 const DEFAULT_STATIC_DIR: &str = "apps/web/dist";
 const DEFAULT_OPENAPI_EXPORT_PATH: &str = "docs/openapi/openapi.json";
 const DEFAULT_INIT_DB_ON_BOOT: bool = false;
@@ -13,6 +13,7 @@ const DEFAULT_INIT_DB_ON_BOOT: bool = false;
 pub enum AppEnv {
     Dev,
     Test,
+    Staging,
     Prod,
 }
 
@@ -21,6 +22,7 @@ impl AppEnv {
         match raw.trim().to_ascii_lowercase().as_str() {
             "dev" | "development" => Ok(Self::Dev),
             "test" | "testing" => Ok(Self::Test),
+            "staging" => Ok(Self::Staging),
             "prod" | "production" => Ok(Self::Prod),
             value => Err(ConfigError::invalid_env(value)),
         }
@@ -30,6 +32,7 @@ impl AppEnv {
         match self {
             Self::Dev => "dev",
             Self::Test => "test",
+            Self::Staging => "staging",
             Self::Prod => "prod",
         }
     }
@@ -105,6 +108,10 @@ impl AppConfig {
             config.openapi_export_path = PathBuf::from(value);
         }
 
+        if config.init_db_on_boot && matches!(config.app_env, AppEnv::Staging | AppEnv::Prod) {
+            return Err(ConfigError::unsupported_db_boot(config.app_env));
+        }
+
         Ok(config)
     }
 
@@ -144,6 +151,16 @@ impl ConfigError {
         Self {
             field,
             message: format!("unsupported {field} value: {value}"),
+        }
+    }
+
+    fn unsupported_db_boot(app_env: AppEnv) -> Self {
+        Self {
+            field: "INIT_DB_ON_BOOT",
+            message: format!(
+                "INIT_DB_ON_BOOT=true is only supported for APP_ENV=dev or APP_ENV=test, got {}",
+                app_env.as_str()
+            ),
         }
     }
 
@@ -204,7 +221,7 @@ mod tests {
             AppConfig {
                 app_env: AppEnv::Dev,
                 http_addr: "0.0.0.0:8080".to_owned(),
-                database_url: "postgres://mini_conf:secret@127.0.0.1:5432/mini_conf".to_owned(),
+                database_url: "postgres://127.0.0.1:5432/postgres".to_owned(),
                 init_db_on_boot: false,
                 init_admin_username: None,
                 init_admin_password: None,
@@ -225,9 +242,12 @@ mod tests {
     #[test]
     fn from_lookup_reads_all_supported_overrides() {
         let values = map_lookup(&[
-            ("APP_ENV", "prod"),
+            ("APP_ENV", "dev"),
             ("HTTP_ADDR", "127.0.0.1:9090"),
-            ("DATABASE_URL", "postgres://db.example/mini_conf"),
+            (
+                "DATABASE_URL",
+                "postgres://db.example/mini_conf_prod_candidate",
+            ),
             ("INIT_DB_ON_BOOT", "true"),
             ("STATIC_DIR", "var/web"),
             ("OPENAPI_EXPORT_PATH", "var/openapi.json"),
@@ -239,9 +259,9 @@ mod tests {
         assert_eq!(
             config,
             AppConfig {
-                app_env: AppEnv::Prod,
+                app_env: AppEnv::Dev,
                 http_addr: "127.0.0.1:9090".to_owned(),
-                database_url: "postgres://db.example/mini_conf".to_owned(),
+                database_url: "postgres://db.example/mini_conf_prod_candidate".to_owned(),
                 init_db_on_boot: true,
                 init_admin_username: None,
                 init_admin_password: None,
@@ -258,6 +278,7 @@ mod tests {
             ("development", AppEnv::Dev),
             ("test", AppEnv::Test),
             ("testing", AppEnv::Test),
+            ("staging", AppEnv::Staging),
             ("prod", AppEnv::Prod),
             ("production", AppEnv::Prod),
         ] {
@@ -274,16 +295,13 @@ mod tests {
     #[test]
     fn from_lookup_rejects_unknown_app_env() {
         let error = AppConfig::from_lookup(|key| match key {
-            "APP_ENV" => Some("staging".to_owned()),
+            "APP_ENV" => Some("qa".to_owned()),
             _ => None,
         })
         .expect_err("config should reject unknown app env");
 
         assert_eq!(error.field(), "APP_ENV");
-        assert_eq!(
-            error.to_string(),
-            "APP_ENV: unsupported APP_ENV value: staging"
-        );
+        assert_eq!(error.to_string(), "APP_ENV: unsupported APP_ENV value: qa");
     }
 
     #[test]
@@ -334,6 +352,26 @@ mod tests {
     }
 
     #[test]
+    fn from_lookup_rejects_db_boot_outside_dev_and_test() {
+        for app_env in ["staging", "prod"] {
+            let error = AppConfig::from_lookup(|key| match key {
+                "APP_ENV" => Some(app_env.to_owned()),
+                "INIT_DB_ON_BOOT" => Some("true".to_owned()),
+                _ => None,
+            })
+            .expect_err("config should reject db boot outside dev and test");
+
+            assert_eq!(error.field(), "INIT_DB_ON_BOOT");
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "INIT_DB_ON_BOOT: INIT_DB_ON_BOOT=true is only supported for APP_ENV=dev or APP_ENV=test, got {app_env}"
+                )
+            );
+        }
+    }
+
+    #[test]
     fn path_accessors_expose_configured_paths() {
         let config = AppConfig::from_lookup(|key| match key {
             "STATIC_DIR" => Some("runtime/static".to_owned()),
@@ -360,7 +398,7 @@ mod tests {
         unsafe {
             std::env::set_var("APP_ENV", "test");
             std::env::set_var("HTTP_ADDR", "127.0.0.1:7001");
-            std::env::set_var("DATABASE_URL", "postgres://override/mini_conf");
+            std::env::set_var("DATABASE_URL", "postgres://override/mini_conf_test");
             std::env::set_var("INIT_DB_ON_BOOT", "1");
             std::env::set_var("STATIC_DIR", "tmp/static");
             std::env::set_var("OPENAPI_EXPORT_PATH", "tmp/openapi.json");
@@ -383,7 +421,7 @@ mod tests {
             AppConfig {
                 app_env: AppEnv::Test,
                 http_addr: "127.0.0.1:7001".to_owned(),
-                database_url: "postgres://override/mini_conf".to_owned(),
+                database_url: "postgres://override/mini_conf_test".to_owned(),
                 init_db_on_boot: true,
                 init_admin_username: None,
                 init_admin_password: None,

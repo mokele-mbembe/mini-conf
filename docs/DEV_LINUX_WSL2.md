@@ -38,7 +38,7 @@
 - 仓库应放在 WSL Linux 文件系统里，不要长期在 `/mnt/c/...` 下高频编译和测试。
 - WSL 不要把 `secret-tool` 或桌面 keyring 当成前置依赖。
 - 本仓库的 Rust `target/`、pnpm store、Corepack 缓存和浏览器缓存应放在仓库外。
-- 本仓库已经通过 `scripts/load-dev-env.sh` 和 `scripts/dev-db-env.sh` 支持从 `~/.config/mini-conf/dev-env.sh` 自动加载本地配置。
+- 本仓库已经通过 `scripts/load-dev-env.sh` 和 `scripts/local-db-env.sh` 支持从 `~/.config/mini-conf/dev-env.sh` 自动加载本地配置。
 
 ## 4. 已验证的初始化步骤
 
@@ -83,12 +83,14 @@ export RUSTC_WRAPPER=sccache
 export PNPM_HOME="$HOME/.local/share/pnpm"
 export PATH="$CARGO_HOME/bin:$HOME/.local/bin:$PNPM_HOME:$PATH"
 
-export MINI_CONF_DB_HOST=127.0.0.1
-export MINI_CONF_DB_PORT=5432
-export MINI_CONF_DB_NAME=mini_conf
-export MINI_CONF_DB_USER=mini_conf
-export MINI_CONF_DB_PASSWORD='replace-with-a-local-dev-password'
-export TEST_DATABASE_URL=''
+export MINI_CONF_LOCAL_DB_HOST=127.0.0.1
+export MINI_CONF_LOCAL_DB_PORT=5432
+export MINI_CONF_LOCAL_DB_NAME=mini_conf_dev
+export MINI_CONF_LOCAL_DB_USER=mini_conf
+export MINI_CONF_LOCAL_DB_PASSWORD='replace-with-a-local-dev-password'
+export MINI_CONF_LOCAL_TEST_DB_NAME=mini_conf_test
+export MINI_CONF_LOCAL_TEST_DB_USER=mini_conf
+export MINI_CONF_LOCAL_TEST_DB_PASSWORD='replace-with-a-local-dev-password'
 export INIT_DB_ON_BOOT=true
 EOF
 
@@ -97,16 +99,16 @@ chmod 600 ~/.config/mini-conf/dev-env.sh
 
 说明：
 
-- `scripts/dev-db-env.sh` 会优先读取 `MINI_CONF_DB_PASSWORD`
-- 脚本会自动 URL 编码并生成 `DATABASE_URL`
-- 如果 `TEST_DATABASE_URL` 为空，脚本会把它补成与 `DATABASE_URL` 一致
+- `scripts/local-db-env.sh` 会优先读取 `MINI_CONF_LOCAL_*`
+- local wrapper 会自动 URL 编码并生成 `DATABASE_URL` / `TEST_DATABASE_URL`
+- `TEST_DATABASE_URL` 不再从 `DATABASE_URL` 隐式补齐；如果你确实想本机共用一个库，需要显式设置 `MINI_CONF_LOCAL_TEST_USE_RUNTIME_DB=true`
 
 因此：
 
-- `just db-migrate-up`
-- `just db-migrate-down`
-- `just test-backend-db`
-- `just dev-server`
+- `just db-migrate-up-local`
+- `just db-migrate-down-local`
+- `just test-backend-db-local`
+- `just run-server-local`
 
 都不需要额外手工拼连接串。
 
@@ -310,14 +312,14 @@ just test-backend-db
 2. `~/.config/mini-conf/dev-env.sh`
 3. `~/.config/mini-conf/activate-fedora43.sh`
 
-### `scripts/dev-db-env.sh`
+### `scripts/local-db-env.sh`
 
 行为如下：
 
-- 如果 `DATABASE_URL` 未设置，就根据 `MINI_CONF_DB_*` 变量拼接
-- 如果 `MINI_CONF_DB_PASSWORD` 未设置，才尝试 `MINI_CONF_DB_PASSWORD_FILE`
+- 如果 `DATABASE_URL` 未设置，就根据 `MINI_CONF_LOCAL_DB_*` 或兼容的旧 `MINI_CONF_DB_*` 变量拼接
+- 如果 `MINI_CONF_LOCAL_DB_PASSWORD` 未设置，才尝试对应的 password file
 - 以上都没有时，才会回退到 `secret-tool`
-- `TEST_DATABASE_URL` 为空时会被补成 `DATABASE_URL`
+- `TEST_DATABASE_URL` 只会从显式测试变量生成，不会隐式补成 `DATABASE_URL`
 - `INIT_DB_ON_BOOT` 默认为 `true`
 
 ### `justfile`
@@ -327,10 +329,14 @@ just test-backend-db
 - `just db-migrate-up`
 - `just db-migrate-down`
 - `just test-backend-db`
-- `just dev-server`
+- `just run-server`
+- `just db-migrate-up-local`
+- `just db-migrate-down-local`
+- `just test-backend-db-local`
+- `just run-server-local`
 
-这些命令都会先 `source scripts/dev-db-env.sh`，所以只要 `~/.config/mini-conf/dev-env.sh` 正确，就不需要每次手工导出连接串。
-Rust 测试代码本身只读取 `TEST_DATABASE_URL`；由脚本负责在 `Full` 环境里把它补齐。
+portable 命令不会自动加载本机环境文件；local wrapper 才会先 `source scripts/local-db-env.sh`。
+Rust 测试代码本身只读取 `TEST_DATABASE_URL`；如果你想本机测试库复用运行库，需要显式设置 `MINI_CONF_LOCAL_TEST_USE_RUNTIME_DB=true`。
 
 ## 6. 这次实际搭建里踩到的坑
 

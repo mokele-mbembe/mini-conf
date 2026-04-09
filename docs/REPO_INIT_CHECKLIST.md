@@ -68,11 +68,14 @@
 ### 5. 初始化数据库与迁移
 
 - 优先配置 `~/.config/mini-conf/dev-env.sh`，不要把 WSL 初始化绑定到 `secret-tool`
-- 让 `scripts/dev-db-env.sh` 自动生成 `DATABASE_URL`，并在需要时补齐 `TEST_DATABASE_URL`
+- 优先为每个场景单独建库，不把数据库名固定成产品名
+- 运行时与迁移使用显式 `DATABASE_URL`
+- 数据库集成测试使用显式 `TEST_DATABASE_URL`
+- 本机开发便利变量交给 `scripts/local-db-env.sh` 解析
 - 初始化 PostgreSQL 16 数据目录
 - 把默认 `pg_hba.conf` 的 `peer` / `ident` 改成 `scram-sha-256`
-- 创建 `mini_conf` 用户和 `mini_conf` 数据库
-- 跑 `just db-migrate-up`
+- 创建应用用户与场景化数据库，例如 `mini_conf_dev` 或 `mini_conf_ci`
+- 跑 `just db-migrate-up` 或 `just db-migrate-up-local`
 
 参考文档：
 
@@ -117,7 +120,7 @@
 - `just test`
 - `just openapi-check`
 
-再补 `Full`：
+再补 `Isolated DB`：
 
 - `just db-migrate-up`
 - `just test-backend-db`
@@ -136,7 +139,7 @@
 ### 9. 验证 CI
 
 - 确认 GitHub Actions 工作流语法正确
-- 确认本地 `Core` 和 `Full` 命令都可跑
+- 确认本地 `Core` 和 `Isolated DB` 命令都可跑
 - 确认 GitHub `quality` 与 `backend-db` 两条工作流职责清晰
 
 ## 3. MVP 初始化完成标准

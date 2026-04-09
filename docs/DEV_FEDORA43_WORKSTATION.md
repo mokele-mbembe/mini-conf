@@ -17,7 +17,7 @@
 
 - 系统依赖里补装 `openssl`，不要只保留 `openssl-devel`
 - 把 `~/.config/mini-conf/dev-env.sh` 自动加载片段补进 `~/.bashrc`
-- 如果你原来只依赖 `secret-tool` 存数据库密码，现在也可以直接把 `MINI_CONF_DB_*` 写进 `dev-env.sh`，让 Fedora 和 WSL 的行为对齐
+- 如果你原来只依赖 `secret-tool` 存数据库密码，现在也可以直接把 `MINI_CONF_LOCAL_DB_*` / `MINI_CONF_LOCAL_TEST_DB_*` 写进 `dev-env.sh`，让 Fedora 和 WSL 的行为对齐
 
 ## 2. 最短执行清单
 
@@ -52,12 +52,14 @@ export PNPM_HOME="$HOME/.local/share/pnpm"
 export PATH="$CARGO_HOME/bin:$HOME/.local/bin:$PNPM_HOME:$PATH"
 
 # Optional but recommended for parity with WSL:
-# export MINI_CONF_DB_HOST=127.0.0.1
-# export MINI_CONF_DB_PORT=5432
-# export MINI_CONF_DB_NAME=mini_conf
-# export MINI_CONF_DB_USER=mini_conf
-# export MINI_CONF_DB_PASSWORD='replace-with-a-local-dev-password'
-# export TEST_DATABASE_URL=''
+# export MINI_CONF_LOCAL_DB_HOST=127.0.0.1
+# export MINI_CONF_LOCAL_DB_PORT=5432
+# export MINI_CONF_LOCAL_DB_NAME=mini_conf_dev
+# export MINI_CONF_LOCAL_DB_USER=mini_conf
+# export MINI_CONF_LOCAL_DB_PASSWORD='replace-with-a-local-dev-password'
+# export MINI_CONF_LOCAL_TEST_DB_NAME=mini_conf_test
+# export MINI_CONF_LOCAL_TEST_DB_USER=mini_conf
+# export MINI_CONF_LOCAL_TEST_DB_PASSWORD='replace-with-a-local-dev-password'
 # export INIT_DB_ON_BOOT=true
 EOF
 source "${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/dev-env.sh"
@@ -277,12 +279,14 @@ export PNPM_HOME="$HOME/.local/share/pnpm"
 export PATH="$CARGO_HOME/bin:$HOME/.local/bin:$PNPM_HOME:$PATH"
 
 # Optional but recommended for parity with WSL:
-# export MINI_CONF_DB_HOST=127.0.0.1
-# export MINI_CONF_DB_PORT=5432
-# export MINI_CONF_DB_NAME=mini_conf
-# export MINI_CONF_DB_USER=mini_conf
-# export MINI_CONF_DB_PASSWORD='replace-with-a-local-dev-password'
-# export TEST_DATABASE_URL=''
+# export MINI_CONF_LOCAL_DB_HOST=127.0.0.1
+# export MINI_CONF_LOCAL_DB_PORT=5432
+# export MINI_CONF_LOCAL_DB_NAME=mini_conf_dev
+# export MINI_CONF_LOCAL_DB_USER=mini_conf
+# export MINI_CONF_LOCAL_DB_PASSWORD='replace-with-a-local-dev-password'
+# export MINI_CONF_LOCAL_TEST_DB_NAME=mini_conf_test
+# export MINI_CONF_LOCAL_TEST_DB_USER=mini_conf
+# export MINI_CONF_LOCAL_TEST_DB_PASSWORD='replace-with-a-local-dev-password'
 # export INIT_DB_ON_BOOT=true
 EOF
 ```
@@ -501,7 +505,7 @@ rm -rf /var/cache/codex/shared/sccache/*
 
 `mini-conf` 规划里明确是 PostgreSQL 16+。Fedora 43 已提供 `postgresql16` / `postgresql16-server` 包。
 
-如果你希望和 WSL 保持完全一致，可以直接把 `MINI_CONF_DB_*` 写进 `dev-env.sh`；当前仓库的 `scripts/dev-db-env.sh` 已经支持这种方式。
+如果你希望和 WSL 保持完全一致，可以直接把 `MINI_CONF_LOCAL_DB_*` / `MINI_CONF_LOCAL_TEST_DB_*` 写进 `dev-env.sh`；当前仓库的 `scripts/local-db-env.sh` 已经支持这种方式。
 
 如果你更希望数据库密码不写进文档或 shell 历史，再把密码存进 GNOME Keyring。
 
@@ -573,7 +577,7 @@ psql -h 127.0.0.1 -p 5432 -U mini_conf -d mini_conf \
 
 - 这里的 `postgresql-setup` / `postgresql` service 用法是基于 Fedora 官方 PostgreSQL 快速开始和 Fedora 43 的 PostgreSQL 16 包命名推断出来的
 - 如果你使用随机强密码，不要把明文直接塞进 `postgres://...` URI 里做 CLI 验证；密码里可能含有 URL 保留字符，`psql` 会解析失败
-- 只要 `MINI_CONF_DB_PASSWORD` 已经在 `dev-env.sh` 里设置好，`just db-migrate-up`、`just test-backend-db` 和 Git hooks 都不再依赖 `secret-tool`
+- 只要 `MINI_CONF_LOCAL_DB_PASSWORD` 已经在 `dev-env.sh` 里设置好，`just db-migrate-up-local`、`just test-backend-db-local` 和 Git hooks 都不再依赖 `secret-tool`
 - 如果你的机器提示 unit 名不对，先执行下面这条确认本机实际服务名：
 
 ```bash
@@ -711,7 +715,7 @@ source "${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/dev-env.sh"
 
 如果这些都正常，说明 Fedora 43 的 `mini-conf` 开发底座已经够用了。
 
-如果你已经把 `MINI_CONF_DB_PASSWORD` 写进 `dev-env.sh`，上面的 `psql` 验证也可以改成先 `source "${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/dev-env.sh"`，再用 `PGPASSWORD="$MINI_CONF_DB_PASSWORD"` 连接。
+如果你已经把 `MINI_CONF_LOCAL_DB_PASSWORD` 写进 `dev-env.sh`，上面的 `psql` 验证也可以改成先 `source "${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/dev-env.sh"`，再用 `PGPASSWORD="$MINI_CONF_LOCAL_DB_PASSWORD"` 连接。
 
 ## 18. 参考来源
 

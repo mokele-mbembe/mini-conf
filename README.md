@@ -151,8 +151,10 @@ MVP 默认采用 `DeploymentInstance` 作为配置组织模型，因为它最贴
 当前约定：
 
 - 所有 Linux 协作者至少满足 `Core` 工作流：`just lint`、`just test`、`just openapi-check`
-- 承担数据库联调和真实 PostgreSQL 集成测试的环境满足 `Full` 工作流：`just db-migrate-up`、`just test-backend-db`、`just dev-server`
+- 承担数据库主路径开发与 PR 级 PostgreSQL 集成测试的环境满足 `Isolated DB` 工作流：`just db-migrate-up`、`just test-backend-db`
+- 共享黑盒环境与生产部署额外属于 `Blackbox / Staging` 和 `Production` 工作流，不复用开发机脚本
 - `~/.config/mini-conf/dev-env.sh` 是唯一推荐的本机环境入口
+- 默认采用 `database-per-instance`，数据库名由部署者按场景自定义；允许同一 PostgreSQL server 承载多套独立 database
 - `secret-tool` 只是兼容选项，不是标准前提
 
 ## 测试约定
@@ -161,7 +163,9 @@ MVP 默认采用 `DeploymentInstance` 作为配置组织模型，因为它最贴
 
 - 新增数据库集成测试时，使用 `test_database_url(...)` 解析测试连接串，不要在测试文件里重复读取环境变量
 - Rust 测试代码只读取 `TEST_DATABASE_URL`
-- `scripts/dev-db-env.sh` 负责在 `Full` 环境里统一生成 `DATABASE_URL` 与 `TEST_DATABASE_URL`
+- portable 运行时和迁移命令只读取显式 `DATABASE_URL`
+- 本机 local wrapper 通过 [`scripts/local-db-env.sh`](./scripts/local-db-env.sh) 解析开发机便利变量
+- `TEST_DATABASE_URL` 不再由 `DATABASE_URL` 隐式补齐
 - 需要隔离 schema 时，使用 `unique_schema_name(...)`
 - 需要按 schema 建连接时，使用 `with_search_path(...)`
 
@@ -184,6 +188,7 @@ MVP 默认采用 `DeploymentInstance` 作为配置组织模型，因为它最贴
 - 提交前 Review 清单：[docs/SUBMISSION_CHECKLIST.md](./docs/SUBMISSION_CHECKLIST.md)
 - 首次提交说明草案：[docs/INITIAL_PR_DRAFT.md](./docs/INITIAL_PR_DRAFT.md)
 - Linux / WSL2 开发环境实录：[docs/DEV_LINUX_WSL2.md](./docs/DEV_LINUX_WSL2.md)
+- 2026-04-09 工作流迁移说明：[docs/WORKFLOW_MIGRATION_2026-04-09.md](./docs/WORKFLOW_MIGRATION_2026-04-09.md)
 
 ## 当前状态
 

@@ -150,16 +150,18 @@ OPENAPI_EXPORT_PATH=docs/openapi/openapi.json
 当前仓库约定：
 
 - `Core` 工作流：`just lint`、`just test`、`just openapi-check`
-- `Full` 工作流：`just dev-server`、`just db-migrate-up`、`just db-migrate-down`、`just test-backend-db`
+- `Isolated DB` 工作流：`just db-migrate-up`、`just db-migrate-down`、`just test-backend-db`
+- 本机 local wrapper：`just run-server-local`、`just db-migrate-up-local`、`just db-migrate-down-local`、`just test-backend-db-local`
 
 统一规范见 [docs/STANDARD_WORKFLOW.md](./STANDARD_WORKFLOW.md)。
 
 数据库命令入口约定：
 
-- `scripts/dev-db-env.sh` 负责生成 `DATABASE_URL`
-- 如果 `TEST_DATABASE_URL` 为空字符串，脚本会把它补成与 `DATABASE_URL` 一致
+- portable 命令只读取显式 `DATABASE_URL` / `TEST_DATABASE_URL`
+- `scripts/local-db-env.sh` 只负责本机 local wrapper 的 DSN 解析
+- `scripts/dev-db-env.sh` 仅保留为兼容壳
 - Rust 数据库测试代码本身只读取 `TEST_DATABASE_URL`
-- 如果脚本无法从本机环境文件取到密码，才会尝试 `secret-tool lookup service mini-conf env dev role app-db user mini_conf`
+- 数据库名不绑定产品名，推荐按场景显式命名，例如 `mini_conf_dev`、`mini_conf_ci`、`mini_conf_staging`
 
 数据库集成测试约定：
 
