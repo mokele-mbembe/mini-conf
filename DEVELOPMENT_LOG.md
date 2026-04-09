@@ -10,6 +10,23 @@
 - 切换机器继续开发
 - 新开会话时快速恢复上下文
 
+## 1.1 最近完成
+
+2026-04-10 本轮已完成后端权限与审计主线收口：
+
+- 新增 `project_members` 与 `audit_logs` 迁移，并补历史项目给活动用户 `admin` 的成员回填
+- 管理端资源访问已从“登录即管理员”切换为项目成员角色模型
+- 新增 `GET /api/projects/{id}/members`、`POST /api/projects/{id}/members`、`PUT /api/projects/{id}/members/{memberId}`、`DELETE /api/projects/{id}/members/{memberId}`
+- 新增 `GET /api/deployment-sync-records` 与 `GET /api/audit-logs`
+- 现有项目、配置文件、部署实例、Draft、Release、token reset、登录流程已补审计日志
+- OpenAPI、数据库文档、鉴权文档、产品澄清文档已经同步
+
+本轮本地验证结果：
+
+- `cargo test --workspace` 通过
+- `just lint-backend` 通过
+- `docs/openapi/openapi.json` 已重新导出
+
 ## 2. 当前进度 Checklist
 
 ### 2.1 基础设施与工程基线
@@ -45,6 +62,7 @@
 ### 2.4 管理端资源
 
 - [x] `projects` CRUD
+- [x] `project_members` CRUD
 - [x] `config-files` CRUD
 - [x] `config_files.is_required`
 - [x] `deployment-instances` CRUD
@@ -57,6 +75,8 @@
 - [x] `GET /api/releases/:id`
 - [x] `GET /api/releases/:id/diff`
 - [x] `POST /api/deployment-instances/:id/token/reset`
+- [x] `GET /api/deployment-sync-records`
+- [x] `GET /api/audit-logs`
 
 ### 2.5 产品规则收口
 
@@ -69,6 +89,10 @@
 - [x] preview-bundle 返回业务预览明细和 consumer 侧整包预览
 - [x] `release diff` 固定比较上一版并返回文本级摘要
 - [x] token reset 原地轮换默认凭证并立即切换 open API 鉴权
+- [x] 项目仅对成员可见
+- [x] 项目创建者自动成为项目 `admin`
+- [x] 写操作和关键认证事件写入 `audit_logs`
+- [x] 管理端资源访问收口到项目成员角色
 
 ### 2.6 测试基线
 
@@ -85,14 +109,14 @@
 
 ### 3.1 后端主路径仍缺的模块
 
-- [ ] `project_members` 表与管理端 API
-- [ ] 项目级权限校验从“管理员会话”收口到成员模型
-- [ ] `audit_logs`
+- [x] `project_members` 表与管理端 API
+- [x] 项目级权限校验从“管理员会话”收口到成员模型
+- [x] `audit_logs`
 
 ### 3.2 后端补强项
 
-- [ ] 管理端查看 deployment sync records
-- [ ] 更完整的 OpenAPI 文档说明与示例
+- [x] 管理端查看 deployment sync records
+- [x] 更完整的 OpenAPI 文档说明与示例
 - [ ] `sqlx-check` 恢复为强制检查的时机评估
 
 ### 3.3 前端未来主路径
@@ -107,30 +131,19 @@
 - [ ] preview-bundle 预览页
 - [ ] release history / diff 页
 
-## 4. 下一个会话推荐起手工作
+## 4. 当前阶段剩余工作
 
 推荐顺序：
 
-1. `project_members`
-2. 项目级权限收口
-3. `audit_logs`
-4. 管理端查看 deployment sync records
+1. 前端管理台主路径
+2. 覆盖率基线
+3. `sqlx-check` 恢复为强制检查的时机评估
+4. 更完整的 E2E 回归
 
 理由：
 
-- `release diff` 与 `token/reset` 已完成，下一阶段应该转入权限模型主线
-- `project_members` 会直接决定后续项目级权限收口的实现边界
-- `audit_logs` 更适合放在成员与权限主链路明确之后统一补齐
-
-### 当前建议的第一个开发任务
-
-优先从 `project_members` 开始。
-
-建议做法：
-
-- 先补一篇产品澄清文档，锁定首版角色与管理边界
-- 再补表结构、接口响应模型与 OpenAPI
-- 最后写真实 PostgreSQL 集成测试，覆盖成员增删改查与权限边界
+- 后端主路径、项目级权限、审计日志和管理端同步记录查询已经完成
+- 当前更大的风险已从“后端功能缺失”转向“前端接线、覆盖率和持续质量基线”
 
 ## 5. 下一个会话建议先跑的命令
 
@@ -165,6 +178,7 @@ just test-backend-db
 - [产品澄清目录](./docs/product-qa/README.md)
 - [必选配置与预览澄清](./docs/product-qa/0002-required-configs-and-preview.md)
 - [部署实例 Token 重置澄清](./docs/product-qa/0004-token-reset.md)
+- [项目成员、项目级权限与审计日志澄清](./docs/product-qa/0005-project-members-permissions-audit.md)
 - [前端 MVP 蓝图](./docs/FRONTEND_MVP_BLUEPRINT.md)
 
 ### 与环境相关
@@ -190,5 +204,5 @@ just test-backend-db
 如果下一个会话需要快速恢复上下文，可以直接从这里开始：
 
 ```text
-先阅读 DEVELOPMENT_LOG.md、docs/QUALITY_CHECK_PLAN.md、docs/product-qa/0004-token-reset.md，然后继续做 project_members，并先补文档再改代码。
+先阅读 DEVELOPMENT_LOG.md、docs/QUALITY_CHECK_PLAN.md、docs/product-qa/0005-project-members-permissions-audit.md，然后转入前端管理台主路径或补覆盖率与 E2E。
 ```

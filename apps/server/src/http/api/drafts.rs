@@ -1,8 +1,13 @@
-use crate::{auth::authenticate_admin_session, error::ApiError, state::AppState};
+use crate::{
+    audit::{AuditLogEntry, write_audit_log},
+    authorization::{ProjectRole, authenticate_user, require_project_role},
+    error::ApiError,
+    state::AppState,
+};
 use axum::{
     Json, Router,
     extract::{Path, State, rejection::JsonRejection},
-    http::{HeaderMap, header},
+    http::HeaderMap,
     routing::get,
 };
 use schema::draft::{DraftCloneResponse, DraftResponse};
@@ -94,15 +99,17 @@ pub(crate) async fn get_draft(
         ));
     };
 
-    authenticate_admin_session(
+    let auth = authenticate_user(pool, &headers).await?;
+    let context = load_draft_context(pool, deployment_id, config_file_id).await?;
+    require_project_role(
         pool,
-        headers
-            .get(header::COOKIE)
-            .and_then(|value| value.to_str().ok()),
+        auth.user_id,
+        context.project_id,
+        ProjectRole::Editor,
+        "deployment_instance_not_found",
+        "deployment instance not found",
     )
     .await?;
-
-    load_draft_context(pool, deployment_id, config_file_id).await?;
 
     let row = sqlx::query(
         r#"
@@ -170,17 +177,21 @@ pub(crate) async fn put_draft(
         ));
     };
 
-    let auth = authenticate_admin_session(
-        pool,
-        headers
-            .get(header::COOKIE)
-            .and_then(|value| value.to_str().ok()),
-    )
-    .await?;
+    let auth = authenticate_user(pool, &headers).await?;
 
     let context = load_draft_context(pool, deployment_id, config_file_id).await?;
+    require_project_role(
+        pool,
+        auth.user_id,
+        context.project_id,
+        ProjectRole::Editor,
+        "deployment_instance_not_found",
+        "deployment instance not found",
+    )
+    .await?;
     validate_draft_payload(&payload, &context)?;
 
+    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
     let row = if let Some(existing) = sqlx::query(
         r#"
         SELECT version
@@ -192,7 +203,7 @@ pub(crate) async fn put_draft(
     )
     .bind(deployment_id)
     .bind(config_file_id)
-    .fetch_optional(pool)
+    .fetch_optional(&mut *tx)
     .await
     .map_err(|_| ApiError::internal())?
     {
@@ -234,7 +245,7 @@ pub(crate) async fn put_draft(
         .bind(&payload.format)
         .bind(context.schema_version)
         .bind(auth.user_id)
-        .fetch_one(pool)
+        .fetch_one(&mut *tx)
         .await
         .map_err(|_| ApiError::internal())?
     } else {
@@ -277,12 +288,31 @@ pub(crate) async fn put_draft(
         .bind(&payload.format)
         .bind(context.schema_version)
         .bind(auth.user_id)
-        .fetch_one(pool)
+        .fetch_one(&mut *tx)
         .await
         .map_err(|_| ApiError::internal())?
     };
 
-    Ok(Json(map_draft_row(row)))
+    let summary = map_draft_row(row);
+    write_audit_log(
+        &mut *tx,
+        AuditLogEntry {
+            project_id: Some(context.project_id),
+            user_id: Some(auth.user_id),
+            action: "draft.saved",
+            resource_type: "draft",
+            resource_id: format!("{deployment_id}:{config_file_id}"),
+            detail: Some(serde_json::json!({
+                "deployment_instance_id": deployment_id,
+                "config_file_id": config_file_id,
+                "changed_fields": ["format", "base_version"]
+            })),
+        },
+    )
+    .await?;
+    tx.commit().await.map_err(|_| ApiError::internal())?;
+
+    Ok(Json(summary))
 }
 
 #[utoipa::path(
@@ -325,15 +355,18 @@ pub(crate) async fn clone_draft(
         ));
     };
 
-    let auth = authenticate_admin_session(
-        pool,
-        headers
-            .get(header::COOKIE)
-            .and_then(|value| value.to_str().ok()),
-    )
-    .await?;
+    let auth = authenticate_user(pool, &headers).await?;
 
     let context = load_draft_context(pool, target_deployment_id, config_file_id).await?;
+    require_project_role(
+        pool,
+        auth.user_id,
+        context.project_id,
+        ProjectRole::Editor,
+        "deployment_instance_not_found",
+        "deployment instance not found",
+    )
+    .await?;
     ensure_same_project(
         pool,
         context.project_id,
@@ -351,8 +384,9 @@ pub(crate) async fn clone_draft(
     .await?;
     validate_cloned_draft(&context, &source)?;
 
+    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
     let row = upsert_draft(
-        pool,
+        &mut tx,
         target_deployment_id,
         config_file_id,
         &context,
@@ -360,6 +394,24 @@ pub(crate) async fn clone_draft(
         auth.user_id,
     )
     .await?;
+    write_audit_log(
+        &mut *tx,
+        AuditLogEntry {
+            project_id: Some(context.project_id),
+            user_id: Some(auth.user_id),
+            action: "draft.cloned",
+            resource_type: "draft",
+            resource_id: format!("{target_deployment_id}:{config_file_id}"),
+            detail: Some(serde_json::json!({
+                "deployment_instance_id": target_deployment_id,
+                "config_file_id": config_file_id,
+                "source_deployment_instance_id": payload.source_deployment_instance_id,
+                "source_kind": payload.source_kind,
+            })),
+        },
+    )
+    .await?;
+    tx.commit().await.map_err(|_| ApiError::internal())?;
 
     Ok(Json(DraftCloneResponse {
         draft: map_draft_row(row),
@@ -545,7 +597,7 @@ async fn load_clone_source(
 }
 
 async fn upsert_draft(
-    pool: &sqlx::PgPool,
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     deployment_id: i64,
     config_file_id: i64,
     context: &DraftContext,
@@ -563,7 +615,7 @@ async fn upsert_draft(
     )
     .bind(deployment_id)
     .bind(config_file_id)
-    .fetch_optional(pool)
+    .fetch_optional(&mut **tx)
     .await
     .map_err(|_| ApiError::internal())?
     {
@@ -598,7 +650,7 @@ async fn upsert_draft(
         .bind(source.schema_version.clone().or_else(|| context.schema_version.clone()))
         .bind(existing_version + 1)
         .bind(editor_user_id)
-        .fetch_one(pool)
+        .fetch_one(&mut **tx)
         .await
         .map_err(|_| ApiError::internal())
     } else {
@@ -634,7 +686,7 @@ async fn upsert_draft(
         .bind(&source.format)
         .bind(source.schema_version.clone().or_else(|| context.schema_version.clone()))
         .bind(editor_user_id)
-        .fetch_one(pool)
+        .fetch_one(&mut **tx)
         .await
         .map_err(|_| ApiError::internal())
     }

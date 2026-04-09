@@ -1,6 +1,10 @@
 use crate::{error::ErrorResponse, state::AppState};
 use axum::Router;
 use schema::{
+    audit::{
+        AuditLogListResponse, AuditLogSummary, DeploymentSyncRecordListResponse,
+        DeploymentSyncRecordSummary,
+    },
     auth::{AuthSessionResponse, AuthUser},
     config_file::{ConfigFileListResponse, ConfigFileSummary},
     deployment_instance::{
@@ -13,6 +17,7 @@ use schema::{
         ConfigBundleResponse, DeploymentSyncResponse, ReleaseContentResponse, ResolveConfigResponse,
     },
     project::{ProjectListResponse, ProjectSummary},
+    project_member::{ProjectMemberListResponse, ProjectMemberSummary},
     release::{
         ReleaseDetailResponse, ReleaseDiffResponse, ReleaseDiffSummary, ReleaseListResponse,
         ReleaseSummary,
@@ -42,6 +47,7 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
         crate::http::api::auth::login,
         crate::http::api::auth::logout,
         crate::http::api::auth::me,
+        crate::http::api::audit_logs::list_audit_logs,
         crate::http::api::config_files::list_config_files,
         crate::http::api::config_files::create_config_file,
         crate::http::api::config_files::get_config_file,
@@ -53,9 +59,14 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
         crate::http::api::deployment_instances::clone_deployment_instance,
         crate::http::api::deployment_instances::preview_deployment_bundle,
         crate::http::api::deployment_instances::reset_deployment_token,
+        crate::http::api::deployment_sync_records::list_deployment_sync_records,
         crate::http::api::drafts::get_draft,
         crate::http::api::drafts::put_draft,
         crate::http::api::drafts::clone_draft,
+        crate::http::api::project_members::list_project_members,
+        crate::http::api::project_members::create_project_member,
+        crate::http::api::project_members::update_project_member,
+        crate::http::api::project_members::delete_project_member,
         crate::http::api::projects::list_projects,
         crate::http::api::projects::create_project,
         crate::http::api::projects::get_project,
@@ -75,8 +86,12 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
             ErrorResponse,
             AuthSessionResponse,
             AuthUser,
+            AuditLogSummary,
+            AuditLogListResponse,
             ConfigFileSummary,
             ConfigFileListResponse,
+            DeploymentSyncRecordSummary,
+            DeploymentSyncRecordListResponse,
             DraftResponse,
             DraftCloneResponse,
             DeploymentInstanceSummary,
@@ -84,6 +99,8 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
             DeploymentBundlePreviewResponse,
             DeploymentTokenResetResponse,
             HealthzResponse,
+            ProjectMemberSummary,
+            ProjectMemberListResponse,
             ResolveConfigResponse,
             ReleaseContentResponse,
             ReleaseSummary,
@@ -103,10 +120,14 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
             CloneDraftRequestBody,
             UpdateDeploymentInstanceRequestBody,
             UpdateConfigFileRequestBody,
+            CreateProjectMemberRequestBody,
             CreateProjectRequestBody,
             UpdateProjectRequestBody,
+            UpdateProjectMemberRequestBody,
             PublishReleaseRequestBody,
+            ListAuditLogsParams,
             ListConfigFilesParams,
+            ListDeploymentSyncRecordsParams,
             ListDeploymentInstancesParams,
             ListReleasesParams,
             ResolveConfigParams,
@@ -241,6 +262,19 @@ pub struct UpdateProjectRequestBody {
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
+#[schema(example = create_project_member_request_example)]
+pub struct CreateProjectMemberRequestBody {
+    pub username: String,
+    pub role: String,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
+#[schema(example = update_project_member_request_example)]
+pub struct UpdateProjectMemberRequestBody {
+    pub role: String,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
 pub struct PublishReleaseRequestBody {
     pub project_id: i64,
     pub deployment_instance_id: i64,
@@ -264,10 +298,30 @@ pub struct ListDeploymentInstancesParams {
 
 #[derive(Debug, IntoParams, ToSchema)]
 #[into_params(parameter_in = Query)]
+pub struct ListDeploymentSyncRecordsParams {
+    pub project_id: Option<i64>,
+    pub deployment_instance_id: Option<i64>,
+    pub config_file_id: Option<i64>,
+    pub process_key: Option<String>,
+    pub action: Option<String>,
+    pub status: Option<String>,
+}
+
+#[derive(Debug, IntoParams, ToSchema)]
+#[into_params(parameter_in = Query)]
 pub struct ListReleasesParams {
     pub project_id: Option<i64>,
     pub deployment_instance_id: Option<i64>,
     pub config_file_id: Option<i64>,
+}
+
+#[derive(Debug, IntoParams, ToSchema)]
+#[into_params(parameter_in = Query)]
+pub struct ListAuditLogsParams {
+    pub project_id: Option<i64>,
+    pub user_id: Option<i64>,
+    pub action: Option<String>,
+    pub resource_type: Option<String>,
 }
 
 #[derive(Debug, IntoParams, ToSchema)]
@@ -313,6 +367,19 @@ pub struct HeartbeatRequestBody {
     #[schema(value_type = Object, nullable = true)]
     pub metadata: Option<serde_json::Value>,
     pub reported_at: Option<String>,
+}
+
+fn create_project_member_request_example() -> serde_json::Value {
+    serde_json::json!({
+        "username": "alice",
+        "role": "viewer"
+    })
+}
+
+fn update_project_member_request_example() -> serde_json::Value {
+    serde_json::json!({
+        "role": "admin"
+    })
 }
 
 pub fn document() -> OpenApiDocument {

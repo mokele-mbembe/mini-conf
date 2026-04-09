@@ -113,6 +113,8 @@ token 存储建议：
 
 可以：
 
+- 查看项目
+- 修改项目
 - 管理项目成员
 - 管理配置文件
 - 管理部署实例
@@ -128,12 +130,16 @@ token 存储建议：
 
 - 查看项目、配置文件、部署实例
 - 编辑 Draft
+- 预览实例整包配置
 - 发布 Release
 - 查看同步记录
 
 不可以：
 
+- 修改项目
 - 管理项目成员
+- 管理配置文件
+- 管理部署实例
 - 重置高风险凭证
 
 ### viewer
@@ -145,6 +151,7 @@ token 存储建议：
 不可以：
 
 - 编辑 Draft
+- 预览实例整包配置
 - 发布 Release
 - 重置 token
 
@@ -159,6 +166,7 @@ token 存储建议：
 
 - 这个管理员主要用于系统初始化和创建首批项目
 - 日常业务权限仍以项目级成员关系为主
+- 已有历史项目在引入 `project_members` 时，会回填给活动用户 `admin` 作为项目 `admin`
 
 ## 9. 审计日志要求
 
@@ -171,6 +179,7 @@ token 存储建议：
 - 配置文件创建和修改
 - 部署实例创建、修改和克隆
 - Draft 保存
+- Draft 克隆
 - Release 发布
 - 部署实例 token 重置
 
@@ -178,6 +187,7 @@ token 存储建议：
 
 - 审计日志和 tracing 日志不得记录敏感配置明文
 - 如需记录配置差异，应记录脱敏后的摘要或字段路径
+- `detail` 只允许记录安全元数据，例如 `project_id`、`deployment_instance_id`、`config_file_id`、`revision`、`username`、`role`、`changed_fields`、`source_kind`、`token_preview`
 
 ## 10. 开放接口安全要求
 

@@ -1,15 +1,14 @@
 use crate::{
-    auth::{
-        authenticate_admin_session, deployment_token_preview, generate_deployment_token,
-        hash_bearer_token,
-    },
+    audit::{AuditLogEntry, write_audit_log},
+    auth::{deployment_token_preview, generate_deployment_token, hash_bearer_token},
+    authorization::{ProjectRole, authenticate_user, require_project_role},
     error::ApiError,
     state::AppState,
 };
 use axum::{
     Json, Router,
     extract::{Path, Query, State, rejection::JsonRejection},
-    http::{HeaderMap, StatusCode, header},
+    http::{HeaderMap, StatusCode},
     routing::{get, post},
 };
 use schema::{
@@ -154,33 +153,31 @@ pub(crate) async fn list_deployment_instances(
         ));
     };
 
-    authenticate_admin_session(
-        pool,
-        headers
-            .get(header::COOKIE)
-            .and_then(|value| value.to_str().ok()),
-    )
-    .await?;
+    let auth = authenticate_user(pool, &headers).await?;
 
     let rows = sqlx::query(
         r#"
         SELECT
-            id,
-            project_id,
-            environment,
-            deployment_key,
-            name,
-            description,
-            is_template,
-            template_source_id,
-            status
-        FROM deployment_instances
-        WHERE ($1::bigint IS NULL OR project_id = $1)
-          AND ($2::varchar IS NULL OR environment = $2)
-          AND ($3::varchar IS NULL OR status = $3)
-        ORDER BY project_id ASC, environment ASC, deployment_key ASC, id ASC
+            di.id,
+            di.project_id,
+            di.environment,
+            di.deployment_key,
+            di.name,
+            di.description,
+            di.is_template,
+            di.template_source_id,
+            di.status
+        FROM deployment_instances di
+        JOIN project_members pm
+          ON pm.project_id = di.project_id
+         AND pm.user_id = $1
+        WHERE ($2::bigint IS NULL OR di.project_id = $2)
+          AND ($3::varchar IS NULL OR di.environment = $3)
+          AND ($4::varchar IS NULL OR di.status = $4)
+        ORDER BY di.project_id ASC, di.environment ASC, di.deployment_key ASC, di.id ASC
         "#,
     )
+    .bind(auth.user_id)
     .bind(query.project_id)
     .bind(normalize_optional(query.environment))
     .bind(normalize_optional(query.status))
@@ -227,14 +224,18 @@ pub(crate) async fn create_deployment_instance(
         ));
     };
 
-    authenticate_admin_session(
+    let auth = authenticate_user(pool, &headers).await?;
+    require_project_role(
         pool,
-        headers
-            .get(header::COOKIE)
-            .and_then(|value| value.to_str().ok()),
+        auth.user_id,
+        payload.project_id,
+        ProjectRole::Admin,
+        "project_not_found",
+        "project not found",
     )
     .await?;
 
+    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
     let row = sqlx::query(
         r#"
         INSERT INTO deployment_instances (
@@ -265,11 +266,29 @@ pub(crate) async fn create_deployment_instance(
     .bind(payload.name)
     .bind(payload.description)
     .bind(payload.is_template)
-    .fetch_one(pool)
+    .fetch_one(&mut *tx)
     .await
     .map_err(map_deployment_write_error)?;
 
-    Ok((StatusCode::CREATED, Json(map_deployment_row(row))))
+    let summary = map_deployment_row(row);
+    write_audit_log(
+        &mut *tx,
+        AuditLogEntry {
+            project_id: Some(summary.project_id),
+            user_id: Some(auth.user_id),
+            action: "deployment_instance.created",
+            resource_type: "deployment_instance",
+            resource_id: summary.id.to_string(),
+            detail: Some(serde_json::json!({
+                "deployment_instance_id": summary.id,
+                "changed_fields": ["environment", "deployment_key", "name", "description", "is_template"]
+            })),
+        },
+    )
+    .await?;
+    tx.commit().await.map_err(|_| ApiError::internal())?;
+
+    Ok((StatusCode::CREATED, Json(summary)))
 }
 
 #[utoipa::path(
@@ -302,13 +321,7 @@ pub(crate) async fn get_deployment_instance(
         ));
     };
 
-    authenticate_admin_session(
-        pool,
-        headers
-            .get(header::COOKIE)
-            .and_then(|value| value.to_str().ok()),
-    )
-    .await?;
+    let auth = authenticate_user(pool, &headers).await?;
 
     let row = sqlx::query(
         r#"
@@ -322,12 +335,16 @@ pub(crate) async fn get_deployment_instance(
             is_template,
             template_source_id,
             status
-        FROM deployment_instances
-        WHERE id = $1
+        FROM deployment_instances di
+        JOIN project_members pm
+          ON pm.project_id = di.project_id
+         AND pm.user_id = $2
+        WHERE di.id = $1
         LIMIT 1
         "#,
     )
     .bind(id)
+    .bind(auth.user_id)
     .fetch_optional(pool)
     .await
     .map_err(|_| ApiError::internal())?
@@ -379,14 +396,47 @@ pub(crate) async fn update_deployment_instance(
         ));
     };
 
-    authenticate_admin_session(
+    let auth = authenticate_user(pool, &headers).await?;
+    let existing_project_id = sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT project_id
+        FROM deployment_instances
+        WHERE id = $1
+        LIMIT 1
+        "#,
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| ApiError::internal())?
+    .ok_or_else(|| {
+        ApiError::not_found_with(
+            "deployment_instance_not_found",
+            "deployment instance not found",
+        )
+    })?;
+    require_project_role(
         pool,
-        headers
-            .get(header::COOKIE)
-            .and_then(|value| value.to_str().ok()),
+        auth.user_id,
+        existing_project_id,
+        ProjectRole::Admin,
+        "deployment_instance_not_found",
+        "deployment instance not found",
     )
     .await?;
+    if payload.project_id != existing_project_id {
+        require_project_role(
+            pool,
+            auth.user_id,
+            payload.project_id,
+            ProjectRole::Admin,
+            "project_not_found",
+            "project not found",
+        )
+        .await?;
+    }
 
+    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
     let row = sqlx::query(
         r#"
         UPDATE deployment_instances
@@ -420,7 +470,7 @@ pub(crate) async fn update_deployment_instance(
     .bind(payload.description)
     .bind(payload.is_template)
     .bind(payload.status)
-    .fetch_optional(pool)
+    .fetch_optional(&mut *tx)
     .await
     .map_err(map_deployment_write_error)?
     .ok_or_else(|| {
@@ -430,7 +480,25 @@ pub(crate) async fn update_deployment_instance(
         )
     })?;
 
-    Ok(Json(map_deployment_row(row)))
+    let summary = map_deployment_row(row);
+    write_audit_log(
+        &mut *tx,
+        AuditLogEntry {
+            project_id: Some(summary.project_id),
+            user_id: Some(auth.user_id),
+            action: "deployment_instance.updated",
+            resource_type: "deployment_instance",
+            resource_id: summary.id.to_string(),
+            detail: Some(serde_json::json!({
+                "deployment_instance_id": summary.id,
+                "changed_fields": ["environment", "deployment_key", "name", "description", "is_template", "status"]
+            })),
+        },
+    )
+    .await?;
+    tx.commit().await.map_err(|_| ApiError::internal())?;
+
+    Ok(Json(summary))
 }
 
 #[utoipa::path(
@@ -471,15 +539,18 @@ pub(crate) async fn clone_deployment_instance(
         ));
     };
 
-    let auth = authenticate_admin_session(
-        pool,
-        headers
-            .get(header::COOKIE)
-            .and_then(|value| value.to_str().ok()),
-    )
-    .await?;
+    let auth = authenticate_user(pool, &headers).await?;
 
     let template = load_template_context(pool, id).await?;
+    require_project_role(
+        pool,
+        auth.user_id,
+        template.project_id,
+        ProjectRole::Admin,
+        "deployment_instance_not_found",
+        "deployment instance not found",
+    )
+    .await?;
     if !template.is_template {
         return Err(ApiError::conflict(
             "deployment_instance_not_template",
@@ -525,6 +596,22 @@ pub(crate) async fn clone_deployment_instance(
     let cloned = map_deployment_row(row);
 
     clone_drafts_from_template(&mut tx, id, cloned.id, auth.user_id).await?;
+    write_audit_log(
+        &mut *tx,
+        AuditLogEntry {
+            project_id: Some(cloned.project_id),
+            user_id: Some(auth.user_id),
+            action: "deployment_instance.cloned",
+            resource_type: "deployment_instance",
+            resource_id: cloned.id.to_string(),
+            detail: Some(serde_json::json!({
+                "deployment_instance_id": cloned.id,
+                "source_deployment_instance_id": id,
+                "source_kind": "draft"
+            })),
+        },
+    )
+    .await?;
 
     tx.commit().await.map_err(|_| ApiError::internal())?;
 
@@ -561,15 +648,17 @@ pub(crate) async fn preview_deployment_bundle(
         ));
     };
 
-    authenticate_admin_session(
+    let context = load_preview_context(pool, id).await?;
+    let auth = authenticate_user(pool, &headers).await?;
+    require_project_role(
         pool,
-        headers
-            .get(header::COOKIE)
-            .and_then(|value| value.to_str().ok()),
+        auth.user_id,
+        context.project_id,
+        ProjectRole::Editor,
+        "deployment_instance_not_found",
+        "deployment instance not found",
     )
     .await?;
-
-    let context = load_preview_context(pool, id).await?;
     let rows = sqlx::query(
         r#"
         SELECT
@@ -733,26 +822,44 @@ pub(crate) async fn reset_deployment_token(
         ));
     };
 
-    authenticate_admin_session(
+    let auth = authenticate_user(pool, &headers).await?;
+    let project_id = load_deployment_project_id(pool, id).await?;
+    require_project_role(
         pool,
-        headers
-            .get(header::COOKIE)
-            .and_then(|value| value.to_str().ok()),
+        auth.user_id,
+        project_id,
+        ProjectRole::Admin,
+        "deployment_instance_not_found",
+        "deployment instance not found",
     )
     .await?;
-
-    ensure_deployment_exists(pool, id).await?;
 
     let token = generate_deployment_token();
     let token_hash = hash_bearer_token(&token);
     let credential_name = upsert_default_deployment_credential(pool, id, &token_hash).await?;
-
-    Ok(Json(DeploymentTokenResetResponse {
+    let response = DeploymentTokenResetResponse {
         deployment_instance_id: id,
         credential_name,
         token_preview: deployment_token_preview(&token),
         token,
-    }))
+    };
+    write_audit_log(
+        pool,
+        AuditLogEntry {
+            project_id: Some(project_id),
+            user_id: Some(auth.user_id),
+            action: "deployment_token.reset",
+            resource_type: "deployment_instance",
+            resource_id: id.to_string(),
+            detail: Some(serde_json::json!({
+                "deployment_instance_id": id,
+                "token_preview": response.token_preview,
+            })),
+        },
+    )
+    .await?;
+
+    Ok(Json(response))
 }
 
 impl CreateDeploymentInstanceRequest {
@@ -857,10 +964,10 @@ async fn load_template_context(
     })
 }
 
-async fn ensure_deployment_exists(pool: &sqlx::PgPool, id: i64) -> Result<(), ApiError> {
+async fn load_deployment_project_id(pool: &sqlx::PgPool, id: i64) -> Result<i64, ApiError> {
     sqlx::query_scalar::<_, i64>(
         r#"
-        SELECT id
+        SELECT project_id
         FROM deployment_instances
         WHERE id = $1
         LIMIT 1
@@ -875,9 +982,7 @@ async fn ensure_deployment_exists(pool: &sqlx::PgPool, id: i64) -> Result<(), Ap
             "deployment_instance_not_found",
             "deployment instance not found",
         )
-    })?;
-
-    Ok(())
+    })
 }
 
 async fn upsert_default_deployment_credential(

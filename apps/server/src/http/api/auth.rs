@@ -1,4 +1,5 @@
 use crate::{
+    audit::{AuditLogEntry, write_audit_log_best_effort},
     auth::{
         authenticate_admin_session, clear_session_cookie_header, generate_session_token,
         hash_bearer_token, revoke_admin_session, session_cookie_header, verify_password,
@@ -76,11 +77,46 @@ pub(crate) async fn login(
     .bind(&payload.username)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
-    .ok_or_else(|| ApiError::unauthorized("invalid_credentials", "Invalid username or password"))?;
+    .map_err(|_| ApiError::internal())?;
+    let Some(row) = row else {
+        write_audit_log_best_effort(
+            pool,
+            AuditLogEntry {
+                project_id: None,
+                user_id: None,
+                action: "auth.login_failed",
+                resource_type: "auth",
+                resource_id: payload.username.clone(),
+                detail: Some(serde_json::json!({
+                    "username": payload.username
+                })),
+            },
+        )
+        .await;
+        return Err(ApiError::unauthorized(
+            "invalid_credentials",
+            "Invalid username or password",
+        ));
+    };
 
     let password_hash: String = row.get("password_hash");
     if !verify_password(&payload.password, &password_hash)? {
+        let user_id: i64 = row.get("id");
+        let username: String = row.get("username");
+        write_audit_log_best_effort(
+            pool,
+            AuditLogEntry {
+                project_id: None,
+                user_id: Some(user_id),
+                action: "auth.login_failed",
+                resource_type: "auth",
+                resource_id: username.clone(),
+                detail: Some(serde_json::json!({
+                    "username": username
+                })),
+            },
+        )
+        .await;
         return Err(ApiError::unauthorized(
             "invalid_credentials",
             "Invalid username or password",
@@ -102,6 +138,20 @@ pub(crate) async fn login(
     .execute(pool)
     .await
     .map_err(|_| ApiError::internal())?;
+    write_audit_log_best_effort(
+        pool,
+        AuditLogEntry {
+            project_id: None,
+            user_id: Some(user_id),
+            action: "auth.login_success",
+            resource_type: "auth",
+            resource_id: username.clone(),
+            detail: Some(serde_json::json!({
+                "username": username
+            })),
+        },
+    )
+    .await;
 
     let mut response = Json(AuthSessionResponse {
         user: AuthUser {

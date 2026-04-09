@@ -1,8 +1,13 @@
-use crate::{auth::authenticate_admin_session, error::ApiError, state::AppState};
+use crate::{
+    audit::{AuditLogEntry, write_audit_log},
+    authorization::{ProjectRole, authenticate_user, require_project_role},
+    error::ApiError,
+    state::AppState,
+};
 use axum::{
     Json, Router,
     extract::{Path, Query, State, rejection::JsonRejection},
-    http::{HeaderMap, StatusCode, header},
+    http::{HeaderMap, StatusCode},
     routing::{get, post},
 };
 use schema::release::{
@@ -90,35 +95,33 @@ pub(crate) async fn list_releases(
         ));
     };
 
-    authenticate_admin_session(
-        pool,
-        headers
-            .get(header::COOKIE)
-            .and_then(|value| value.to_str().ok()),
-    )
-    .await?;
+    let auth = authenticate_user(pool, &headers).await?;
 
     let rows = sqlx::query(
         r#"
         SELECT
-            id,
-            project_id,
-            deployment_instance_id,
-            config_file_id,
-            revision,
-            btrim(content_hash) AS content_hash,
-            format,
-            change_summary,
-            apply_mode,
-            published_by,
-            to_char(published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS published_at
-        FROM releases
-        WHERE ($1::bigint IS NULL OR project_id = $1)
-          AND ($2::bigint IS NULL OR deployment_instance_id = $2)
-          AND ($3::bigint IS NULL OR config_file_id = $3)
-        ORDER BY published_at DESC, id DESC
+            r.id,
+            r.project_id,
+            r.deployment_instance_id,
+            r.config_file_id,
+            r.revision,
+            btrim(r.content_hash) AS content_hash,
+            r.format,
+            r.change_summary,
+            r.apply_mode,
+            r.published_by,
+            to_char(r.published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS published_at
+        FROM releases r
+        JOIN project_members pm
+          ON pm.project_id = r.project_id
+         AND pm.user_id = $1
+        WHERE ($2::bigint IS NULL OR r.project_id = $2)
+          AND ($3::bigint IS NULL OR r.deployment_instance_id = $3)
+          AND ($4::bigint IS NULL OR r.config_file_id = $4)
+        ORDER BY r.published_at DESC, r.id DESC
         "#,
     )
+    .bind(auth.user_id)
     .bind(query.project_id)
     .bind(query.deployment_instance_id)
     .bind(query.config_file_id)
@@ -164,11 +167,14 @@ pub(crate) async fn publish_release(
         ));
     };
 
-    let auth = authenticate_admin_session(
+    let auth = authenticate_user(pool, &headers).await?;
+    require_project_role(
         pool,
-        headers
-            .get(header::COOKIE)
-            .and_then(|value| value.to_str().ok()),
+        auth.user_id,
+        payload.project_id,
+        ProjectRole::Editor,
+        "project_not_found",
+        "project not found",
     )
     .await?;
 
@@ -206,6 +212,7 @@ pub(crate) async fn publish_release(
     );
     let revision = next_revision(pool).await?;
 
+    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
     let row = sqlx::query(
         r#"
         INSERT INTO releases (
@@ -246,11 +253,30 @@ pub(crate) async fn publish_release(
     .bind(payload.change_summary)
     .bind(SqlxJson(diff_summary))
     .bind(auth.user_id)
-    .fetch_one(pool)
+    .fetch_one(&mut *tx)
     .await
     .map_err(|_| ApiError::internal())?;
 
-    Ok((StatusCode::CREATED, Json(map_release_row(&row))))
+    let summary = map_release_row(&row);
+    write_audit_log(
+        &mut *tx,
+        AuditLogEntry {
+            project_id: Some(summary.project_id),
+            user_id: Some(auth.user_id),
+            action: "release.published",
+            resource_type: "release",
+            resource_id: summary.id.to_string(),
+            detail: Some(serde_json::json!({
+                "deployment_instance_id": summary.deployment_instance_id,
+                "config_file_id": summary.config_file_id,
+                "revision": summary.revision,
+            })),
+        },
+    )
+    .await?;
+    tx.commit().await.map_err(|_| ApiError::internal())?;
+
+    Ok((StatusCode::CREATED, Json(summary)))
 }
 
 #[utoipa::path(
@@ -283,15 +309,18 @@ pub(crate) async fn get_release_detail(
         ));
     };
 
-    authenticate_admin_session(
-        pool,
-        headers
-            .get(header::COOKIE)
-            .and_then(|value| value.to_str().ok()),
-    )
-    .await?;
+    let auth = authenticate_user(pool, &headers).await?;
 
     let release = load_release_by_id(pool, id).await?;
+    require_project_role(
+        pool,
+        auth.user_id,
+        release.release.project_id,
+        ProjectRole::Viewer,
+        "release_not_found",
+        "release not found",
+    )
+    .await?;
     Ok(Json(ReleaseDetailResponse {
         release: release.release,
         content: release.content,
@@ -329,15 +358,18 @@ pub(crate) async fn get_release_diff(
         ));
     };
 
-    authenticate_admin_session(
-        pool,
-        headers
-            .get(header::COOKIE)
-            .and_then(|value| value.to_str().ok()),
-    )
-    .await?;
+    let auth = authenticate_user(pool, &headers).await?;
 
     let release = load_release_by_id(pool, id).await?;
+    require_project_role(
+        pool,
+        auth.user_id,
+        release.release.project_id,
+        ProjectRole::Viewer,
+        "release_not_found",
+        "release not found",
+    )
+    .await?;
     let base_release = find_previous_release_before_id(pool, id).await?;
     let diff_summary = release.diff_summary.clone().unwrap_or_else(|| {
         build_diff_summary(

@@ -1,8 +1,13 @@
-use crate::{auth::authenticate_admin_session, error::ApiError, state::AppState};
+use crate::{
+    audit::{AuditLogEntry, write_audit_log},
+    authorization::{ProjectRole, authenticate_user, require_project_role},
+    error::ApiError,
+    state::AppState,
+};
 use axum::{
     Json, Router,
     extract::{Path, Query, State, rejection::JsonRejection},
-    http::{HeaderMap, StatusCode, header},
+    http::{HeaderMap, StatusCode},
     routing::get,
 };
 use schema::config_file::{ConfigFileListResponse, ConfigFileSummary};
@@ -111,35 +116,33 @@ pub(crate) async fn list_config_files(
         ));
     };
 
-    authenticate_admin_session(
-        pool,
-        headers
-            .get(header::COOKIE)
-            .and_then(|value| value.to_str().ok()),
-    )
-    .await?;
+    let auth = authenticate_user(pool, &headers).await?;
 
     let rows = sqlx::query(
         r#"
         SELECT
-            id,
-            project_id,
-            code,
-            name,
-            is_required,
-            format,
-            schema_name,
-            schema_version,
-            sensitivity,
-            secret_paths,
-            description,
-            status
-        FROM config_files
-        WHERE status = 'active'
-          AND ($1::bigint IS NULL OR project_id = $1)
-        ORDER BY project_id ASC, code ASC, id ASC
+            cf.id,
+            cf.project_id,
+            cf.code,
+            cf.name,
+            cf.is_required,
+            cf.format,
+            cf.schema_name,
+            cf.schema_version,
+            cf.sensitivity,
+            cf.secret_paths,
+            cf.description,
+            cf.status
+        FROM config_files cf
+        JOIN project_members pm
+          ON pm.project_id = cf.project_id
+         AND pm.user_id = $1
+        WHERE cf.status = 'active'
+          AND ($2::bigint IS NULL OR cf.project_id = $2)
+        ORDER BY cf.project_id ASC, cf.code ASC, cf.id ASC
         "#,
     )
+    .bind(auth.user_id)
     .bind(query.project_id)
     .fetch_all(pool)
     .await
@@ -184,14 +187,18 @@ pub(crate) async fn create_config_file(
         ));
     };
 
-    authenticate_admin_session(
+    let auth = authenticate_user(pool, &headers).await?;
+    require_project_role(
         pool,
-        headers
-            .get(header::COOKIE)
-            .and_then(|value| value.to_str().ok()),
+        auth.user_id,
+        payload.project_id,
+        ProjectRole::Admin,
+        "project_not_found",
+        "project not found",
     )
     .await?;
 
+    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
     let row = sqlx::query(
         r#"
         INSERT INTO config_files (
@@ -233,11 +240,30 @@ pub(crate) async fn create_config_file(
     .bind(payload.sensitivity)
     .bind(payload.secret_paths.map(SqlxJson))
     .bind(payload.description)
-    .fetch_one(pool)
+    .fetch_one(&mut *tx)
     .await
     .map_err(map_config_file_write_error)?;
 
-    Ok((StatusCode::CREATED, Json(map_config_file_row(row))))
+    let summary = map_config_file_row(row);
+    write_audit_log(
+        &mut *tx,
+        AuditLogEntry {
+            project_id: Some(summary.project_id),
+            user_id: Some(auth.user_id),
+            action: "config_file.created",
+            resource_type: "config_file",
+            resource_id: summary.id.to_string(),
+            detail: Some(serde_json::json!({
+                "config_file_id": summary.id,
+                "changed_fields": ["code", "name", "is_required", "format", "schema_name", "schema_version", "sensitivity", "description"]
+            })),
+        },
+    )
+    .await?;
+
+    tx.commit().await.map_err(|_| ApiError::internal())?;
+
+    Ok((StatusCode::CREATED, Json(summary)))
 }
 
 #[utoipa::path(
@@ -270,13 +296,7 @@ pub(crate) async fn get_config_file(
         ));
     };
 
-    authenticate_admin_session(
-        pool,
-        headers
-            .get(header::COOKIE)
-            .and_then(|value| value.to_str().ok()),
-    )
-    .await?;
+    let auth = authenticate_user(pool, &headers).await?;
 
     let row = sqlx::query(
         r#"
@@ -293,12 +313,16 @@ pub(crate) async fn get_config_file(
             secret_paths,
             description,
             status
-        FROM config_files
-        WHERE id = $1
+        FROM config_files cf
+        JOIN project_members pm
+          ON pm.project_id = cf.project_id
+         AND pm.user_id = $2
+        WHERE cf.id = $1
         LIMIT 1
         "#,
     )
     .bind(id)
+    .bind(auth.user_id)
     .fetch_optional(pool)
     .await
     .map_err(|_| ApiError::internal())?
@@ -345,14 +369,43 @@ pub(crate) async fn update_config_file(
         ));
     };
 
-    authenticate_admin_session(
+    let auth = authenticate_user(pool, &headers).await?;
+    let existing_project_id = sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT project_id
+        FROM config_files
+        WHERE id = $1
+        LIMIT 1
+        "#,
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| ApiError::internal())?
+    .ok_or_else(|| ApiError::not_found_with("config_file_not_found", "config file not found"))?;
+
+    require_project_role(
         pool,
-        headers
-            .get(header::COOKIE)
-            .and_then(|value| value.to_str().ok()),
+        auth.user_id,
+        existing_project_id,
+        ProjectRole::Admin,
+        "config_file_not_found",
+        "config file not found",
     )
     .await?;
+    if payload.project_id != existing_project_id {
+        require_project_role(
+            pool,
+            auth.user_id,
+            payload.project_id,
+            ProjectRole::Admin,
+            "project_not_found",
+            "project not found",
+        )
+        .await?;
+    }
 
+    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
     let row = sqlx::query(
         r#"
         UPDATE config_files
@@ -397,12 +450,31 @@ pub(crate) async fn update_config_file(
     .bind(payload.secret_paths.map(SqlxJson))
     .bind(payload.description)
     .bind(payload.status)
-    .fetch_optional(pool)
+    .fetch_optional(&mut *tx)
     .await
     .map_err(map_config_file_write_error)?
     .ok_or_else(|| ApiError::not_found_with("config_file_not_found", "config file not found"))?;
 
-    Ok(Json(map_config_file_row(row)))
+    let summary = map_config_file_row(row);
+    write_audit_log(
+        &mut *tx,
+        AuditLogEntry {
+            project_id: Some(summary.project_id),
+            user_id: Some(auth.user_id),
+            action: "config_file.updated",
+            resource_type: "config_file",
+            resource_id: summary.id.to_string(),
+            detail: Some(serde_json::json!({
+                "config_file_id": summary.id,
+                "changed_fields": ["code", "name", "is_required", "format", "schema_name", "schema_version", "sensitivity", "description", "status"]
+            })),
+        },
+    )
+    .await?;
+
+    tx.commit().await.map_err(|_| ApiError::internal())?;
+
+    Ok(Json(summary))
 }
 
 impl CreateConfigFileRequest {

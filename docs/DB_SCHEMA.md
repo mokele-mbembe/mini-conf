@@ -59,6 +59,7 @@
 
 - 首版角色只保留 `admin`、`editor`、`viewer`
 - 权限判断以项目成员关系为主，而不是全局角色
+- 引入该表时，将历史项目回填给活动用户 `admin`，角色为 `admin`
 
 ### config_files
 
@@ -201,6 +202,7 @@
 
 - `detail` 中不得写入敏感配置明文
 - 如需记录差异，应该记录脱敏后的摘要
+- 典型安全字段包括 `project_id`、`deployment_instance_id`、`config_file_id`、`revision`、`username`、`role`、`changed_fields`、`source_kind`、`token_preview`
 
 ## 4. 外键建议
 
@@ -264,12 +266,16 @@
 ## 8. 初始索引重点
 
 - `projects.code`
-- `project_members(project_id, user_id)`
+- `project_members(project_id, role)`
+- `project_members(user_id, project_id)`
 - `config_files(project_id, code)`
 - `deployment_instances(project_id, environment, deployment_key)`
 - `releases(deployment_instance_id, config_file_id, published_at desc)`
 - `deployment_credentials(deployment_instance_id, status)`
 - `deployment_sync_records(deployment_instance_id, reported_at desc)`
+- `audit_logs(project_id, created_at desc)`
+- `audit_logs(user_id, created_at desc)`
+- `audit_logs(action, created_at desc)`
 
 ## 9. 关于 Scope / Labels
 

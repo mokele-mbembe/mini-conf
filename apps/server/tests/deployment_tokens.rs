@@ -15,6 +15,41 @@ type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
 const OLD_TOKEN: &str = "mini-conf-old-deployment-token";
 
+async fn install_admin_project_membership_trigger(pool: &PgPool) -> TestResult {
+    sqlx::query(
+        r#"
+        CREATE OR REPLACE FUNCTION auto_grant_test_admin_project_member()
+        RETURNS TRIGGER AS $$
+        BEGIN
+            INSERT INTO project_members (project_id, user_id, role)
+            SELECT NEW.id, id, 'admin'
+            FROM users
+            WHERE username = 'admin'
+              AND status = 'active'
+            ON CONFLICT (project_id, user_id) DO NOTHING;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        DROP TRIGGER IF EXISTS trg_auto_grant_test_admin_project_member ON projects;
+        CREATE TRIGGER trg_auto_grant_test_admin_project_member
+        AFTER INSERT ON projects
+        FOR EACH ROW
+        EXECUTE FUNCTION auto_grant_test_admin_project_member();
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
 async fn setup_app() -> TestResult<Option<(axum::Router, PgPool, String, String)>> {
     let Some(database_url) = test_database_url("deployment tokens") else {
         return Ok(None);
@@ -37,6 +72,7 @@ async fn setup_app() -> TestResult<Option<(axum::Router, PgPool, String, String)
     let Some(pool) = state.db_pool().cloned() else {
         return Err("db pool should be present after bootstrap".into());
     };
+    install_admin_project_membership_trigger(&pool).await?;
 
     Ok(Some((server::app(state), pool, database_url, schema)))
 }
