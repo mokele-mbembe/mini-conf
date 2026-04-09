@@ -181,6 +181,26 @@ ci-local:
   @just test
   @just perf-smoke
 
+ci-local-db:
+  @if [ -f Cargo.toml ]; then \
+    source scripts/local-db-env.sh; \
+    export DATABASE_URL="${DATABASE_URL:-${TEST_DATABASE_URL:-}}"; \
+    if [ -z "${DATABASE_URL:-}" ]; then \
+      echo "DATABASE_URL is required; local DB resolution did not produce a usable runtime or test DSN" >&2; \
+      exit 1; \
+    fi; \
+    if [ -z "${TEST_DATABASE_URL:-}" ]; then \
+      echo "TEST_DATABASE_URL is required; local DB resolution did not produce a usable test DSN" >&2; \
+      exit 1; \
+    fi; \
+    just db-migrate-up; \
+    just test-backend-db; \
+  else echo "Skipping local DB CI: Cargo workspace not initialized"; fi
+
+ci-local-full:
+  @just ci-local
+  @just ci-local-db
+
 run-server:
   @if [ -f Cargo.toml ]; then cargo run --bin server; else echo "Skipping run-server: Cargo workspace not initialized"; fi
 

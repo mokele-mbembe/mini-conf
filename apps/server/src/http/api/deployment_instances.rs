@@ -326,15 +326,15 @@ pub(crate) async fn get_deployment_instance(
     let row = sqlx::query(
         r#"
         SELECT
-            id,
-            project_id,
-            environment,
-            deployment_key,
-            name,
-            description,
-            is_template,
-            template_source_id,
-            status
+            di.id,
+            di.project_id,
+            di.environment,
+            di.deployment_key,
+            di.name,
+            di.description,
+            di.is_template,
+            di.template_source_id,
+            di.status
         FROM deployment_instances di
         JOIN project_members pm
           ON pm.project_id = di.project_id

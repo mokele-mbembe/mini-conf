@@ -145,6 +145,8 @@ OPENAPI_EXPORT_PATH=docs/artifacts/openapi.json
 - `just db-migrate-down`
 - `just test-e2e`
 - `just ci-local`
+- `just ci-local-db`
+- `just ci-local-full`
 - `just db-reset-dev`
 
 当前仓库约定：
@@ -152,6 +154,7 @@ OPENAPI_EXPORT_PATH=docs/artifacts/openapi.json
 - `Core` 工作流：`just lint`、`just test`、`just openapi-check`
 - `Isolated DB` 工作流：`just db-migrate-up`、`just db-migrate-down`、`just test-backend-db`
 - 本机 local wrapper：`just run-server-local`、`just db-migrate-up-local`、`just db-migrate-down-local`、`just test-backend-db-local`
+- 本机 CI 分层：`just ci-local` 不要求数据库；`just ci-local-db` 复用 local wrapper 对齐 GitHub `backend-db`，并在缺少运行库配置时回退到 local test DB；`just ci-local-full` 串联两层
 
 统一规范见 [docs/agents/STANDARD_WORKFLOW.md](../agents/STANDARD_WORKFLOW.md)。
 

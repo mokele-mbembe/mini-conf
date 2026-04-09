@@ -299,6 +299,7 @@ pub(crate) async fn create_project(
         r#"
         INSERT INTO project_members (project_id, user_id, role)
         VALUES ($1, $2, 'admin')
+        ON CONFLICT (project_id, user_id) DO NOTHING
         "#,
     )
     .bind(project_id)

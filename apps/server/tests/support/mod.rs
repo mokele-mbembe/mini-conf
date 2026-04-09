@@ -37,7 +37,6 @@ pub async fn setup_app(
         .db_pool()
         .cloned()
         .ok_or_else(|| std::io::Error::other("db pool should be present after bootstrap"))?;
-    install_admin_project_membership_trigger(&pool).await?;
 
     Ok(Some((server::app(state), pool, database_url, schema)))
 }
@@ -56,7 +55,13 @@ pub async fn read_json<T: serde::de::DeserializeOwned>(
     response: axum::response::Response,
 ) -> TestResult<T> {
     let body = to_bytes(response.into_body(), usize::MAX).await?;
-    Ok(serde_json::from_slice(&body)?)
+    serde_json::from_slice(&body).map_err(|error| {
+        let body_text = String::from_utf8_lossy(&body).into_owned();
+        std::io::Error::other(format!(
+            "failed to decode response body as JSON: {error}; body={body_text}"
+        ))
+        .into()
+    })
 }
 
 pub async fn login_as(app: &axum::Router, username: &str, password: &str) -> TestResult<String> {
@@ -251,47 +256,5 @@ pub async fn seed_sync_record(
     .bind(release_id)
     .execute(pool)
     .await?;
-    Ok(())
-}
-
-async fn install_admin_project_membership_trigger(pool: &PgPool) -> TestResult {
-    sqlx::query(
-        r#"
-        CREATE OR REPLACE FUNCTION auto_grant_test_admin_project_member()
-        RETURNS TRIGGER AS $$
-        BEGIN
-            INSERT INTO project_members (project_id, user_id, role)
-            SELECT NEW.id, id, 'admin'
-            FROM users
-            WHERE username = 'admin'
-              AND status = 'active'
-            ON CONFLICT (project_id, user_id) DO NOTHING;
-            RETURN NEW;
-        END;
-        $$ LANGUAGE plpgsql;
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
-    sqlx::query(
-        r#"
-        DROP TRIGGER IF EXISTS trg_auto_grant_test_admin_project_member ON projects;
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
-    sqlx::query(
-        r#"
-        CREATE TRIGGER trg_auto_grant_test_admin_project_member
-        AFTER INSERT ON projects
-        FOR EACH ROW
-        EXECUTE FUNCTION auto_grant_test_admin_project_member();
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
     Ok(())
 }

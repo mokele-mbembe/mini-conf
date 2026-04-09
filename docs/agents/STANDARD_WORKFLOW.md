@@ -36,6 +36,7 @@
 - `just lint`
 - `just test`
 - `just openapi-check`
+- `just ci-local`
 
 `Core` 是最小一致性基线，用于保证任何 Linux 环境都能完成非数据库前提下的代码质量与契约校验。
 
@@ -45,6 +46,8 @@
 
 - `just db-migrate-up`
 - `just test-backend-db`
+- `just ci-local-db` 或等价组合
+  当前本机 wrapper 允许在缺少运行库配置时复用 local test DB 来完成这条 CI 路径
 
 约束：
 
@@ -152,6 +155,8 @@
 - `just db-migrate-down-local`
 - `just test-backend-db-local`
 - `just run-server-local`
+- `just ci-local-db`
+- `just ci-local-full`
 
 兼容别名：
 
@@ -162,6 +167,7 @@
 当前后端开发仍以数据库集成测试为主时，本机最小适配优先恢复：
 
 - `just test-backend-db-local`
+- `just ci-local-db`
 
 此时推荐：
 
@@ -213,11 +219,13 @@
 1. `just lint`
 2. `just test`
 3. `just openapi-check`
+4. 可选：`just ci-local`
 
 涉及数据库主路径时，再额外执行：
 
-4. `just db-migrate-up` 或 `just db-migrate-up-local`
-5. `just test-backend-db` 或 `just test-backend-db-local`
+5. `just db-migrate-up` 或 `just db-migrate-up-local`
+6. `just test-backend-db` 或 `just test-backend-db-local`
+7. 优先使用 `just ci-local-db`，或直接跑 `just ci-local-full`
 
 说明：
 

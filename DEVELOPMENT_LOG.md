@@ -22,6 +22,7 @@
 - OpenAPI、数据库文档、鉴权文档、产品澄清文档已经同步
 - `docs/` 已按受众重组为 `public / constraints / agents / collaboration / artifacts`
 - OpenAPI 导出产物已从 markdown 叙述目录中分离到 `docs/artifacts/openapi.json`
+- 本机 CI 已新增 `just ci-local-db` 与 `just ci-local-full`，用于把 GitHub `backend-db` 校验纳入统一入口；`ci-local-db` 在缺少运行库配置时会复用 local test DB
 
 本轮本地验证结果：
 
@@ -172,7 +173,7 @@ just test
 如果要继续动数据库主路径，再补：
 
 ```bash
-just test-backend-db
+just ci-local-db
 ```
 
 ## 6. 下一个会话建议先阅读的文档

@@ -156,6 +156,7 @@ MVP 默认采用 `DeploymentInstance` 作为配置组织模型，因为它最贴
 - `~/.config/mini-conf/dev-env.sh` 是唯一推荐的本机环境入口
 - 默认采用 `database-per-instance`，数据库名由部署者按场景自定义；允许同一 PostgreSQL server 承载多套独立 database
 - `secret-tool` 只是兼容选项，不是标准前提
+- 本机 CI 入口分层为：`just ci-local` 负责非 DB 基线，`just ci-local-db` 对齐 GitHub `backend-db` 并在缺少运行库配置时复用 local test DB，`just ci-local-full` 串联两层
 - 当前后端开发阶段，本机优先恢复 `just test-backend-db-local`；`just run-server-local` 只在确实需要联调时启用
 
 ## 测试约定

@@ -301,18 +301,18 @@ pub(crate) async fn get_config_file(
     let row = sqlx::query(
         r#"
         SELECT
-            id,
-            project_id,
-            code,
-            name,
-            is_required,
-            format,
-            schema_name,
-            schema_version,
-            sensitivity,
-            secret_paths,
-            description,
-            status
+            cf.id,
+            cf.project_id,
+            cf.code,
+            cf.name,
+            cf.is_required,
+            cf.format,
+            cf.schema_name,
+            cf.schema_version,
+            cf.sensitivity,
+            cf.secret_paths,
+            cf.description,
+            cf.status
         FROM config_files cf
         JOIN project_members pm
           ON pm.project_id = cf.project_id
