@@ -66,6 +66,48 @@ test-e2e:
   elif [ -f package.json ] || [ -f pnpm-workspace.yaml ]; then pnpm test:e2e; \
   else echo "Skipping e2e tests: package manifest not found"; fi
 
+alpha-smoke:
+  @if [ ! -f Cargo.toml ]; then \
+    echo "Skipping alpha smoke: Cargo.toml not found"; \
+  elif [ -z "${DATABASE_URL:-}" ]; then \
+    echo "DATABASE_URL is required; use just alpha-smoke-local for current developer-local test DB reuse" >&2; \
+    exit 1; \
+  else \
+    bash scripts/alpha-http.sh smoke; \
+  fi
+
+alpha-full:
+  @if [ ! -f Cargo.toml ]; then \
+    echo "Skipping alpha full: Cargo.toml not found"; \
+  elif [ -z "${DATABASE_URL:-}" ]; then \
+    echo "DATABASE_URL is required; use just alpha-full-local for current developer-local test DB reuse" >&2; \
+    exit 1; \
+  else \
+    bash scripts/alpha-http.sh full; \
+  fi
+
+alpha-smoke-local:
+  @if [ -f Cargo.toml ]; then \
+    source scripts/local-db-env.sh; \
+    export DATABASE_URL="${DATABASE_URL:-${TEST_DATABASE_URL:-}}"; \
+    if [ -z "${DATABASE_URL:-}" ]; then \
+      echo "DATABASE_URL is required; local test DB resolution did not produce a usable DSN" >&2; \
+      exit 1; \
+    fi; \
+    bash scripts/alpha-http.sh smoke; \
+  else echo "Skipping alpha smoke: Cargo workspace not initialized"; fi
+
+alpha-full-local:
+  @if [ -f Cargo.toml ]; then \
+    source scripts/local-db-env.sh; \
+    export DATABASE_URL="${DATABASE_URL:-${TEST_DATABASE_URL:-}}"; \
+    if [ -z "${DATABASE_URL:-}" ]; then \
+      echo "DATABASE_URL is required; local test DB resolution did not produce a usable DSN" >&2; \
+      exit 1; \
+    fi; \
+    bash scripts/alpha-http.sh full; \
+  else echo "Skipping alpha full: Cargo workspace not initialized"; fi
+
 coverage:
   @if [ -f Cargo.toml ]; then cargo llvm-cov --workspace --lcov --output-path target/lcov.info; else echo "Skipping backend coverage: Cargo.toml not found"; fi
 

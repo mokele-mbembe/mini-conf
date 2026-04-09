@@ -5,9 +5,39 @@ on:
     branches:
       - main
   pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      alpha: ${{ steps.filter.outputs.alpha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Filter alpha-relevant changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            alpha:
+              - 'apps/server/**'
+              - 'crates/**'
+              - 'migrations/**'
+              - 'scripts/**'
+              - 'justfile'
+              - '.github/workflows/ci.yml'
+              - 'docs/openapi/openapi.json'
+              - 'tests/alpha/**'
+
   quality:
+    if: ${{ github.event_name != 'workflow_dispatch' }}
+    needs: changes
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -82,6 +112,8 @@ jobs:
           path: target/perf/smoke.json
 
   backend-db:
+    if: ${{ github.event_name != 'workflow_dispatch' }}
+    needs: changes
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -132,3 +164,107 @@ jobs:
 
       - name: Run backend DB tests
         run: just test-backend-db
+
+  alpha-smoke:
+    if: ${{ github.event_name == 'pull_request' && needs.changes.outputs.alpha == 'true' }}
+    needs: changes
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+      HTTP_ADDR: 127.0.0.1:18080
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install just
+        uses: extractions/setup-just@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install sqlx-cli
+        uses: baptiste0928/cargo-install@v3
+        with:
+          crate: sqlx-cli
+          args: --no-default-features --features rustls,postgres
+
+      - name: Install Hurl
+        run: |
+          VERSION=7.0.0
+          curl --fail --silent --show-error --location \
+            "https://github.com/Orange-OpenSource/hurl/releases/download/${VERSION}/hurl-${VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
+            | tar xz -C "${RUNNER_TEMP}"
+          echo "${RUNNER_TEMP}/hurl-${VERSION}-x86_64-unknown-linux-gnu/bin" >> "${GITHUB_PATH}"
+
+      - name: Run migrations
+        run: just db-migrate-up
+
+      - name: Run alpha smoke HTTP tests
+        run: just alpha-smoke
+
+  alpha-full:
+    if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.alpha == 'true') || github.event_name == 'workflow_dispatch' }}
+    needs: changes
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+      HTTP_ADDR: 127.0.0.1:18080
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install just
+        uses: extractions/setup-just@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install sqlx-cli
+        uses: baptiste0928/cargo-install@v3
+        with:
+          crate: sqlx-cli
+          args: --no-default-features --features rustls,postgres
+
+      - name: Install Hurl
+        run: |
+          VERSION=7.0.0
+          curl --fail --silent --show-error --location \
+            "https://github.com/Orange-OpenSource/hurl/releases/download/${VERSION}/hurl-${VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
+            | tar xz -C "${RUNNER_TEMP}"
+          echo "${RUNNER_TEMP}/hurl-${VERSION}-x86_64-unknown-linux-gnu/bin" >> "${GITHUB_PATH}"
+
+      - name: Run migrations
+        run: just db-migrate-up
+
+      - name: Run alpha full HTTP tests
+        run: just alpha-full

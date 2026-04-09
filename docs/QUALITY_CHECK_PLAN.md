@@ -18,6 +18,7 @@
 
 - `Core`：`just lint`、`just test`、`just openapi-check`
 - `Isolated DB`：`just db-migrate-up`、`just test-backend-db`
+- `Alpha HTTP`：基于真实 TCP 端口、真实 PostgreSQL 和 Hurl 的后端黑盒验证
 - `Blackbox / Staging`：长期共享环境上的 HTTP 黑盒验证与未来前端 E2E
 - `Production`：显式迁移、启动、健康检查与回滚流程
 
@@ -25,6 +26,8 @@ CI 对应关系：
 
 - `quality` job 对应 `Core`
 - `backend-db` job 对应 `Isolated DB`
+- `alpha-smoke` job 对应 PR 级 `Alpha HTTP`
+- `alpha-full` job 对应 `main` 合入后的全量 `Alpha HTTP`
 
 本地与 CI 当前共同依赖这些入口：
 
@@ -66,7 +69,29 @@ CI 对应关系：
 - Open API、管理端 CRUD、Draft、Release、Preview 这些主路径都已经开始用真实 PostgreSQL 测
 - 这层测试属于 `Isolated DB`，不是共享黑盒环境测试
 
-### 2.3 OpenAPI 检查
+### 2.3 Alpha HTTP 黑盒测试
+
+- `just alpha-smoke`
+- `just alpha-full`
+
+引入时机：
+
+- 后端接口已经足够形成管理端与开放接口的主链路
+- 前端页面尚未进入主开发阶段
+
+当前状态：
+
+- 这层测试通过真实端口启动 `server`
+- 使用 `Hurl` 保存请求与断言文本
+- PR 上先跑 `alpha-smoke`
+- 合入 `main` 后再跑 `alpha-full`
+
+特别说明：
+
+- 这层测试和当前 Rust in-process 集成测试互补，不替代后者
+- 端口默认使用 `127.0.0.1:18080`，不占用文档示例里的 `8080`
+
+### 2.4 OpenAPI 检查
 
 - `just openapi-check`
 
@@ -84,7 +109,7 @@ CI 对应关系：
 - 这条检查不是语义比对，而是导出后检查生成文件是否有 git 变更
 - 所以只要改了接口定义，就必须重新导出并把产物一起提交
 
-### 2.4 SQLx 检查
+### 2.5 SQLx 检查
 
 - `just sqlx-check`
 
@@ -104,7 +129,7 @@ CI 对应关系：
 2. 提交 `.sqlx/` 元数据目录
 3. 希望把复杂 SQL 的字段类型错误前移到编译期
 
-### 2.5 性能烟雾检查
+### 2.6 性能烟雾检查
 
 - `just perf-smoke`
 
@@ -210,9 +235,11 @@ CI 对应关系：
 - `test-backend-db`
 - Open API 主路径 HTTP 契约测试
 
-### 阶段 C：OpenAPI 与管理端期
+### 阶段 C：OpenAPI、Alpha HTTP 与管理端期
 
 - `openapi-check`
+- `alpha-smoke`
+- `alpha-full`
 - 管理端 CRUD 闭环集成测试
 - Preview / clone / publish 规则测试
 
