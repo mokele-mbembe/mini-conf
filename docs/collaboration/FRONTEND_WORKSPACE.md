@@ -80,3 +80,13 @@ packages:
 - 后续可能存在 `apps/web/package.json`
 
 所以这份最小脚手架不是占位垃圾，而是为了让后续工程初始化更顺滑。
+
+进入真实前端开发前，建议同步准备一套本机 runtime DB 和 demo 数据：
+
+- `just dev-db-prepare-local`
+- `just run-server-local`
+- `just dev-web`
+
+如果当前本机 PostgreSQL 账号没有单独建库权限，也可以先用“同一 database 下的独立 schema”承载 runtime 数据，只要保证它和 `TEST_DATABASE_URL` 不共用同一个 `search_path` 即可。
+
+这样前端页面开发默认能看到非空状态、角色差异、发布历史、预览、同步记录和心跳，而不是长期对着空表结构搭页面。

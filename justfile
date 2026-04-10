@@ -160,6 +160,36 @@ db-migrate-up-local:
     else echo "Skipping db migrate up: sqlx CLI not installed"; fi \
   ; else echo "Skipping db migrate up: migrations directory not found"; fi
 
+dev-seed-demo:
+  @if [ -f Cargo.toml ]; then bash scripts/dev-seed-demo.sh; else echo "Skipping demo seed: Cargo workspace not initialized"; fi
+
+dev-seed-demo-local:
+  @if [ -f Cargo.toml ]; then \
+    source scripts/local-db-env.sh; \
+    if [ -z "${DATABASE_URL:-}" ]; then \
+      echo "DATABASE_URL is required for local demo seed; configure MINI_CONF_LOCAL_DB_* or MINI_CONF_LOCAL_DATABASE_URL" >&2; \
+      exit 1; \
+    fi; \
+    if [ -n "${TEST_DATABASE_URL:-}" ] && [ "${DATABASE_URL}" = "${TEST_DATABASE_URL}" ]; then \
+      echo "Warning: DATABASE_URL and TEST_DATABASE_URL currently point to the same database; separate runtime and test DBs are recommended for Local Preview / UI Dev" >&2; \
+    fi; \
+    bash scripts/dev-seed-demo.sh; \
+  else echo "Skipping demo seed: Cargo workspace not initialized"; fi
+
+dev-db-prepare-local:
+  @if [ -f Cargo.toml ]; then \
+    source scripts/local-db-env.sh; \
+    if [ -z "${DATABASE_URL:-}" ]; then \
+      echo "DATABASE_URL is required for local preview DB; configure MINI_CONF_LOCAL_DB_* or MINI_CONF_LOCAL_DATABASE_URL" >&2; \
+      exit 1; \
+    fi; \
+    if [ -n "${TEST_DATABASE_URL:-}" ] && [ "${DATABASE_URL}" = "${TEST_DATABASE_URL}" ]; then \
+      echo "Warning: DATABASE_URL and TEST_DATABASE_URL currently point to the same database; separate runtime and test DBs are recommended for Local Preview / UI Dev" >&2; \
+    fi; \
+    just db-migrate-up; \
+    bash scripts/dev-seed-demo.sh; \
+  else echo "Skipping local preview DB prepare: Cargo workspace not initialized"; fi
+
 db-migrate-down:
   @if [ -d migrations ]; then \
     if command -v sqlx >/dev/null 2>&1; then \

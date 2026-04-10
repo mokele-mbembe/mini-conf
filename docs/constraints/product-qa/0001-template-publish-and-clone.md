@@ -2,7 +2,7 @@
 
 ## 背景
 
-围绕 `DeploymentInstance`、`Template`、`Draft`、`Release` 的关系，当前代码已经有一版可运行实现，但产品语义需要进一步收紧。
+围绕 `DeploymentInstance`、`Template`、`Draft`、`Release` 的关系，这份文档用于固定当前已经落地的产品语义，避免前后端再次按旧草案理解。
 
 ## Q1: Template 是不是单独的模型？
 
@@ -67,21 +67,22 @@
 
 ## Q5: 某些配置文件能不能做更严格的校验？
 
-方向上可以，当前只做了元数据预留，尚未真正实现。
+方向上可以，而且当前首版校验主路径已经落地。
 
 当前已有：
 
 - `config_files.schema_name`
 - `config_files.schema_version`
 - `config_files.sensitivity`
+- 保存 Draft 时的格式解析和 schema 校验
+- Draft clone 时的格式解析和 schema 校验
+- 发布前的二次格式解析和 schema 校验
 
-当前未完成：
+当前仍未做的是更复杂的扩展能力，例如：
 
-- 保存 Draft 时的 schema 校验
-- 发布前的强化校验
-- “某个配置文件必须满足更强规则才能成为候选/可发布”的业务规则
-
-所以这部分目前只是“元数据就位，校验能力未落地”。
+- 更复杂的配置文件专属业务规则
+- 自定义 validator 的更丰富注册机制
+- 超出当前 `(schema_name, schema_version)` 的高级校验策略
 
 ## Q6: Template 是否应该允许发布 Release？
 
@@ -93,8 +94,8 @@
 
 当前代码状态：
 
-- 还没有禁止模板实例执行 `publish`
-- 这是接下来应该修正的规则
+- 已禁止模板实例执行 `publish`
+- 模板仍只承担“作为 clone 来源”的职责
 
 ## Q7: Clone 的目标应该是什么？
 
@@ -117,20 +118,16 @@
 当前已实现：
 
 - `POST /api/deployment-instances/:id/clone`
-- 支持 `clone_source = draft | latest_release`
+- 模板 clone 仅允许 `clone_source = draft`
+- `POST /api/drafts/:targetDeploymentId/:configFileId/clone`
+- 单配置 clone 支持 `source_kind = draft | latest_release`
 - 会创建新实例，并把内容复制到新实例的 Draft
+- 模板实例发布已被禁止
+- 项目成员与项目级权限已接入
 
-当前未满足目标的部分：
+## 当前结论
 
-- 还没有禁止模板实例发布 Release
-- 还没有“单配置文件 clone”接口
-- 还没有项目成员权限，当前主要还是管理员 session 语义
-
-## 当前建议
-
-后续代码调整按这个顺序推进：
-
-1. 禁止 `is_template = true` 的实例执行 `publish`
-2. 保留“从模板创建新实例”的 clone 语义
-3. 新增“单配置文件 clone”接口，供前端批量调用
-4. 接入 `project_members` 和项目级编辑权限
+- 模板仍然是实例概念，不是独立资源
+- 模板可以 clone，但不能发布
+- 模板创建新实例与单配置 clone 是两条不同交互路径
+- 前端批量复制配置时，应通过多次单配置 clone 完成

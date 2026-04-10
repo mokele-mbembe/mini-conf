@@ -7,7 +7,7 @@
 - `deployment_credentials`
 - `Authorization: Bearer <token>`
 
-MVP 已经支持凭证鉴权，但还缺少管理端主动轮换部署实例 token 的接口。
+当前已具备管理端主动轮换部署实例 token 的接口，这份文档用于固定它的行为边界。
 
 ## Q1: `POST /api/deployment-instances/:id/token/reset` 重置的是什么？
 
@@ -101,10 +101,8 @@ MVP 先用平台自生成的不透明字符串：
 - 可解析结构化字段
 - 到期时间内嵌编码
 
-## 当前建议
+## 当前结论
 
-按下面顺序继续推进：
-
-1. 新增 `POST /api/deployment-instances/:id/token/reset`
-2. 为 token reset 补 OpenAPI 与响应模型
-3. 用真实 PostgreSQL + HTTP 测试覆盖旧 token 失效 / 新 token 生效
+- `POST /api/deployment-instances/:id/token/reset` 已是稳定主路径
+- 前端必须把“旧 token 立即失效”当成既定行为处理
+- 首版不需要为多凭证管理预留复杂 UI

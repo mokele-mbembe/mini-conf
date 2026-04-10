@@ -27,7 +27,7 @@
 - 允许同一个 PostgreSQL server 承载多套 `mini-conf` database
 - 不把数据库名绑定到产品名；数据库名由部署者按场景自定义
 
-## 3. 四层工作流模型
+## 3. 五层工作流模型
 
 ### 3.1 Core
 
@@ -55,7 +55,26 @@
 - `TEST_DATABASE_URL` 不能由 `DATABASE_URL` 隐式派生
 - 数据库集成测试必须使用隔离 schema
 
-### 3.3 Blackbox / Staging
+### 3.3 Local Preview / UI Dev
+
+承担前端开发前的本地联调、页面状态观察和手工 API 联调的环境，额外建议支持：
+
+- 一套独立的本机运行库 `DATABASE_URL`
+- `just db-migrate-up-local`
+- `just dev-seed-demo-local`
+- `just dev-db-prepare-local`
+- `just run-server-local`
+- `just dev-web`
+
+约束：
+
+- 这是本机长期保留的运行库，不是测试隔离 schema
+- 推荐和 `TEST_DATABASE_URL` 分离，避免页面联调数据与测试数据互相污染
+- 允许插入稳定 demo 数据用于观察页面效果
+- 这层只服务本机开发体验，不搬上 CI
+- demo 数据应尽量幂等，可重复执行刷新
+
+### 3.4 Blackbox / Staging
 
 承担共享黑盒验证、前端联调和未来管理端 / 消费端 E2E 的环境，至少要支持：
 
@@ -69,7 +88,7 @@
 - 这是长期存在的共享环境，不是开发机脚本的延伸
 - 测试以 HTTP 行为为主，不依赖直接读数据库判定通过
 
-### 3.4 Production
+### 3.5 Production
 
 生产部署环境必须支持：
 
@@ -129,6 +148,13 @@
 - 旧的 `MINI_CONF_DB_*` 仍暂时兼容
 - 但它们不再是推荐的长期命名
 
+前端联调建议：
+
+- 为 `Local Preview / UI Dev` 单独配置 `MINI_CONF_LOCAL_DB_*`
+- 不要把页面联调长期绑定在 `MINI_CONF_LOCAL_TEST_DB_*` 上
+- 推荐使用单独数据库名，例如 `mini_conf_ui_dev`
+- 如果当前本机 DB 用户没有 `CREATEDB` 权限，可先退回到“同一数据库下的独立 schema + `search_path`”方案
+
 ## 5. 命令分层
 
 ### 5.1 Portable 命令
@@ -154,6 +180,8 @@
 - `just db-migrate-up-local`
 - `just db-migrate-down-local`
 - `just test-backend-db-local`
+- `just dev-seed-demo-local`
+- `just dev-db-prepare-local`
 - `just run-server-local`
 - `just ci-local-db`
 - `just ci-local-full`
@@ -164,7 +192,19 @@
 
 ### 5.3 当前阶段建议
 
-当前后端开发仍以数据库集成测试为主时，本机最小适配优先恢复：
+当前进入前端管理台主路径前，本机建议同时具备两套能力：
+
+- `Isolated DB`
+- `Local Preview / UI Dev`
+
+此时推荐：
+
+- 测试库继续通过 `MINI_CONF_LOCAL_TEST_DB_*` 驱动
+- 页面联调库通过 `MINI_CONF_LOCAL_DB_*` 单独维护
+- 先执行 `just dev-db-prepare-local` 准备 runtime DB 和 demo 数据
+- 再分别运行 `just run-server-local` 与 `just dev-web`
+
+如果当前仍只做后端数据库主路径，本机最小适配优先恢复：
 
 - `just test-backend-db-local`
 - `just ci-local-db`

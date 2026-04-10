@@ -7,8 +7,9 @@
 - `POST /api/releases/publish`
 - `GET /api/releases`
 - `GET /api/releases/:id`
+- `GET /api/releases/:id/diff`
 
-但 `GET /api/releases/:id/diff` 之前还只是占位，缺少明确的比较基线和响应语义。
+这份文档用于固定已经落地的 diff 语义，避免前后端继续按“自由 compare”方式理解。
 
 ## Q1: `GET /api/releases/:id/diff` 比较什么？
 
@@ -91,21 +92,13 @@ MVP 只做文本级、按行比较：
 
 ## Q6: 当前实现与目标语义的差异在哪里？
 
-本轮之前：
-
-- `GET /api/releases/:id/diff` 未实现
-- `releases.diff_summary` 字段已存在，但还没有稳定语义
-
-本轮之后应保持：
+当前实现应保持：
 
 - `GET /api/releases/:id/diff` 已可用
 - `diff_summary` 为稳定结构，而不是随意 JSON
 - 重复发布相同内容时，仍生成新 release，但 `has_changes = false`
 
-## 当前建议
+## 当前结论
 
-按下面顺序继续推进：
-
-1. 落地 `GET /api/releases/:id/diff`
-2. 为 release detail 和 release diff 补真实 PostgreSQL + HTTP 集成测试
-3. 然后进入 `POST /api/deployment-instances/:id/token/reset`
+- 前端 Diff 页应固定渲染“当前 release 与上一版”的比较结果
+- release detail 和 diff 都可以直接消费后端返回的摘要与前后文本

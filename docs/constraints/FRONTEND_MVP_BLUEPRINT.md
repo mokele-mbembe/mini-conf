@@ -14,7 +14,10 @@
 
 - 管理端登录态基于 HttpOnly Session Cookie
 - 前端默认通过 `/api/auth/me` 判断当前登录状态
-- 暂不做细粒度权限 UI，先按“管理员已登录”语义设计
+- 前端第一版就应感知项目角色，并按 `admin / editor / viewer` 控制高风险入口
+- 后端仍然是最终权限真值，前端按钮隐藏只用于改善体验
+- 非成员访问项目资源时，前端按资源未命中处理
+- 成员但角色不足时，前端按 `403 project_permission_denied` 处理
 - `Template` 是 `DeploymentInstance` 的特殊实例
 - `publish` 是“实例下单配置文件发布”，不是整实例一键发布
 - 项目级 `ConfigFile.is_required` 决定发布门槛
@@ -23,7 +26,7 @@
 
 页面目标：
 
-- 让管理员登录管理端
+- 让管理端用户登录
 
 依赖接口：
 
@@ -352,7 +355,8 @@
 关键交互：
 
 - 支持按 `deployment_instance_id` / `config_file_id` 过滤
-- 进入详情后查看原始 `content`、`revision`、`change_summary`
+- 进入详情后查看返回的 `content`、`revision`、`change_summary`
+- secret 配置按后端脱敏后的内容展示
 
 ## 13. Diff 对比页
 
@@ -362,12 +366,13 @@
 
 依赖接口：
 
-- 预留 `GET /api/releases/:id/diff`
+- `GET /api/releases/:id/diff`
 
-当前状态：
+关键交互：
 
-- 页面先作为前端蓝图保留
-- 后端 diff 接口仍待实现
+- 以前后文本直接驱动 DiffEditor
+- 固定展示“当前 release 与上一版 release”的对比
+- secret 配置按后端脱敏后的内容展示
 
 ## 14. 发布确认流程
 
@@ -394,3 +399,96 @@
 
 - Template 不允许发布
 - 任一必选配置缺失都会阻塞当前这次单配置发布
+
+## 15. 项目成员页
+
+页面目标：
+
+- 管理项目成员和角色
+
+依赖接口：
+
+- `GET /api/projects/:id/members`
+- `POST /api/projects/:id/members`
+- `PUT /api/projects/:id/members/:memberId`
+- `DELETE /api/projects/:id/members/:memberId`
+
+加载态 / 空状态 / 缺权限状态：
+
+- 无成员异常空状态时，至少应保留创建者可见
+- 非 admin 不展示写操作入口
+
+表单字段与校验：
+
+- `username`
+- `role`
+
+关键交互：
+
+- admin 可添加、修改、删除成员
+- 删除或降级最后一个 admin 时要展示明确错误提示
+
+失败提示：
+
+- `project_member_conflict`
+- `user_not_found`
+- `last_project_admin_required`
+
+## 16. 同步记录页
+
+页面目标：
+
+- 查看实例配置应用结果和回传记录
+
+依赖接口：
+
+- `GET /api/deployment-sync-records`
+
+关键交互：
+
+- 支持按实例、配置文件、进程、动作、状态筛选
+- 明确展示 `revision`、`action`、`status`、`reported_at`
+
+与当前产品规则绑定的限制：
+
+- `admin / editor / viewer` 都可查看
+
+## 17. 心跳页
+
+页面目标：
+
+- 查看实例最近一次进程心跳状态
+
+依赖接口：
+
+- `GET /api/deployment-heartbeats`
+
+关键交互：
+
+- 支持按实例和 `process_key` 筛选
+- 展示 `reported_at`、`process_key` 和最近状态
+
+与当前产品规则绑定的限制：
+
+- 当前接口只返回最近状态，不直接给出在线/离线结论
+- `admin / editor / viewer` 都可查看
+
+## 18. 审计日志页
+
+页面目标：
+
+- 查看高风险操作和关键认证事件
+
+依赖接口：
+
+- `GET /api/audit-logs`
+
+关键交互：
+
+- 支持按 `project_id`、`user_id`、`action`、`resource_type` 过滤
+- 明确展示安全元数据，不尝试渲染被裁剪的敏感内容
+
+与当前产品规则绑定的限制：
+
+- 仅项目 `admin` 可查看
+- 不展示或拼接 Draft / Release 明文、原始 token、完整 diff 文本

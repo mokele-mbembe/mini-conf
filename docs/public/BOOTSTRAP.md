@@ -134,6 +134,8 @@ OPENAPI_EXPORT_PATH=docs/artifacts/openapi.json
 8. Diff 对比页
 9. 部署实例同步记录页
 
+在真正开始前端开发前，建议先补一套本机长期保留的 runtime DB，用于观察真实页面状态，而不是一直复用测试库。
+
 ## 7. 自动化命令建议
 
 - `just dev-server`
@@ -146,6 +148,9 @@ OPENAPI_EXPORT_PATH=docs/artifacts/openapi.json
 - `just openapi-check`
 - `just db-migrate-up`
 - `just db-migrate-down`
+- `just dev-seed-demo`
+- `just dev-seed-demo-local`
+- `just dev-db-prepare-local`
 - `just test-e2e`
 - `just ci-local`
 - `just ci-local-db`
@@ -156,6 +161,7 @@ OPENAPI_EXPORT_PATH=docs/artifacts/openapi.json
 
 - `Core` 工作流：`just lint`、`just test`、`just openapi-check`
 - `Isolated DB` 工作流：`just db-migrate-up`、`just db-migrate-down`、`just test-backend-db`
+- `Local Preview / UI Dev` 工作流：`just db-migrate-up-local`、`just dev-seed-demo-local`、`just dev-db-prepare-local`、`just run-server-local`、`just dev-web`
 - 本机 local wrapper：`just run-server-local`、`just db-migrate-up-local`、`just db-migrate-down-local`、`just test-backend-db-local`
 - 本机 CI 分层：`just ci-local` 不要求数据库；`just ci-local-db` 复用 local wrapper 对齐 GitHub `backend-db`，并在缺少运行库配置时回退到 local test DB；`just ci-local-full` 串联两层
 
@@ -168,12 +174,28 @@ OPENAPI_EXPORT_PATH=docs/artifacts/openapi.json
 - `scripts/dev-db-env.sh` 仅保留为兼容壳
 - Rust 数据库测试代码本身只读取 `TEST_DATABASE_URL`
 - 数据库名不绑定产品名，推荐按场景显式命名，例如 `mini_conf_dev`、`mini_conf_ci`、`mini_conf_staging`
+- 前端联调推荐额外保留一套独立运行库，例如 `mini_conf_ui_dev`
+- demo 数据脚本只写运行库，不写测试库
+- 如果本机数据库账号没有 `CREATEDB` 权限，可先使用同一 database 下的独立 schema，并通过 `DATABASE_URL` 的 `search_path` 指向它
 
 数据库集成测试约定：
 
 - 测试文件不要各自重复解析环境变量
 - 统一复用 [`infra::testing`](../../crates/infra/src/testing.rs) 中的 `test_database_url`、`unique_schema_name`、`with_search_path`
 - 这样可以把 Linux / WSL2 / 本地 shell 的环境差异收口在一处，避免后续新增测试时再引入分叉
+
+本地前端联调建议：
+
+1. 配置 `MINI_CONF_LOCAL_DB_*` 或 `MINI_CONF_LOCAL_DATABASE_URL`
+2. 执行 `just dev-db-prepare-local`
+3. 运行 `just run-server-local`
+4. 运行 `just dev-web`
+
+`just dev-db-prepare-local` 会：
+
+- 对 runtime DB 执行迁移
+- 写入可重复执行的 demo 用户、项目、配置、部署实例、Draft、Release、sync records、heartbeats、audit logs
+- 输出本地可直接登录的账号和 open API demo token
 
 ## 8. 代码质量与 TDD 基线
 

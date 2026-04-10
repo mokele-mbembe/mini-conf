@@ -77,11 +77,15 @@ build_database_url() {
 }
 
 if [[ -z "${DATABASE_URL:-}" ]]; then
-  runtime_password="$(resolve_password \
-    "${MINI_CONF_LOCAL_DB_PASSWORD:-${MINI_CONF_DB_PASSWORD:-}}" \
-    "${MINI_CONF_LOCAL_DB_PASSWORD_FILE:-${MINI_CONF_DB_PASSWORD_FILE:-}}" \
-    "${MINI_CONF_LOCAL_SECRET_ENV:-${MINI_CONF_SECRET_ENV:-dev}}" \
-    "${MINI_CONF_LOCAL_DB_USER:-${MINI_CONF_DB_USER:-}}")"
+  runtime_password=""
+
+  if [[ -z "${MINI_CONF_LOCAL_DATABASE_URL:-}" ]]; then
+    runtime_password="$(resolve_password \
+      "${MINI_CONF_LOCAL_DB_PASSWORD:-${MINI_CONF_DB_PASSWORD:-}}" \
+      "${MINI_CONF_LOCAL_DB_PASSWORD_FILE:-${MINI_CONF_DB_PASSWORD_FILE:-}}" \
+      "${MINI_CONF_LOCAL_SECRET_ENV:-${MINI_CONF_SECRET_ENV:-dev}}" \
+      "${MINI_CONF_LOCAL_DB_USER:-${MINI_CONF_DB_USER:-}}")"
+  fi
 
   runtime_url="$(build_database_url \
     "runtime database" \
@@ -115,11 +119,15 @@ if [[ -z "${TEST_DATABASE_URL:-}" ]]; then
 
     export TEST_DATABASE_URL="${DATABASE_URL}"
   else
-    test_password="$(resolve_password \
-      "${MINI_CONF_LOCAL_TEST_DB_PASSWORD:-}" \
-      "${MINI_CONF_LOCAL_TEST_DB_PASSWORD_FILE:-}" \
-      "${MINI_CONF_LOCAL_TEST_SECRET_ENV:-${MINI_CONF_LOCAL_SECRET_ENV:-${MINI_CONF_SECRET_ENV:-dev}}}" \
-      "${MINI_CONF_LOCAL_TEST_DB_USER:-${MINI_CONF_LOCAL_DB_USER:-${MINI_CONF_DB_USER:-}}}")"
+    test_password=""
+
+    if [[ -z "${MINI_CONF_LOCAL_TEST_DATABASE_URL:-}" ]]; then
+      test_password="$(resolve_password \
+        "${MINI_CONF_LOCAL_TEST_DB_PASSWORD:-}" \
+        "${MINI_CONF_LOCAL_TEST_DB_PASSWORD_FILE:-}" \
+        "${MINI_CONF_LOCAL_TEST_SECRET_ENV:-${MINI_CONF_LOCAL_SECRET_ENV:-${MINI_CONF_SECRET_ENV:-dev}}}" \
+        "${MINI_CONF_LOCAL_TEST_DB_USER:-${MINI_CONF_LOCAL_DB_USER:-${MINI_CONF_DB_USER:-}}}")"
+    fi
 
     test_url="$(build_database_url \
       "test database" \

@@ -116,19 +116,19 @@
 - 单配置 Draft
 - 单配置 Release
 - open consumer 侧整包 `config-bundle`
-
-当前仍缺：
-
 - `ConfigFile.is_required`
 - 发布时对必选配置完整性的校验
 - 管理端整实例预览接口
 - 单配置 clone 接口
 
-## 当前建议
+当前仍未做的是：
 
-按下面顺序推进代码：
+- 多候选 Draft 池
+- 由后端提供更高级的发布前修复建议
+- 超出 MVP 的批量编排能力
 
-1. `config_files` 增加 `is_required`
-2. 发布前校验 template 禁止发布 + 必选配置完整性
-3. 新增单配置 clone
-4. 新增整实例预览接口
+## 当前结论
+
+- `is_required` 已作为项目级发布门槛落地
+- preview-bundle 已成为前端预览最终效果的标准真值接口
+- 前端不应自行组合 Draft / Release / required 缺失逻辑
