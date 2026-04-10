@@ -151,7 +151,7 @@ fn validate_positive_integer_field(
         return Ok(());
     };
 
-    let Some(number) = value.as_i64() else {
+    let Some(number) = extract_integral_number(value) else {
         return Err(ApiError::unprocessable_entity(
             "draft_validation_failed",
             match field {
@@ -174,6 +174,19 @@ fn validate_positive_integer_field(
     }
 
     Ok(())
+}
+
+fn extract_integral_number(value: &JsonValue) -> Option<i64> {
+    match value {
+        JsonValue::Number(number) => number.as_i64().or_else(|| {
+            number
+                .as_f64()
+                .filter(|value| value.fract() == 0.0)
+                .map(|value| value as i64)
+        }),
+        JsonValue::String(value) => value.trim().parse::<i64>().ok(),
+        _ => None,
+    }
 }
 
 fn fully_redacted(format: &str) -> RedactedContent {
@@ -256,6 +269,23 @@ mod tests {
                 Some("v1"),
             )
             .is_ok()
+        );
+    }
+
+    #[test]
+    fn rejects_non_positive_yaml_integer_values() {
+        let error = ValidatorRegistry::validate_content(
+            "yaml",
+            "poll_interval_ms: -1\n",
+            Some("coffee-main"),
+            Some("v1"),
+        )
+        .err();
+
+        assert!(error.is_some());
+        assert_eq!(
+            error.map(|error| error.into_body().message),
+            Some("poll_interval_ms must be greater than zero".to_owned())
         );
     }
 

@@ -1119,12 +1119,13 @@ async fn publish_release_rejects_invalid_schema_in_existing_draft() -> TestResul
             version,
             editor_user_id
         )
-        VALUES ($1, $2, $3, 'poll_interval_ms: -1\n', 'abc123', 'yaml', 'v1', 1, $4)
+        VALUES ($1, $2, $3, $4, 'abc123', 'yaml', 'v1', 1, $5)
         "#,
     )
     .bind(project_id)
     .bind(config_file_id)
     .bind(deployment_id)
+    .bind("poll_interval_ms: -1\n")
     .bind(admin_user_id)
     .execute(&pool)
     .await?;
