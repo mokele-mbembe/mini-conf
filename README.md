@@ -179,6 +179,7 @@ MVP 默认采用 `DeploymentInstance` 作为配置组织模型，因为它最贴
 
 - 文档总索引与分类说明：[docs/README.md](./docs/README.md)
 - 项目启动与里程碑：[KICKOFF.md](./KICKOFF.md)
+- 单人 `main` 开发每日清单：[MAIN_DEV_CHECKLIST.md](./MAIN_DEV_CHECKLIST.md)
 - 对外公开与使用侧文档：[docs/public/README.md](./docs/public/README.md)
 - 项目约束与产品边界：[docs/constraints/README.md](./docs/constraints/README.md)
 - AI agent 工作流与环境约定：[docs/agents/README.md](./docs/agents/README.md)
