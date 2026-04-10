@@ -151,6 +151,7 @@ MVP 默认采用 `DeploymentInstance` 作为配置组织模型，因为它最贴
 当前约定：
 
 - 所有 Linux 协作者至少满足 `Core` 工作流：`just lint`、`just test`、`just openapi-check`
+- MVP 发布前采用 `single-maintainer main-first`：单人开发默认直接在 `main` 上迭代，push 前至少跑 `just ci-local`，数据库主路径额外跑 `just ci-local-db`
 - 承担数据库主路径开发与 PR 级 PostgreSQL 集成测试的环境满足 `Isolated DB` 工作流：`just db-migrate-up`、`just test-backend-db`
 - 共享黑盒环境与生产部署额外属于 `Blackbox / Staging` 和 `Production` 工作流，不复用开发机脚本
 - `~/.config/mini-conf/dev-env.sh` 是唯一推荐的本机环境入口

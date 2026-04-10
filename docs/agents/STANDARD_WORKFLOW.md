@@ -17,6 +17,7 @@
 
 - Linux-first；不承诺 Windows / PowerShell 作为主工作流
 - 仓库命令入口统一使用 `just`
+- MVP 发布前允许采用 `single-maintainer main-first` 工作模式
 - 运行时、迁移和 CI 一律以显式 DSN 为准
 - 本机环境入口统一使用 `~/.config/mini-conf/dev-env.sh`
 - `secret-tool` 只作为本机兼容选项，不是标准前提
@@ -26,6 +27,14 @@
 - 默认采用 `database-per-instance`
 - 允许同一个 PostgreSQL server 承载多套 `mini-conf` database
 - 不把数据库名绑定到产品名；数据库名由部署者按场景自定义
+
+`single-maintainer main-first` 的边界：
+
+- 仅适用于当前单人开发、尚未上线、业务设计仍可能推翻的阶段
+- 默认开发分支就是 `main`
+- 不要求所有功能先走 PR / 长期特性分支
+- 允许为了排查 CI、验证高风险改动或导出临时 patch 开短命分支
+- 临时分支完成后优先使用线性历史并回 `main`，不保留长期并行开发线
 
 ## 3. 五层工作流模型
 
@@ -272,6 +281,23 @@
 - `just openapi-check` 失败通常表示接口定义已变化，但 `docs/artifacts/openapi.json` 没有同步提交
 - 不接受“单独补一个 refresh generated spec 空提交”作为标准做法
 - OpenAPI 生成物应和功能改动处于同一个提交序列中
+
+### 7.1 MVP 前单人 `main` 提交约定
+
+在 MVP 发布前，默认按下面的简化纪律使用 `main`：
+
+1. 日常开发直接在 `main` 上进行
+2. 每次提交尽量只覆盖一个主题，避免把 schema、接口、前端脚手架和文档大杂烩塞进同一提交
+3. 非 DB 改动 push 前至少执行 `just ci-local`
+4. 涉及迁移、SQL、权限、发布链路或运行库初始化时，额外执行 `just ci-local-db`；需要时直接执行 `just ci-local-full`
+5. push 后以 GitHub Actions 结果为最终兜底；若 CI 失败，优先立即修复，不在 `main` 上继续叠加新主题
+6. 临时分支只用于隔离高风险实验或修复 CI；回收时优先 `git merge --ff-only`
+
+补充约束：
+
+- 不为了省 Actions 分钟而关闭缓存、覆盖率或关键回归检查
+- 可以为了减少重复执行而少开分支，但不能跳过本地最小门禁
+- 当前没有多人协作前，不强制 PR 审核；但一旦进入多人协作或出现 staging / production 使用者，应重新切回分支与 PR 为默认入口
 
 ## 8. CI 与长期环境对齐
 
