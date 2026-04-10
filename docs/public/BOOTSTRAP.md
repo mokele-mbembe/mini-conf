@@ -79,6 +79,7 @@ DATABASE_ADMIN_URL=postgres://postgres:secret@127.0.0.1:5432/postgres
 INIT_DB_ON_BOOT=true
 INIT_ADMIN_USERNAME=admin
 INIT_ADMIN_PASSWORD=admin123456
+INIT_USERS_FILE=tests/alpha/users.seed.yaml
 STATIC_DIR=apps/web/dist
 ADMIN_AUTH_MODE=session
 JWT_ENABLED=false
@@ -102,10 +103,12 @@ OPENAPI_EXPORT_PATH=docs/artifacts/openapi.json
 - `GET /api/deployment-instances`
 - `POST /api/deployment-instances`
 - `POST /api/deployment-instances/:id/clone`
+- `GET /api/deployment-heartbeats`
 - `GET /api/drafts/:deploymentId/:configFileId`
 - `PUT /api/drafts/:deploymentId/:configFileId`
 - `POST /api/releases/publish`
 - `GET /api/releases`
+- `GET /api/releases/:id`
 - `GET /api/releases/:id/diff`
 - `POST /api/deployment-instances/:id/token/reset`
 

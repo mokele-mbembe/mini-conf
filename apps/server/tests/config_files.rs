@@ -151,7 +151,7 @@ async fn list_config_files_filters_by_project() -> TestResult {
         INSERT INTO config_files (project_id, code, name, format, sensitivity, status)
         VALUES
             ($1, 'main', 'Main', 'yaml', 'normal', 'active'),
-            ($1, 'vision', 'Vision', 'yaml', 'secret', 'active'),
+            ($1, 'vision', 'Vision', 'yaml', 'secret', 'archived'),
             ($2, 'main', 'Main', 'json', 'normal', 'active')
         "#,
     )
@@ -162,10 +162,11 @@ async fn list_config_files_filters_by_project() -> TestResult {
 
     let cookie = login(&app).await?;
     let response = app
+        .clone()
         .oneshot(
             Request::builder()
                 .uri(format!("/api/config-files?project_id={project_a}"))
-                .header(header::COOKIE, cookie)
+                .header(header::COOKIE, &cookie)
                 .body(Body::empty())?,
         )
         .await?;
@@ -181,6 +182,23 @@ async fn list_config_files_filters_by_project() -> TestResult {
     );
     assert_eq!(payload.items[0].code, "main");
     assert_eq!(payload.items[1].code, "vision");
+    assert_eq!(payload.items[1].status, "archived");
+
+    let archived_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/config-files?project_id={project_a}&status=archived"
+                ))
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(archived_response.status(), StatusCode::OK);
+    let archived_payload: ConfigFileListResponse = read_json(archived_response).await?;
+    assert_eq!(archived_payload.items.len(), 1);
+    assert_eq!(archived_payload.items[0].code, "vision");
 
     teardown(&database_url, &schema, pool).await
 }

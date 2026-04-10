@@ -2,8 +2,8 @@ use crate::{error::ErrorResponse, state::AppState};
 use axum::Router;
 use schema::{
     audit::{
-        AuditLogListResponse, AuditLogSummary, DeploymentSyncRecordListResponse,
-        DeploymentSyncRecordSummary,
+        AuditLogListResponse, AuditLogSummary, DeploymentHeartbeatListResponse,
+        DeploymentHeartbeatSummary, DeploymentSyncRecordListResponse, DeploymentSyncRecordSummary,
     },
     auth::{AuthSessionResponse, AuthUser},
     config_file::{ConfigFileListResponse, ConfigFileSummary},
@@ -59,6 +59,7 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
         crate::http::api::deployment_instances::clone_deployment_instance,
         crate::http::api::deployment_instances::preview_deployment_bundle,
         crate::http::api::deployment_instances::reset_deployment_token,
+        crate::http::api::deployment_heartbeats::list_deployment_heartbeats,
         crate::http::api::deployment_sync_records::list_deployment_sync_records,
         crate::http::api::drafts::get_draft,
         crate::http::api::drafts::put_draft,
@@ -88,6 +89,8 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
             AuthUser,
             AuditLogSummary,
             AuditLogListResponse,
+            DeploymentHeartbeatSummary,
+            DeploymentHeartbeatListResponse,
             ConfigFileSummary,
             ConfigFileListResponse,
             DeploymentSyncRecordSummary,
@@ -127,8 +130,10 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
             PublishReleaseRequestBody,
             ListAuditLogsParams,
             ListConfigFilesParams,
+            ListDeploymentHeartbeatsParams,
             ListDeploymentSyncRecordsParams,
             ListDeploymentInstancesParams,
+            ListProjectsParams,
             ListReleasesParams,
             ResolveConfigParams,
             ConfigBundleParams,
@@ -284,8 +289,15 @@ pub struct PublishReleaseRequestBody {
 
 #[derive(Debug, IntoParams, ToSchema)]
 #[into_params(parameter_in = Query)]
+pub struct ListProjectsParams {
+    pub status: Option<String>,
+}
+
+#[derive(Debug, IntoParams, ToSchema)]
+#[into_params(parameter_in = Query)]
 pub struct ListConfigFilesParams {
     pub project_id: Option<i64>,
+    pub status: Option<String>,
 }
 
 #[derive(Debug, IntoParams, ToSchema)]
@@ -293,7 +305,16 @@ pub struct ListConfigFilesParams {
 pub struct ListDeploymentInstancesParams {
     pub project_id: Option<i64>,
     pub environment: Option<String>,
+    pub keyword: Option<String>,
     pub status: Option<String>,
+}
+
+#[derive(Debug, IntoParams, ToSchema)]
+#[into_params(parameter_in = Query)]
+pub struct ListDeploymentHeartbeatsParams {
+    pub project_id: Option<i64>,
+    pub deployment_instance_id: Option<i64>,
+    pub process_key: Option<String>,
 }
 
 #[derive(Debug, IntoParams, ToSchema)]
@@ -425,6 +446,7 @@ mod tests {
         assert!(paths.contains_key("/api/deployment-instances/{id}/clone"));
         assert!(paths.contains_key("/api/deployment-instances/{id}/preview-bundle"));
         assert!(paths.contains_key("/api/deployment-instances/{id}/token/reset"));
+        assert!(paths.contains_key("/api/deployment-heartbeats"));
         assert!(paths.contains_key("/api/drafts/{deployment_id}/{config_file_id}"));
         assert!(paths.contains_key("/api/drafts/{target_deployment_id}/{config_file_id}/clone"));
         assert!(paths.contains_key("/api/projects"));

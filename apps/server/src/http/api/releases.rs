@@ -3,6 +3,7 @@ use crate::{
     authorization::{ProjectRole, authenticate_user, require_project_role},
     error::ApiError,
     state::AppState,
+    validation::{ValidatorRegistry, redact_content},
 };
 use axum::{
     Json, Router,
@@ -16,6 +17,7 @@ use schema::release::{
 };
 use serde::Deserialize;
 use sqlx::{Row, types::Json as SqlxJson};
+use tracing::error;
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct ListReleasesQuery {
@@ -44,6 +46,8 @@ struct ValidatedPublishReleaseRequest {
 struct ReleasePublishContext {
     format: String,
     is_template: bool,
+    schema_name: Option<String>,
+    schema_version: Option<String>,
 }
 
 #[derive(Debug)]
@@ -58,6 +62,8 @@ struct ReleaseRecord {
     release: ReleaseSummary,
     content: String,
     diff_summary: Option<ReleaseDiffSummary>,
+    sensitivity: String,
+    secret_paths: Option<Vec<String>>,
 }
 
 pub fn router() -> Router<AppState> {
@@ -202,6 +208,12 @@ pub(crate) async fn publish_release(
             "draft format no longer matches config file",
         ));
     }
+    ValidatorRegistry::validate_content(
+        &context.format,
+        &draft.content,
+        context.schema_name.as_deref(),
+        context.schema_version.as_deref(),
+    )?;
     let previous_release =
         find_latest_release(pool, payload.deployment_instance_id, payload.config_file_id).await?;
     let diff_summary = build_diff_summary(
@@ -212,7 +224,16 @@ pub(crate) async fn publish_release(
     );
     let revision = next_revision(pool).await?;
 
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let mut tx = pool.begin().await.map_err(|error| {
+        error!(
+            ?error,
+            project_id = payload.project_id,
+            deployment_instance_id = payload.deployment_instance_id,
+            config_file_id = payload.config_file_id,
+            "failed to start release publish transaction"
+        );
+        ApiError::internal()
+    })?;
     let row = sqlx::query(
         r#"
         INSERT INTO releases (
@@ -255,7 +276,16 @@ pub(crate) async fn publish_release(
     .bind(auth.user_id)
     .fetch_one(&mut *tx)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| {
+        error!(
+            ?error,
+            project_id = payload.project_id,
+            deployment_instance_id = payload.deployment_instance_id,
+            config_file_id = payload.config_file_id,
+            "failed to insert published release"
+        );
+        ApiError::internal()
+    })?;
 
     let summary = map_release_row(&row);
     write_audit_log(
@@ -273,8 +303,25 @@ pub(crate) async fn publish_release(
             })),
         },
     )
-    .await?;
-    tx.commit().await.map_err(|_| ApiError::internal())?;
+    .await
+    .map_err(|error| {
+        error!(
+            ?error,
+            release_id = summary.id,
+            project_id = summary.project_id,
+            "failed to write release publish audit log"
+        );
+        error
+    })?;
+    tx.commit().await.map_err(|error| {
+        error!(
+            ?error,
+            release_id = summary.id,
+            project_id = summary.project_id,
+            "failed to commit release publish transaction"
+        );
+        ApiError::internal()
+    })?;
 
     Ok((StatusCode::CREATED, Json(summary)))
 }
@@ -321,10 +368,18 @@ pub(crate) async fn get_release_detail(
         "release not found",
     )
     .await?;
+    let content_redacted = redact_content(
+        &release.release.format,
+        &release.content,
+        &release.sensitivity,
+        release.secret_paths.as_deref(),
+    );
+
     Ok(Json(ReleaseDetailResponse {
         release: release.release,
-        content: release.content,
+        content: content_redacted.content,
         diff_summary: release.diff_summary,
+        content_redacted: content_redacted.redacted,
     }))
 }
 
@@ -378,12 +433,29 @@ pub(crate) async fn get_release_diff(
         )
     });
 
+    let before = base_release.as_ref().map(|base| {
+        redact_content(
+            &base.release.format,
+            &base.content,
+            &base.sensitivity,
+            base.secret_paths.as_deref(),
+        )
+    });
+    let after = redact_content(
+        &release.release.format,
+        &release.content,
+        &release.sensitivity,
+        release.secret_paths.as_deref(),
+    );
+
     Ok(Json(ReleaseDiffResponse {
         release: release.release,
         base_release: base_release.as_ref().map(|base| base.release.clone()),
-        before_content: base_release.map(|base| base.content),
-        after_content: release.content,
+        before_content: before.as_ref().map(|value| value.content.clone()),
+        after_content: after.content,
         diff_summary,
+        before_redacted: before.as_ref().is_some_and(|value| value.redacted),
+        after_redacted: after.redacted,
     }))
 }
 
@@ -450,7 +522,7 @@ async fn load_publish_context(
 
     let row = sqlx::query(
         r#"
-        SELECT project_id, format
+        SELECT project_id, format, schema_name, schema_version
         FROM config_files
         WHERE id = $1
         LIMIT 1
@@ -472,6 +544,8 @@ async fn load_publish_context(
     Ok(ReleasePublishContext {
         format: row.get("format"),
         is_template: deployment_row.get("is_template"),
+        schema_name: row.get("schema_name"),
+        schema_version: row.get("schema_version"),
     })
 }
 
@@ -551,21 +625,24 @@ async fn load_release_by_id(pool: &sqlx::PgPool, id: i64) -> Result<ReleaseRecor
     let row = sqlx::query(
         r#"
         SELECT
-            id,
-            project_id,
-            deployment_instance_id,
-            config_file_id,
-            revision,
-            btrim(content_hash) AS content_hash,
-            format,
-            change_summary,
-            diff_summary,
-            apply_mode,
-            published_by,
-            to_char(published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS published_at,
-            content
-        FROM releases
-        WHERE id = $1
+            r.id,
+            r.project_id,
+            r.deployment_instance_id,
+            r.config_file_id,
+            r.revision,
+            btrim(r.content_hash) AS content_hash,
+            r.format,
+            r.change_summary,
+            r.diff_summary,
+            r.apply_mode,
+            r.published_by,
+            to_char(r.published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS published_at,
+            r.content,
+            cf.sensitivity,
+            cf.secret_paths
+        FROM releases r
+        JOIN config_files cf ON cf.id = r.config_file_id
+        WHERE r.id = $1
         LIMIT 1
         "#,
     )
@@ -586,23 +663,26 @@ async fn find_latest_release(
     let row = sqlx::query(
         r#"
         SELECT
-            id,
-            project_id,
-            deployment_instance_id,
-            config_file_id,
-            revision,
-            btrim(content_hash) AS content_hash,
-            format,
-            change_summary,
-            diff_summary,
-            apply_mode,
-            published_by,
-            to_char(published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS published_at,
-            content
-        FROM releases
-        WHERE deployment_instance_id = $1
-          AND config_file_id = $2
-        ORDER BY published_at DESC, id DESC
+            r.id,
+            r.project_id,
+            r.deployment_instance_id,
+            r.config_file_id,
+            r.revision,
+            btrim(r.content_hash) AS content_hash,
+            r.format,
+            r.change_summary,
+            r.diff_summary,
+            r.apply_mode,
+            r.published_by,
+            to_char(r.published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS published_at,
+            r.content,
+            cf.sensitivity,
+            cf.secret_paths
+        FROM releases r
+        JOIN config_files cf ON cf.id = r.config_file_id
+        WHERE r.deployment_instance_id = $1
+          AND r.config_file_id = $2
+        ORDER BY r.published_at DESC, r.id DESC
         LIMIT 1
         "#,
     )
@@ -639,8 +719,11 @@ async fn find_previous_release_before_id(
             r.apply_mode,
             r.published_by,
             to_char(r.published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS published_at,
-            r.content
+            r.content,
+            cf.sensitivity,
+            cf.secret_paths
         FROM releases r
+        JOIN config_files cf ON cf.id = r.config_file_id
         JOIN target t
           ON r.deployment_instance_id = t.deployment_instance_id
          AND r.config_file_id = t.config_file_id
@@ -679,6 +762,10 @@ fn map_release_record(row: &sqlx::postgres::PgRow) -> ReleaseRecord {
         content: row.get("content"),
         diff_summary: row
             .get::<Option<SqlxJson<ReleaseDiffSummary>>, _>("diff_summary")
+            .map(|value| value.0),
+        sensitivity: row.get("sensitivity"),
+        secret_paths: row
+            .get::<Option<SqlxJson<Vec<String>>>, _>("secret_paths")
             .map(|value| value.0),
     }
 }

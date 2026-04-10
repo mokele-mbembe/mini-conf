@@ -44,6 +44,23 @@ pub struct DeploymentSyncRecordListResponse {
     pub items: Vec<DeploymentSyncRecordSummary>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[schema(example = deployment_heartbeat_summary_example)]
+pub struct DeploymentHeartbeatSummary {
+    pub id: i64,
+    pub project_id: i64,
+    pub deployment_instance_id: i64,
+    pub process_key: String,
+    pub metadata: Option<Value>,
+    pub reported_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[schema(example = deployment_heartbeat_list_response_example)]
+pub struct DeploymentHeartbeatListResponse {
+    pub items: Vec<DeploymentHeartbeatSummary>,
+}
+
 fn audit_log_summary_example() -> serde_json::Value {
     serde_json::json!({
         "id": 41,
@@ -122,11 +139,43 @@ fn deployment_sync_record_list_response_example() -> serde_json::Value {
     })
 }
 
+fn deployment_heartbeat_summary_example() -> serde_json::Value {
+    serde_json::json!({
+        "id": 21,
+        "project_id": 7,
+        "deployment_instance_id": 3,
+        "process_key": "vision",
+        "metadata": {
+            "ip": "10.0.0.8",
+            "version": "1.0.3"
+        },
+        "reported_at": "2026-04-10T12:05:00Z"
+    })
+}
+
+fn deployment_heartbeat_list_response_example() -> serde_json::Value {
+    serde_json::json!({
+        "items": [
+            {
+                "id": 21,
+                "project_id": 7,
+                "deployment_instance_id": 3,
+                "process_key": "vision",
+                "metadata": {
+                    "ip": "10.0.0.8",
+                    "version": "1.0.3"
+                },
+                "reported_at": "2026-04-10T12:05:00Z"
+            }
+        ]
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        AuditLogListResponse, AuditLogSummary, DeploymentSyncRecordListResponse,
-        DeploymentSyncRecordSummary,
+        AuditLogListResponse, AuditLogSummary, DeploymentHeartbeatListResponse,
+        DeploymentHeartbeatSummary, DeploymentSyncRecordListResponse, DeploymentSyncRecordSummary,
     };
 
     #[test]
@@ -205,6 +254,39 @@ mod tests {
                             "duration_ms": 87
                         },
                         "reported_at": "2026-04-10T12:00:00Z"
+                    }
+                ]
+            })
+        );
+    }
+
+    #[test]
+    fn deployment_heartbeat_list_response_serializes_expected_shape() {
+        let value = serde_json::to_value(DeploymentHeartbeatListResponse {
+            items: vec![DeploymentHeartbeatSummary {
+                id: 21,
+                project_id: 7,
+                deployment_instance_id: 3,
+                process_key: "vision".to_owned(),
+                metadata: Some(serde_json::json!({"ip": "10.0.0.8"})),
+                reported_at: "2026-04-10T12:05:00Z".to_owned(),
+            }],
+        })
+        .expect("response should serialize");
+
+        assert_eq!(
+            value,
+            serde_json::json!({
+                "items": [
+                    {
+                        "id": 21,
+                        "project_id": 7,
+                        "deployment_instance_id": 3,
+                        "process_key": "vision",
+                        "metadata": {
+                            "ip": "10.0.0.8"
+                        },
+                        "reported_at": "2026-04-10T12:05:00Z"
                     }
                 ]
             })

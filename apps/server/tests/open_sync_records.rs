@@ -285,3 +285,49 @@ async fn sync_record_returns_not_found_for_unknown_release() -> TestResult {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn sync_record_returns_not_found_for_archived_config() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    seed_release(&pool).await?;
+    sqlx::query("UPDATE config_files SET status = 'archived' WHERE code = 'main'")
+        .execute(&pool)
+        .await?;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/open/deployment-sync-records")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {TEST_TOKEN}"))
+                .body(Body::from(
+                    r#"{
+                        "project":"coffee-legacy",
+                        "environment":"prod",
+                        "deployment_key":"store-001",
+                        "config":"main",
+                        "action":"apply",
+                        "status":"success"
+                    }"#,
+                ))?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let payload: ErrorResponse = read_json(response).await?;
+    assert_eq!(
+        payload,
+        ErrorResponse {
+            code: "config_file_not_found".to_owned(),
+            message: "config file not found".to_owned(),
+        }
+    );
+
+    teardown(&database_url, &schema, pool).await?;
+
+    Ok(())
+}

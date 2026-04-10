@@ -403,6 +403,67 @@ async fn put_draft_rejects_format_mismatch() -> TestResult {
 }
 
 #[tokio::test]
+async fn put_draft_rejects_invalid_yaml_content() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+    let (_, config_file_id, deployment_id) = seed_project_config_deployment(&pool).await?;
+
+    let cookie = login(&app).await?;
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/api/drafts/{deployment_id}/{config_file_id}"))
+                .header(header::COOKIE, &cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"content":"poll_interval_ms: [","format":"yaml"}"#,
+                ))?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let payload: ErrorResponse = read_json(response).await?;
+    assert_eq!(payload.code, "draft_validation_failed");
+    assert_eq!(payload.message, "draft content is not valid yaml");
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn put_draft_rejects_schema_validation_failure() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+    let (_, config_file_id, deployment_id) = seed_project_config_deployment(&pool).await?;
+
+    let cookie = login(&app).await?;
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/api/drafts/{deployment_id}/{config_file_id}"))
+                .header(header::COOKIE, &cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"content":"poll_interval_ms: -1\n","format":"yaml"}"#,
+                ))?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let payload: ErrorResponse = read_json(response).await?;
+    assert_eq!(payload.code, "draft_validation_failed");
+    assert_eq!(
+        payload.message,
+        "poll_interval_ms must be greater than zero"
+    );
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
 async fn clone_draft_copies_latest_release_into_target_draft() -> TestResult {
     let Some((app, pool, database_url, schema)) = setup_app().await? else {
         return Ok(());

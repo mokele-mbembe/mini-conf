@@ -212,3 +212,48 @@ async fn heartbeat_returns_not_found_for_unknown_deployment() -> TestResult {
     teardown(&database_url, &schema, pool).await?;
     Ok(())
 }
+
+#[tokio::test]
+async fn heartbeat_returns_not_found_for_archived_deployment() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    seed_deployment(&pool).await?;
+    sqlx::query(
+        "UPDATE deployment_instances SET status = 'archived' WHERE deployment_key = 'store-001'",
+    )
+    .execute(&pool)
+    .await?;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/open/heartbeats")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {TEST_TOKEN}"))
+                .body(Body::from(
+                    r#"{
+                        "project":"coffee-legacy",
+                        "environment":"prod",
+                        "deployment_key":"store-001",
+                        "process_key":"vision"
+                    }"#,
+                ))?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let payload: ErrorResponse = read_json(response).await?;
+    assert_eq!(
+        payload,
+        ErrorResponse {
+            code: "deployment_not_found".to_owned(),
+            message: "deployment instance not found".to_owned(),
+        }
+    );
+
+    teardown(&database_url, &schema, pool).await?;
+    Ok(())
+}

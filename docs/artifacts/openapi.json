@@ -315,6 +315,14 @@
               "type": "integer",
               "format": "int64"
             }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -641,6 +649,89 @@
         ]
       }
     },
+    "/api/deployment-heartbeats": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "list_deployment_heartbeats",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "deployment_instance_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "process_key",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deployment heartbeats visible to the current project member",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentHeartbeatListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or expired admin session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database bootstrap disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_auth": []
+          }
+        ]
+      }
+    },
     "/api/deployment-instances": {
       "get": {
         "tags": [
@@ -659,6 +750,14 @@
           },
           {
             "name": "environment",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "keyword",
             "in": "query",
             "required": false,
             "schema": {
@@ -2305,6 +2404,16 @@
           "admin"
         ],
         "operationId": "list_projects",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "List active projects visible to the current session user",
@@ -3857,6 +3966,77 @@
           }
         }
       },
+      "DeploymentHeartbeatListResponse": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeploymentHeartbeatSummary"
+            }
+          }
+        },
+        "example": {
+          "items": [
+            {
+              "deployment_instance_id": 3,
+              "id": 21,
+              "metadata": {
+                "ip": "10.0.0.8",
+                "version": "1.0.3"
+              },
+              "process_key": "vision",
+              "project_id": 7,
+              "reported_at": "2026-04-10T12:05:00Z"
+            }
+          ]
+        }
+      },
+      "DeploymentHeartbeatSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "project_id",
+          "deployment_instance_id",
+          "process_key",
+          "reported_at"
+        ],
+        "properties": {
+          "deployment_instance_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "metadata": {},
+          "process_key": {
+            "type": "string"
+          },
+          "project_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "reported_at": {
+            "type": "string"
+          }
+        },
+        "example": {
+          "deployment_instance_id": 3,
+          "id": 21,
+          "metadata": {
+            "ip": "10.0.0.8",
+            "version": "1.0.3"
+          },
+          "process_key": "vision",
+          "project_id": 7,
+          "reported_at": "2026-04-10T12:05:00Z"
+        }
+      },
       "DeploymentInstanceListResponse": {
         "type": "object",
         "required": [
@@ -4353,6 +4533,37 @@
               "null"
             ],
             "format": "int64"
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ListDeploymentHeartbeatsParams": {
+        "type": "object",
+        "properties": {
+          "deployment_instance_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "process_key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "project_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           }
         }
       },
@@ -4360,6 +4571,12 @@
         "type": "object",
         "properties": {
           "environment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "keyword": {
             "type": [
               "string",
               "null"
@@ -4416,6 +4633,17 @@
             ],
             "format": "int64"
           },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ListProjectsParams": {
+        "type": "object",
+        "properties": {
           "status": {
             "type": [
               "string",
@@ -4666,11 +4894,15 @@
         "type": "object",
         "required": [
           "release",
-          "content"
+          "content",
+          "content_redacted"
         ],
         "properties": {
           "content": {
             "type": "string"
+          },
+          "content_redacted": {
+            "type": "boolean"
           },
           "diff_summary": {
             "oneOf": [
@@ -4692,11 +4924,16 @@
         "required": [
           "release",
           "after_content",
-          "diff_summary"
+          "diff_summary",
+          "before_redacted",
+          "after_redacted"
         ],
         "properties": {
           "after_content": {
             "type": "string"
+          },
+          "after_redacted": {
+            "type": "boolean"
           },
           "base_release": {
             "oneOf": [
@@ -4713,6 +4950,9 @@
               "string",
               "null"
             ]
+          },
+          "before_redacted": {
+            "type": "boolean"
           },
           "diff_summary": {
             "$ref": "#/components/schemas/ReleaseDiffSummary"

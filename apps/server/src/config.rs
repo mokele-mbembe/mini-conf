@@ -46,6 +46,7 @@ pub struct AppConfig {
     pub init_db_on_boot: bool,
     pub init_admin_username: Option<String>,
     pub init_admin_password: Option<String>,
+    pub init_users_file: Option<PathBuf>,
     pub static_dir: PathBuf,
     pub openapi_export_path: PathBuf,
 }
@@ -59,6 +60,7 @@ impl Default for AppConfig {
             init_db_on_boot: DEFAULT_INIT_DB_ON_BOOT,
             init_admin_username: None,
             init_admin_password: None,
+            init_users_file: None,
             static_dir: PathBuf::from(DEFAULT_STATIC_DIR),
             openapi_export_path: PathBuf::from(DEFAULT_OPENAPI_EXPORT_PATH),
         }
@@ -98,6 +100,10 @@ impl AppConfig {
 
         if let Some(value) = lookup("INIT_ADMIN_PASSWORD") {
             config.init_admin_password = non_empty(value);
+        }
+
+        if let Some(value) = lookup("INIT_USERS_FILE") {
+            config.init_users_file = non_empty(value).map(PathBuf::from);
         }
 
         if let Some(value) = lookup("STATIC_DIR") {
@@ -164,10 +170,10 @@ impl ConfigError {
         }
     }
 
-    pub fn from_seed(field: &'static str, message: &'static str) -> Self {
+    pub fn from_seed(field: &'static str, message: impl Into<String>) -> Self {
         Self {
             field,
-            message: message.to_owned(),
+            message: message.into(),
         }
     }
 
@@ -225,6 +231,7 @@ mod tests {
                 init_db_on_boot: false,
                 init_admin_username: None,
                 init_admin_password: None,
+                init_users_file: None,
                 static_dir: PathBuf::from("apps/web/dist"),
                 openapi_export_path: PathBuf::from("docs/artifacts/openapi.json"),
             }
@@ -249,6 +256,7 @@ mod tests {
                 "postgres://db.example/mini_conf_prod_candidate",
             ),
             ("INIT_DB_ON_BOOT", "true"),
+            ("INIT_USERS_FILE", "config/bootstrap-users.yaml"),
             ("STATIC_DIR", "var/web"),
             ("OPENAPI_EXPORT_PATH", "var/openapi.json"),
         ]);
@@ -265,6 +273,7 @@ mod tests {
                 init_db_on_boot: true,
                 init_admin_username: None,
                 init_admin_password: None,
+                init_users_file: Some(PathBuf::from("config/bootstrap-users.yaml")),
                 static_dir: PathBuf::from("var/web"),
                 openapi_export_path: PathBuf::from("var/openapi.json"),
             }
@@ -425,6 +434,7 @@ mod tests {
                 init_db_on_boot: true,
                 init_admin_username: None,
                 init_admin_password: None,
+                init_users_file: None,
                 static_dir: PathBuf::from("tmp/static"),
                 openapi_export_path: PathBuf::from("tmp/openapi.json"),
             }

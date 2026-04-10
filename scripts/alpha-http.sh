@@ -54,6 +54,12 @@ app_env="${APP_ENV:-dev}"
 init_db_on_boot="${INIT_DB_ON_BOOT:-true}"
 admin_username="${ALPHA_ADMIN_USERNAME:-admin}"
 admin_password="${ALPHA_ADMIN_PASSWORD:-admin123456}"
+default_users_file="${repo_root}/tests/alpha/users.seed.yaml"
+if [[ -f "${default_users_file}" ]]; then
+  init_users_file="${ALPHA_INIT_USERS_FILE:-${default_users_file}}"
+else
+  init_users_file="${ALPHA_INIT_USERS_FILE:-}"
+fi
 suite_id="${ALPHA_SUITE_ID:-$(date +%s%N)}"
 ready_timeout_sec="${ALPHA_HTTP_READY_TIMEOUT_SEC:-180}"
 
@@ -90,6 +96,7 @@ env \
   INIT_DB_ON_BOOT="${init_db_on_boot}" \
   INIT_ADMIN_USERNAME="${admin_username}" \
   INIT_ADMIN_PASSWORD="${admin_password}" \
+  INIT_USERS_FILE="${init_users_file}" \
   cargo run --bin server >"${server_log}" 2>&1 &
 server_pid=$!
 

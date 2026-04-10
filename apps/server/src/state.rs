@@ -69,6 +69,7 @@ mod tests {
                 init_db_on_boot: false,
                 init_admin_username: None,
                 init_admin_password: None,
+                init_users_file: None,
                 static_dir: PathBuf::from("apps/web/dist"),
                 openapi_export_path: PathBuf::from("docs/artifacts/openapi.json"),
             }

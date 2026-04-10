@@ -7,6 +7,7 @@ pub mod error;
 mod http;
 pub mod openapi;
 pub mod state;
+pub mod validation;
 
 use axum::Router;
 use state::AppState;

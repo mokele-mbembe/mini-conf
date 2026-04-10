@@ -25,6 +25,7 @@ use sqlx::{Error as SqlxError, Row};
 pub(crate) struct ListDeploymentInstancesQuery {
     project_id: Option<i64>,
     environment: Option<String>,
+    keyword: Option<String>,
     status: Option<String>,
 }
 
@@ -173,7 +174,15 @@ pub(crate) async fn list_deployment_instances(
          AND pm.user_id = $1
         WHERE ($2::bigint IS NULL OR di.project_id = $2)
           AND ($3::varchar IS NULL OR di.environment = $3)
-          AND ($4::varchar IS NULL OR di.status = $4)
+          AND (
+                $4::varchar IS NULL
+                OR di.status = $4
+          )
+          AND (
+                $5::varchar IS NULL
+                OR di.deployment_key ILIKE '%' || $5 || '%'
+                OR di.name ILIKE '%' || $5 || '%'
+          )
         ORDER BY di.project_id ASC, di.environment ASC, di.deployment_key ASC, di.id ASC
         "#,
     )
@@ -181,6 +190,7 @@ pub(crate) async fn list_deployment_instances(
     .bind(query.project_id)
     .bind(normalize_optional(query.environment))
     .bind(normalize_optional(query.status))
+    .bind(normalize_optional(query.keyword))
     .fetch_all(pool)
     .await
     .map_err(|_| ApiError::internal())?;
@@ -823,7 +833,7 @@ pub(crate) async fn reset_deployment_token(
     };
 
     let auth = authenticate_user(pool, &headers).await?;
-    let project_id = load_deployment_project_id(pool, id).await?;
+    let (project_id, deployment_status) = load_deployment_project(pool, id).await?;
     require_project_role(
         pool,
         auth.user_id,
@@ -833,6 +843,12 @@ pub(crate) async fn reset_deployment_token(
         "deployment instance not found",
     )
     .await?;
+    if deployment_status != "active" {
+        return Err(ApiError::conflict(
+            "deployment_instance_inactive",
+            "deployment instance is not active",
+        ));
+    }
 
     let token = generate_deployment_token();
     let token_hash = hash_bearer_token(&token);
@@ -964,10 +980,10 @@ async fn load_template_context(
     })
 }
 
-async fn load_deployment_project_id(pool: &sqlx::PgPool, id: i64) -> Result<i64, ApiError> {
-    sqlx::query_scalar::<_, i64>(
+async fn load_deployment_project(pool: &sqlx::PgPool, id: i64) -> Result<(i64, String), ApiError> {
+    let row = sqlx::query(
         r#"
-        SELECT project_id
+        SELECT project_id, status
         FROM deployment_instances
         WHERE id = $1
         LIMIT 1
@@ -982,7 +998,9 @@ async fn load_deployment_project_id(pool: &sqlx::PgPool, id: i64) -> Result<i64,
             "deployment_instance_not_found",
             "deployment instance not found",
         )
-    })
+    })?;
+
+    Ok((row.get("project_id"), row.get("status")))
 }
 
 async fn upsert_default_deployment_credential(

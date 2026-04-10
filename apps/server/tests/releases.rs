@@ -176,6 +176,34 @@ async fn seed_project_config_deployment(pool: &PgPool) -> TestResult<(i64, i64, 
     Ok((project_id, config_file_id, deployment_id))
 }
 
+async fn seed_template_deployment(
+    pool: &PgPool,
+    project_id: i64,
+    deployment_key: &str,
+) -> TestResult<i64> {
+    let deployment_id: i64 = sqlx::query_scalar(
+        r#"
+        INSERT INTO deployment_instances (
+            project_id,
+            environment,
+            deployment_key,
+            name,
+            is_template,
+            status
+        )
+        VALUES ($1, 'prod', $2, $3, true, 'active')
+        RETURNING id
+        "#,
+    )
+    .bind(project_id)
+    .bind(deployment_key)
+    .bind(format!("{deployment_key} template"))
+    .fetch_one(pool)
+    .await?;
+
+    Ok(deployment_id)
+}
+
 async fn seed_required_config_file(pool: &PgPool, project_id: i64, code: &str) -> TestResult<i64> {
     let config_file_id: i64 = sqlx::query_scalar(
         r#"
@@ -379,6 +407,92 @@ async fn publish_release_generates_new_revision_for_identical_draft_content() ->
 }
 
 #[tokio::test]
+async fn publish_release_succeeds_for_template_clone_target() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    let project_id: i64 = sqlx::query_scalar(
+        "INSERT INTO projects (code, name, status) VALUES ('alpha-clone-release', 'Alpha Clone Release', 'active') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await?;
+    let config_file_id: i64 = sqlx::query_scalar(
+        r#"
+        INSERT INTO config_files (
+            project_id,
+            code,
+            name,
+            is_required,
+            format,
+            schema_name,
+            schema_version,
+            sensitivity,
+            status
+        )
+        VALUES ($1, 'main', 'Main Config', true, 'yaml', 'alpha-main', 'v1', 'normal', 'active')
+        RETURNING id
+        "#,
+    )
+    .bind(project_id)
+    .fetch_one(&pool)
+    .await?;
+    let template_id = seed_template_deployment(&pool, project_id, "alpha-template").await?;
+
+    let cookie = login(&app).await?;
+    let _ = save_draft(
+        &app,
+        &cookie,
+        template_id,
+        config_file_id,
+        "poll_interval_ms: 5000\n",
+        None,
+    )
+    .await?;
+
+    let clone_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/deployment-instances/{template_id}/clone"))
+                .header(header::COOKIE, &cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"deployment_key":"alpha-store-001","name":"Alpha Store 001","environment":"prod","clone_source":"draft"}"#,
+                ))?,
+        )
+        .await?;
+    assert_eq!(clone_response.status(), StatusCode::CREATED);
+    let cloned: serde_json::Value = read_json(clone_response).await?;
+    let deployment_id = cloned
+        .get("id")
+        .and_then(serde_json::Value::as_i64)
+        .ok_or_else(|| std::io::Error::other("clone response should include deployment id"))?;
+
+    let publish_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/releases/publish")
+                .header(header::COOKIE, &cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(format!(
+                    r#"{{"project_id":{project_id},"deployment_instance_id":{deployment_id},"config_file_id":{config_file_id},"change_summary":"clone publish"}}"#
+                )))?,
+        )
+        .await?;
+
+    assert_eq!(publish_response.status(), StatusCode::CREATED);
+    let payload: ReleaseSummary = read_json(publish_response).await?;
+    assert_eq!(payload.project_id, project_id);
+    assert_eq!(payload.deployment_instance_id, deployment_id);
+    assert_eq!(payload.config_file_id, config_file_id);
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
 async fn publish_release_returns_draft_not_found_when_current_draft_is_missing() -> TestResult {
     let Some((app, pool, database_url, schema)) = setup_app().await? else {
         return Ok(());
@@ -536,6 +650,7 @@ async fn get_release_detail_returns_content_and_metadata() -> TestResult {
     let payload: ReleaseDetailResponse = read_json(response).await?;
     assert_eq!(payload.release.id, created.id);
     assert_eq!(payload.content, "poll_interval_ms: 5000\n");
+    assert!(!payload.content_redacted);
     assert_eq!(
         payload.diff_summary,
         Some(schema::release::ReleaseDiffSummary {
@@ -650,6 +765,8 @@ async fn get_release_diff_returns_initial_release_shape_for_first_publish() -> T
     assert!(payload.diff_summary.has_changes);
     assert_eq!(payload.diff_summary.added_lines, 1);
     assert_eq!(payload.diff_summary.removed_lines, 0);
+    assert!(!payload.before_redacted);
+    assert!(!payload.after_redacted);
 
     teardown(&database_url, &schema, pool).await
 }
@@ -726,6 +843,8 @@ async fn get_release_diff_returns_previous_release_content_and_summary() -> Test
     assert!(payload.diff_summary.has_changes);
     assert_eq!(payload.diff_summary.added_lines, 2);
     assert_eq!(payload.diff_summary.removed_lines, 1);
+    assert!(!payload.before_redacted);
+    assert!(!payload.after_redacted);
 
     teardown(&database_url, &schema, pool).await
 }
@@ -789,6 +908,8 @@ async fn get_release_diff_marks_identical_republish_as_no_change() -> TestResult
     assert!(!payload.diff_summary.has_changes);
     assert_eq!(payload.diff_summary.added_lines, 0);
     assert_eq!(payload.diff_summary.removed_lines, 0);
+    assert!(!payload.before_redacted);
+    assert!(!payload.after_redacted);
 
     teardown(&database_url, &schema, pool).await
 }
@@ -971,6 +1092,159 @@ async fn publish_release_allows_required_config_when_it_has_existing_release() -
     )
     .await?;
     assert_eq!(payload.deployment_instance_id, deployment_id);
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn publish_release_rejects_invalid_schema_in_existing_draft() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+    let (project_id, config_file_id, deployment_id) = seed_project_config_deployment(&pool).await?;
+    let admin_user_id: i64 =
+        sqlx::query_scalar("SELECT id FROM users WHERE username = 'admin' LIMIT 1")
+            .fetch_one(&pool)
+            .await?;
+    sqlx::query(
+        r#"
+        INSERT INTO drafts (
+            project_id,
+            config_file_id,
+            deployment_instance_id,
+            content,
+            content_hash,
+            format,
+            schema_version,
+            version,
+            editor_user_id
+        )
+        VALUES ($1, $2, $3, 'poll_interval_ms: -1\n', 'abc123', 'yaml', 'v1', 1, $4)
+        "#,
+    )
+    .bind(project_id)
+    .bind(config_file_id)
+    .bind(deployment_id)
+    .bind(admin_user_id)
+    .execute(&pool)
+    .await?;
+
+    let cookie = login(&app).await?;
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/releases/publish")
+                .header(header::COOKIE, &cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(format!(
+                    r#"{{"project_id":{project_id},"deployment_instance_id":{deployment_id},"config_file_id":{config_file_id}}}"#
+                )))?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let payload: ErrorResponse = read_json(response).await?;
+    assert_eq!(payload.code, "draft_validation_failed");
+    assert_eq!(
+        payload.message,
+        "poll_interval_ms must be greater than zero"
+    );
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn secret_release_detail_and_diff_are_redacted_for_management_reads() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+    let (project_id, config_file_id, deployment_id) = seed_project_config_deployment(&pool).await?;
+    sqlx::query(
+        r#"
+        UPDATE config_files
+        SET sensitivity = 'secret',
+            secret_paths = '["$.wifi.password"]'::jsonb
+        WHERE id = $1
+        "#,
+    )
+    .bind(config_file_id)
+    .execute(&pool)
+    .await?;
+
+    let cookie = login(&app).await?;
+    let _ = save_draft(
+        &app,
+        &cookie,
+        deployment_id,
+        config_file_id,
+        "wifi:\n  password: secret-1\n",
+        None,
+    )
+    .await?;
+    let first = publish_release(
+        &app,
+        &cookie,
+        project_id,
+        deployment_id,
+        config_file_id,
+        Some("initial"),
+    )
+    .await?;
+    let _ = save_draft(
+        &app,
+        &cookie,
+        deployment_id,
+        config_file_id,
+        "wifi:\n  password: secret-2\n",
+        Some(1),
+    )
+    .await?;
+    let second = publish_release(
+        &app,
+        &cookie,
+        project_id,
+        deployment_id,
+        config_file_id,
+        Some("rotate"),
+    )
+    .await?;
+
+    let detail_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/releases/{}", second.id))
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(detail_response.status(), StatusCode::OK);
+    let detail: ReleaseDetailResponse = read_json(detail_response).await?;
+    assert!(detail.content_redacted);
+    assert!(detail.content.contains("***REDACTED***"));
+    assert!(!detail.content.contains("secret-2"));
+
+    let diff_response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/releases/{}/diff", second.id))
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(diff_response.status(), StatusCode::OK);
+    let diff: ReleaseDiffResponse = read_json(diff_response).await?;
+    assert_eq!(diff.base_release.map(|release| release.id), Some(first.id));
+    assert!(diff.before_redacted);
+    assert!(diff.after_redacted);
+    assert!(
+        diff.before_content
+            .as_deref()
+            .is_some_and(|content| content.contains("***REDACTED***"))
+    );
+    assert!(diff.after_content.contains("***REDACTED***"));
+    assert!(!diff.after_content.contains("secret-2"));
 
     teardown(&database_url, &schema, pool).await
 }

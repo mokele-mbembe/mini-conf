@@ -17,6 +17,7 @@ use sqlx::{Error as SqlxError, Row, types::Json as SqlxJson};
 #[derive(Debug, Deserialize)]
 pub(crate) struct ListConfigFilesQuery {
     project_id: Option<i64>,
+    status: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -137,13 +138,20 @@ pub(crate) async fn list_config_files(
         JOIN project_members pm
           ON pm.project_id = cf.project_id
          AND pm.user_id = $1
-        WHERE cf.status = 'active'
-          AND ($2::bigint IS NULL OR cf.project_id = $2)
+        WHERE ($2::bigint IS NULL OR cf.project_id = $2)
+          AND (
+                $3::varchar IS NULL
+                AND cf.status IN ('active', 'archived')
+              OR
+                $3::varchar IS NOT NULL
+                AND cf.status = $3
+          )
         ORDER BY cf.project_id ASC, cf.code ASC, cf.id ASC
         "#,
     )
     .bind(auth.user_id)
     .bind(query.project_id)
+    .bind(normalize_optional(query.status))
     .fetch_all(pool)
     .await
     .map_err(|_| ApiError::internal())?;

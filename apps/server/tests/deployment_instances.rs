@@ -226,12 +226,13 @@ async fn list_deployment_instances_filters_by_project_and_environment() -> TestR
 
     let cookie = login(&app).await?;
     let response = app
+        .clone()
         .oneshot(
             Request::builder()
                 .uri(format!(
                     "/api/deployment-instances?project_id={project_a}&environment=prod&status=active"
                 ))
-                .header(header::COOKIE, cookie)
+                .header(header::COOKIE, &cookie)
                 .body(Body::empty())?,
         )
         .await?;
@@ -242,6 +243,22 @@ async fn list_deployment_instances_filters_by_project_and_environment() -> TestR
     assert_eq!(payload.items[0].project_id, project_a);
     assert_eq!(payload.items[0].environment, "prod");
     assert_eq!(payload.items[0].deployment_key, "store-001");
+
+    let keyword_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/deployment-instances?project_id={project_a}&keyword=001"
+                ))
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(keyword_response.status(), StatusCode::OK);
+    let keyword_payload: DeploymentInstanceListResponse = read_json(keyword_response).await?;
+    assert_eq!(keyword_payload.items.len(), 1);
+    assert_eq!(keyword_payload.items[0].deployment_key, "store-001");
 
     teardown(&database_url, &schema, pool).await
 }

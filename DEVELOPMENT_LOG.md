@@ -12,7 +12,7 @@
 
 ## 1.1 最近完成
 
-2026-04-10 本轮已完成后端权限与审计主线收口：
+2026-04-10 本轮已完成后端权限与审计主线收口，并补完后端补强批次的主路径：
 
 - 新增 `project_members` 与 `audit_logs` 迁移，并补历史项目给活动用户 `admin` 的成员回填
 - 管理端资源访问已从“登录即管理员”切换为项目成员角色模型
@@ -23,6 +23,14 @@
 - `docs/` 已按受众重组为 `public / constraints / agents / collaboration / artifacts`
 - OpenAPI 导出产物已从 markdown 叙述目录中分离到 `docs/artifacts/openapi.json`
 - 本机 CI 已新增 `just ci-local-db` 与 `just ci-local-full`，用于把 GitHub `backend-db` 校验纳入统一入口；`ci-local-db` 在缺少运行库配置时会复用 local test DB
+- 新增 `INIT_USERS_FILE` 启动 seed，支持 JSON / YAML 导入多用户与项目成员绑定；alpha HTTP 默认接入 `tests/alpha/users.seed.yaml`
+- 管理端列表已补 `projects/config-files` 的 `status` 过滤和 `deployment-instances` 的 `keyword` 过滤
+- open consumer 侧 `resolve / release / config-bundle / sync-record / heartbeat` 已统一只接受 `project/config/deployment` 均为 `active` 的资源
+- 新增 `GET /api/deployment-heartbeats`
+- Draft 保存、clone 与发布前已接入格式解析和可插拔 schema validator
+- 管理端 `release detail / diff` 已对 secret 配置做脱敏返回，并返回 redaction 标记字段
+- `alpha-full` 已补多用户 seed、项目成员、同步记录、心跳、模板 clone、二次发布 diff、旧 token 失效回归
+- 本机与 CI 已补后端覆盖率基线入口：`just coverage-check`
 
 本轮本地验证结果：
 
@@ -104,7 +112,7 @@
 - [x] 真实 PostgreSQL 集成测试
 - [x] OpenAPI 导出检查
 - [x] 性能 smoke 检查
-- [ ] 覆盖率基线
+- [x] 覆盖率基线
 - [ ] 前端测试基线
 - [ ] compile-time SQLx metadata 检查
 
@@ -120,9 +128,9 @@
 
 - [x] 管理端查看 deployment sync records
 - [x] 更完整的 OpenAPI 文档说明与示例
-- [ ] `alpha-full` 补 `project_members / audit_logs / deployment-sync-records` 的黑盒闭环
-- [ ] `alpha-full` 补模板 clone、二次发布 diff、旧 token 失效回归
-- [ ] 评估多用户 alpha seed / setup 方案，支撑项目级权限黑盒回归
+- [x] `alpha-full` 补 `project_members / audit_logs / deployment-sync-records` 的黑盒闭环
+- [x] `alpha-full` 补模板 clone、二次发布 diff、旧 token 失效回归
+- [x] 多用户 alpha seed / setup 方案，支撑项目级权限黑盒回归
 - [ ] `sqlx-check` 恢复为强制检查的时机评估
 
 ### 3.3 前端未来主路径
@@ -142,15 +150,14 @@
 推荐顺序：
 
 1. 前端管理台主路径
-2. 覆盖率基线
-3. `alpha-full` 黑盒回归补强
-4. `sqlx-check` 恢复为强制检查的时机评估
+2. `sqlx-check` 恢复为强制检查的时机评估
+3. 黑盒与覆盖率基线的持续补量
 
 理由：
 
-- 后端主路径、项目级权限、审计日志和管理端同步记录查询已经完成
-- 当前更大的风险已从“后端功能缺失”转向“前端接线、覆盖率和持续质量基线”
-- 当前 alpha 黑盒回归还没有覆盖新成员权限链路与审计查询链路
+- 后端主路径、项目级权限、审计日志、管理端同步/心跳查询和开放接口活跃态约束已经完成
+- 当前更大的风险已从“后端功能缺失”转向“前端接线、覆盖率持续抬升和 compile-time SQLx metadata 时机”
+- alpha 黑盒已覆盖成员权限、审计查询、模板 clone、二次发布 diff 和 token 失效回归
 
 ## 5. 下一个会话建议先跑的命令
 
@@ -160,6 +167,7 @@
 git status --short
 cargo test --workspace
 bash scripts/export-openapi.sh
+just coverage-check
 ```
 
 如果要在本地复现 CI 基线，再跑：

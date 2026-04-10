@@ -3,6 +3,7 @@ use crate::{
     authorization::{ProjectRole, authenticate_user, require_project_role},
     error::ApiError,
     state::AppState,
+    validation::ValidatorRegistry,
 };
 use axum::{
     Json, Router,
@@ -45,6 +46,7 @@ struct ValidatedCloneDraftRequest {
 struct DraftContext {
     project_id: i64,
     format: String,
+    schema_name: Option<String>,
     schema_version: Option<String>,
 }
 
@@ -470,7 +472,7 @@ async fn load_draft_context(
 
     let row = sqlx::query(
         r#"
-        SELECT project_id, format, schema_version
+        SELECT project_id, format, schema_name, schema_version
         FROM config_files
         WHERE id = $1
         LIMIT 1
@@ -493,6 +495,7 @@ async fn load_draft_context(
     Ok(DraftContext {
         project_id: config_project_id,
         format: row.get("format"),
+        schema_name: row.get("schema_name"),
         schema_version: row.get("schema_version"),
     })
 }
@@ -715,6 +718,13 @@ fn validate_draft_payload(
         ));
     }
 
+    ValidatorRegistry::validate_content(
+        &context.format,
+        &payload.content,
+        context.schema_name.as_deref(),
+        context.schema_version.as_deref(),
+    )?;
+
     Ok(())
 }
 
@@ -728,6 +738,13 @@ fn validate_cloned_draft(
             "draft format must match config file format",
         ));
     }
+
+    ValidatorRegistry::validate_content(
+        &context.format,
+        &source.content,
+        context.schema_name.as_deref(),
+        context.schema_version.as_deref(),
+    )?;
 
     Ok(())
 }

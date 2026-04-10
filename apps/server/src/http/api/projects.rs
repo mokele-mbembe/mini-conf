@@ -6,7 +6,7 @@ use crate::{
 };
 use axum::{
     Json, Router,
-    extract::{Path, State, rejection::JsonRejection},
+    extract::{Path, Query, State, rejection::JsonRejection},
     http::HeaderMap,
     http::StatusCode,
     routing::get,
@@ -14,6 +14,11 @@ use axum::{
 use schema::project::{ProjectListResponse, ProjectSummary};
 use serde::Deserialize;
 use sqlx::{Error as SqlxError, Row};
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct ListProjectsQuery {
+    status: Option<String>,
+}
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct CreateProjectRequest {
@@ -55,6 +60,7 @@ pub fn router() -> Router<AppState> {
     get,
     path = "/api/projects",
     tag = "admin",
+    params(crate::openapi::ListProjectsParams),
     security(
         ("session_auth" = [])
     ),
@@ -67,6 +73,7 @@ pub fn router() -> Router<AppState> {
 )]
 pub(crate) async fn list_projects(
     State(state): State<AppState>,
+    Query(query): Query<ListProjectsQuery>,
     headers: HeaderMap,
 ) -> Result<Json<ProjectListResponse>, ApiError> {
     let Some(pool) = state.db_pool() else {
@@ -84,11 +91,19 @@ pub(crate) async fn list_projects(
         JOIN project_members pm
           ON pm.project_id = p.id
          AND pm.user_id = $1
-        WHERE p.status = 'active'
+        WHERE (
+                $2::varchar IS NULL
+                AND p.status IN ('active', 'archived')
+              )
+           OR (
+                $2::varchar IS NOT NULL
+                AND p.status = $2
+              )
         ORDER BY p.code ASC, p.id ASC
         "#,
     )
     .bind(auth.user_id)
+    .bind(normalize_optional(query.status))
     .fetch_all(pool)
     .await
     .map_err(|_| ApiError::internal())?;

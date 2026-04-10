@@ -154,8 +154,10 @@ async fn find_deployment(
         FROM projects p
         JOIN deployment_instances d ON d.project_id = p.id
         WHERE p.code = $1
+          AND p.status = 'active'
           AND d.environment = $2
           AND d.deployment_key = $3
+          AND d.status = 'active'
         "#,
     )
     .bind(project)

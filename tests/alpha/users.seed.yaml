@@ -1,0 +1,10 @@
+users:
+  - username: alice
+    password: alice123
+    status: active
+  - username: bob
+    password: bob123
+    status: active
+  - username: carol
+    password: carol123
+    status: active

@@ -238,3 +238,39 @@ async fn config_bundle_returns_not_found_for_unknown_deployment() -> TestResult 
     teardown(&database_url, &schema, pool).await?;
     Ok(())
 }
+
+#[tokio::test]
+async fn config_bundle_returns_not_found_for_archived_deployment() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    seed_bundle(&pool).await?;
+    sqlx::query(
+        "UPDATE deployment_instances SET status = 'archived' WHERE deployment_key = 'store-001'",
+    )
+    .execute(&pool)
+    .await?;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/open/deployments/store-001/config-bundle?project=coffee-legacy&environment=prod")
+                .header(header::AUTHORIZATION, format!("Bearer {TEST_TOKEN}"))
+                .body(Body::empty())?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let payload: ErrorResponse = read_json(response).await?;
+    assert_eq!(
+        payload,
+        ErrorResponse {
+            code: "deployment_not_found".to_owned(),
+            message: "deployment instance not found".to_owned(),
+        }
+    );
+
+    teardown(&database_url, &schema, pool).await?;
+    Ok(())
+}

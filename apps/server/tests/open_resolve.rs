@@ -246,3 +246,40 @@ async fn resolve_returns_config_file_not_found_when_config_is_missing() -> TestR
 
     Ok(())
 }
+
+#[tokio::test]
+async fn resolve_returns_not_found_for_archived_deployment() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    seed_release(&pool, "main").await?;
+    sqlx::query(
+        "UPDATE deployment_instances SET status = 'archived' WHERE deployment_key = 'store-001'",
+    )
+    .execute(&pool)
+    .await?;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/open/configs/resolve?project=coffee-legacy&environment=prod&deployment_key=store-001&config=main")
+                .header(header::AUTHORIZATION, format!("Bearer {TEST_TOKEN}"))
+                .body(Body::empty())?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let payload: ErrorResponse = read_json(response).await?;
+    assert_eq!(
+        payload,
+        ErrorResponse {
+            code: "deployment_not_found".to_owned(),
+            message: "deployment instance not found".to_owned(),
+        }
+    );
+
+    teardown(&database_url, &schema, pool).await?;
+
+    Ok(())
+}

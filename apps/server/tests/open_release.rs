@@ -229,3 +229,38 @@ async fn release_returns_not_found_for_unknown_revision() -> TestResult {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn release_returns_not_found_for_archived_config() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    seed_release(&pool, "20260405.0001").await?;
+    sqlx::query("UPDATE config_files SET status = 'archived' WHERE code = 'main'")
+        .execute(&pool)
+        .await?;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/open/releases/20260405.0001")
+                .header(header::AUTHORIZATION, format!("Bearer {TEST_TOKEN}"))
+                .body(Body::empty())?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let payload: ErrorResponse = read_json(response).await?;
+    assert_eq!(
+        payload,
+        ErrorResponse {
+            code: "release_not_found".to_owned(),
+            message: "release not found".to_owned(),
+        }
+    );
+
+    teardown(&database_url, &schema, pool).await?;
+
+    Ok(())
+}

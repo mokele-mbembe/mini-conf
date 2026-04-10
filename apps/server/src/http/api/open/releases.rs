@@ -114,6 +114,9 @@ async fn find_release(
         JOIN deployment_instances d ON d.id = r.deployment_instance_id
         WHERE r.revision = $1
           AND r.deployment_instance_id = $2
+          AND p.status = 'active'
+          AND cf.status = 'active'
+          AND d.status = 'active'
         ORDER BY r.id DESC
         LIMIT 1
         "#,

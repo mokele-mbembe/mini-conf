@@ -1,6 +1,7 @@
 pub(crate) mod audit_logs;
 pub(crate) mod auth;
 pub(crate) mod config_files;
+pub(crate) mod deployment_heartbeats;
 pub(crate) mod deployment_instances;
 pub(crate) mod deployment_sync_records;
 pub(crate) mod drafts;
@@ -18,6 +19,7 @@ pub fn router() -> Router<crate::state::AppState> {
         .merge(auth::router())
         .merge(config_files::router())
         .merge(deployment_instances::router())
+        .merge(deployment_heartbeats::router())
         .merge(deployment_sync_records::router())
         .merge(drafts::router())
         .merge(health::router())

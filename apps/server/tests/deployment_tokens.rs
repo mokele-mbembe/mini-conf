@@ -284,6 +284,37 @@ async fn reset_token_returns_not_found_for_unknown_deployment() -> TestResult {
 }
 
 #[tokio::test]
+async fn reset_token_rejects_archived_deployment() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+    let (_, _, deployment_id) = seed_open_access_fixture(&pool, Some(OLD_TOKEN)).await?;
+    sqlx::query("UPDATE deployment_instances SET status = 'archived' WHERE id = $1")
+        .bind(deployment_id)
+        .execute(&pool)
+        .await?;
+
+    let cookie = login(&app).await?;
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/deployment-instances/{deployment_id}/token/reset"
+                ))
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let payload: ErrorResponse = read_json(response).await?;
+    assert_eq!(payload.code, "deployment_instance_inactive");
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
 async fn reset_token_rotates_existing_default_credential_and_invalidates_old_token() -> TestResult {
     let Some((app, pool, database_url, schema)) = setup_app().await? else {
         return Ok(());

@@ -136,6 +136,7 @@ async fn list_projects_requires_session_cookie() -> TestResult {
     };
 
     let response = app
+        .clone()
         .oneshot(
             Request::builder()
                 .uri("/api/projects")
@@ -157,7 +158,7 @@ async fn list_projects_requires_session_cookie() -> TestResult {
 }
 
 #[tokio::test]
-async fn list_projects_returns_active_projects_for_authenticated_session() -> TestResult {
+async fn list_projects_returns_visible_projects_and_supports_status_filter() -> TestResult {
     let Some((app, pool, database_url, schema)) = setup_app().await? else {
         return Ok(());
     };
@@ -176,10 +177,11 @@ async fn list_projects_returns_active_projects_for_authenticated_session() -> Te
 
     let cookie = login(&app).await?;
     let response = app
+        .clone()
         .oneshot(
             Request::builder()
                 .uri("/api/projects")
-                .header(header::COOKIE, cookie)
+                .header(header::COOKIE, &cookie)
                 .body(Body::empty())?,
         )
         .await?;
@@ -187,15 +189,33 @@ async fn list_projects_returns_active_projects_for_authenticated_session() -> Te
     assert_eq!(response.status(), StatusCode::OK);
     let payload: ProjectListResponse = read_json(response).await?;
 
-    assert_eq!(payload.items.len(), 2);
+    assert_eq!(payload.items.len(), 3);
+    assert_eq!(payload.items[0].code, "coffee-legacy");
+    assert_eq!(payload.items[1].code, "coffee-shadow");
+    assert_eq!(payload.items[1].status, "archived");
+    assert_eq!(payload.items[2].code, "store-os");
+
+    let archived_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/projects?status=archived")
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+
+    assert_eq!(archived_response.status(), StatusCode::OK);
+    let archived_payload: ProjectListResponse = read_json(archived_response).await?;
+    assert_eq!(archived_payload.items.len(), 1);
     assert_eq!(payload.items[0].code, "coffee-legacy");
     assert_eq!(payload.items[0].name, "Coffee Legacy");
     assert_eq!(
         payload.items[0].description.as_deref(),
         Some("Retail edge rollout")
     );
-    assert_eq!(payload.items[1].code, "store-os");
-    assert_eq!(payload.items[1].status, "active");
+    assert_eq!(archived_payload.items[0].code, "coffee-shadow");
+    assert_eq!(archived_payload.items[0].status, "archived");
 
     teardown(&database_url, &schema, pool).await
 }

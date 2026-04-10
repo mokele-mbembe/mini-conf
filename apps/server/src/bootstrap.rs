@@ -5,12 +5,34 @@ use crate::{
     state::AppState,
 };
 use infra::AppIdentity;
+use serde::Deserialize;
 use sqlx::{PgPool, migrate::Migrator};
-use std::fmt;
+use std::{fmt, fs, path::Path};
 use tokio::net::TcpListener;
 use tracing_subscriber::{EnvFilter, fmt as tracing_fmt};
 
 static MIGRATOR: Migrator = sqlx::migrate!("../../migrations");
+
+#[derive(Debug, Deserialize)]
+struct UserSeedFile {
+    users: Vec<UserSeedEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+struct UserSeedEntry {
+    username: String,
+    password: Option<String>,
+    password_hash: Option<String>,
+    status: Option<String>,
+    memberships: Option<Vec<ProjectMembershipSeed>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ProjectMembershipSeed {
+    project_id: Option<i64>,
+    project_code: Option<String>,
+    role: String,
+}
 
 #[derive(Debug)]
 pub enum StartupError {
@@ -85,6 +107,7 @@ pub async fn build_state(config: AppConfig) -> Result<AppState, StartupError> {
         MIGRATOR.run(&pool).await?;
         tracing::info!("database migrations applied");
         seed_admin_if_configured(&pool, &config).await?;
+        seed_users_from_file_if_configured(&pool, &config).await?;
 
         Some(pool)
     } else {
@@ -148,6 +171,200 @@ async fn seed_admin_if_configured(pool: &PgPool, config: &AppConfig) -> Result<(
     .await?;
 
     Ok(())
+}
+
+async fn seed_users_from_file_if_configured(
+    pool: &PgPool,
+    config: &AppConfig,
+) -> Result<(), StartupError> {
+    let Some(path) = config.init_users_file.as_deref() else {
+        return Ok(());
+    };
+
+    tracing::info!(path = %path.display(), "seeding bootstrap users from file");
+    let seed_file = load_user_seed_file(path)?;
+
+    for user in seed_file.users {
+        seed_user_entry(pool, user).await?;
+    }
+
+    Ok(())
+}
+
+fn load_user_seed_file(path: &Path) -> Result<UserSeedFile, StartupError> {
+    let raw = fs::read_to_string(path).map_err(|error| {
+        StartupError::Config(ConfigError::from_seed(
+            "INIT_USERS_FILE",
+            format!("failed to read user seed file: {error}"),
+        ))
+    })?;
+
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.to_ascii_lowercase());
+
+    let parsed = match extension.as_deref() {
+        Some("yaml") | Some("yml") => serde_yaml::from_str(&raw).map_err(|error| error.to_string()),
+        Some("json") => serde_json::from_str(&raw).map_err(|error| error.to_string()),
+        _ => serde_json::from_str(&raw)
+            .map_err(|json_error| json_error.to_string())
+            .or_else(|_| serde_yaml::from_str(&raw).map_err(|yaml_error| yaml_error.to_string())),
+    };
+
+    parsed.map_err(|error| {
+        StartupError::Config(ConfigError::from_seed(
+            "INIT_USERS_FILE",
+            format!("failed to parse user seed file: {error}"),
+        ))
+    })
+}
+
+async fn seed_user_entry(pool: &PgPool, user: UserSeedEntry) -> Result<(), StartupError> {
+    let username = non_empty_seed("INIT_USERS_FILE", "username", &user.username)?;
+    let status = validate_user_status(user.status.as_deref())?;
+    let password_hash = resolve_user_password_hash(&user)?;
+
+    let user_id: i64 = sqlx::query_scalar(
+        r#"
+        INSERT INTO users (username, password_hash, status)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (username)
+        DO UPDATE SET
+            password_hash = EXCLUDED.password_hash,
+            status = EXCLUDED.status,
+            updated_at = NOW()
+        RETURNING id
+        "#,
+    )
+    .bind(username)
+    .bind(password_hash)
+    .bind(status)
+    .fetch_one(pool)
+    .await?;
+
+    for membership in user.memberships.unwrap_or_default() {
+        let role = validate_project_role(&membership.role)?;
+        let project_id = resolve_seed_project_id(pool, membership).await?;
+
+        sqlx::query(
+            r#"
+            INSERT INTO project_members (project_id, user_id, role)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (project_id, user_id)
+            DO UPDATE SET role = EXCLUDED.role
+            "#,
+        )
+        .bind(project_id)
+        .bind(user_id)
+        .bind(role)
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
+fn resolve_user_password_hash(user: &UserSeedEntry) -> Result<String, StartupError> {
+    match (user.password.as_deref(), user.password_hash.as_deref()) {
+        (Some(password), None) => hash_password(password).map_err(|_| {
+            StartupError::Config(ConfigError::from_seed(
+                "INIT_USERS_FILE",
+                "failed to hash seeded user password",
+            ))
+        }),
+        (None, Some(password_hash)) => Ok(password_hash.to_owned()),
+        (Some(_), Some(_)) => Err(StartupError::Config(ConfigError::from_seed(
+            "INIT_USERS_FILE",
+            "seeded user must specify either password or password_hash, not both",
+        ))),
+        (None, None) => Err(StartupError::Config(ConfigError::from_seed(
+            "INIT_USERS_FILE",
+            "seeded user must specify password or password_hash",
+        ))),
+    }
+}
+
+fn validate_user_status(value: Option<&str>) -> Result<&'static str, StartupError> {
+    match value.map(str::trim).filter(|value| !value.is_empty()) {
+        None | Some("active") => Ok("active"),
+        Some("disabled") => Ok("disabled"),
+        Some(_) => Err(StartupError::Config(ConfigError::from_seed(
+            "INIT_USERS_FILE",
+            "seeded user status must be active or disabled",
+        ))),
+    }
+}
+
+fn validate_project_role(value: &str) -> Result<&'static str, StartupError> {
+    match value.trim() {
+        "admin" => Ok("admin"),
+        "editor" => Ok("editor"),
+        "viewer" => Ok("viewer"),
+        _ => Err(StartupError::Config(ConfigError::from_seed(
+            "INIT_USERS_FILE",
+            "seeded project member role must be admin, editor, or viewer",
+        ))),
+    }
+}
+
+async fn resolve_seed_project_id(
+    pool: &PgPool,
+    membership: ProjectMembershipSeed,
+) -> Result<i64, StartupError> {
+    match (
+        membership.project_id,
+        membership
+            .project_code
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty()),
+    ) {
+        (Some(project_id), None) => {
+            sqlx::query_scalar::<_, i64>("SELECT id FROM projects WHERE id = $1 LIMIT 1")
+                .bind(project_id)
+                .fetch_optional(pool)
+                .await?
+                .ok_or_else(|| {
+                    StartupError::Config(ConfigError::from_seed(
+                        "INIT_USERS_FILE",
+                        "seeded project membership references an unknown project_id",
+                    ))
+                })
+        }
+        (None, Some(project_code)) => {
+            sqlx::query_scalar::<_, i64>("SELECT id FROM projects WHERE code = $1 LIMIT 1")
+                .bind(project_code)
+                .fetch_optional(pool)
+                .await?
+                .ok_or_else(|| {
+                    StartupError::Config(ConfigError::from_seed(
+                        "INIT_USERS_FILE",
+                        "seeded project membership references an unknown project_code",
+                    ))
+                })
+        }
+        _ => Err(StartupError::Config(ConfigError::from_seed(
+            "INIT_USERS_FILE",
+            "seeded project membership must specify exactly one of project_id or project_code",
+        ))),
+    }
+}
+
+fn non_empty_seed<'a>(
+    field: &'static str,
+    label: &'static str,
+    value: &'a str,
+) -> Result<&'a str, StartupError> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        Err(StartupError::Config(ConfigError::from_seed(
+            field,
+            format!("seeded user {label} must not be empty"),
+        )))
+    } else {
+        Ok(trimmed)
+    }
 }
 
 #[cfg(test)]

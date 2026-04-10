@@ -34,6 +34,7 @@ pub struct ReleaseDetailResponse {
     pub release: ReleaseSummary,
     pub content: String,
     pub diff_summary: Option<ReleaseDiffSummary>,
+    pub content_redacted: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -43,6 +44,8 @@ pub struct ReleaseDiffResponse {
     pub before_content: Option<String>,
     pub after_content: String,
     pub diff_summary: ReleaseDiffSummary,
+    pub before_redacted: bool,
+    pub after_redacted: bool,
 }
 
 #[cfg(test)]
@@ -151,6 +154,7 @@ mod tests {
                 added_lines: 1,
                 removed_lines: 1,
             }),
+            content_redacted: false,
         })
         .expect("response should serialize");
 
@@ -171,6 +175,7 @@ mod tests {
                     "published_at": "2026-04-06T12:00:00Z"
                 },
                 "content": "poll_interval_ms: 5000\n",
+                "content_redacted": false,
                 "diff_summary": {
                     "is_initial": false,
                     "has_changes": true,
@@ -218,6 +223,8 @@ mod tests {
                 added_lines: 1,
                 removed_lines: 1,
             },
+            before_redacted: false,
+            after_redacted: false,
         })
         .expect("response should serialize");
 
@@ -257,7 +264,9 @@ mod tests {
                     "has_changes": true,
                     "added_lines": 1,
                     "removed_lines": 1
-                }
+                },
+                "before_redacted": false,
+                "after_redacted": false
             })
         );
     }
