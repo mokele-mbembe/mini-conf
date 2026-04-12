@@ -400,7 +400,7 @@ jobs:
 
           # Start Vite preview server (serves the built frontend)
           VITE_API_TARGET="http://${HTTP_ADDR}" \
-            pnpm --dir apps/web preview --port 4173 --strictPort &
+            pnpm --dir apps/web preview --host 127.0.0.1 --port 4173 --strictPort &
           PREVIEW_PID=$!
 
           # Wait for preview server to be ready
