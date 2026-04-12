@@ -305,7 +305,7 @@ jobs:
         run: just alpha-full
 
   frontend-smoke:
-    if: ${{ github.event_name == 'pull_request' && needs.changes.outputs.frontend == 'true' }}
+    if: ${{ ((github.event_name == 'pull_request') || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && needs.changes.outputs.frontend == 'true' }}
     needs: changes
     runs-on: ubuntu-latest
     services:
