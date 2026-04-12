@@ -1,0 +1,34 @@
+{
+  "name": "@mini-conf/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext .vue,.ts,.tsx --fix",
+    "typecheck": "vue-tsc --noEmit",
+    "format:check": "prettier --check .",
+    "test": "echo \"no tests yet\"",
+    "test:e2e": "echo \"no e2e tests yet\""
+  },
+  "dependencies": {
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0",
+    "pinia": "^2.3.1",
+    "element-plus": "^2.9.7",
+    "@element-plus/icons-vue": "^2.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.3",
+    "typescript": "^5.7.3",
+    "vite": "^6.3.2",
+    "vue-tsc": "^2.2.8",
+    "@tsconfig/node22": "^22.0.1",
+    "eslint": "^9.25.0",
+    "@eslint/js": "^9.25.0",
+    "eslint-plugin-vue": "^10.0.0",
+    "typescript-eslint": "^8.30.1"
+  }
+}
