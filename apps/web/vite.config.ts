@@ -20,4 +20,12 @@ export default defineConfig({
       },
     },
   },
+  preview: {
+    proxy: {
+      "/api": {
+        target: apiTarget,
+        changeOrigin: true,
+      },
+    },
+  },
 });
