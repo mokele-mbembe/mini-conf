@@ -15,14 +15,17 @@
 
 建议按这个顺序阅读：
 
-1. [`docs/collaboration/FRONTEND_HANDOFF.md`](./FRONTEND_HANDOFF.md)
-2. [`docs/collaboration/FRONTEND_IMPLEMENTATION_PLAN.md`](./FRONTEND_IMPLEMENTATION_PLAN.md)
-3. [`docs/constraints/FRONTEND_MVP_BLUEPRINT.md`](../constraints/FRONTEND_MVP_BLUEPRINT.md)
-4. [`docs/constraints/product-qa/README.md`](../constraints/product-qa/README.md)
-5. [`docs/constraints/ADMIN_API.md`](../constraints/ADMIN_API.md)
-6. [`docs/artifacts/openapi.json`](../artifacts/openapi.json)
-7. [`docs/constraints/AUTH_AND_SECURITY.md`](../constraints/AUTH_AND_SECURITY.md)
-8. [`docs/public/CLIENT_HTTP_PROTOCOL.md`](../public/CLIENT_HTTP_PROTOCOL.md)
+1. [`docs/collaboration/FRONTEND_TASK_ROUTING.md`](./FRONTEND_TASK_ROUTING.md)
+2. [`docs/collaboration/FRONTEND_HANDOFF.md`](./FRONTEND_HANDOFF.md)
+3. [`docs/collaboration/FRONTEND_IMPLEMENTATION_PLAN.md`](./FRONTEND_IMPLEMENTATION_PLAN.md)
+4. [`docs/collaboration/FRONTEND_WORKSPACE.md`](./FRONTEND_WORKSPACE.md)
+5. [`docs/collaboration/FRONTEND_PAGE_TESTING.md`](./FRONTEND_PAGE_TESTING.md)
+6. [`docs/constraints/FRONTEND_MVP_BLUEPRINT.md`](../constraints/FRONTEND_MVP_BLUEPRINT.md)
+7. [`docs/constraints/product-qa/README.md`](../constraints/product-qa/README.md)
+8. [`docs/constraints/ADMIN_API.md`](../constraints/ADMIN_API.md)
+9. [`docs/artifacts/openapi.json`](../artifacts/openapi.json)
+10. [`docs/constraints/AUTH_AND_SECURITY.md`](../constraints/AUTH_AND_SECURITY.md)
+11. [`docs/public/CLIENT_HTTP_PROTOCOL.md`](../public/CLIENT_HTTP_PROTOCOL.md)
 
 推荐真值优先级：
 
@@ -37,6 +40,18 @@
 - `just dev-db-prepare-local`
 - `just run-server-local`
 - `just dev-web`
+
+## 2.1 当前前端已落地基线
+
+当前仓库已经有真实前端 scaffold，不再是“只有前端预留 workspace”：
+
+- `apps/web` 已初始化
+- 已有登录页、项目列表页、项目详情骨架页
+- 已有本地联调文档 `FRONTEND_PAGE_TESTING`
+- 已有 frontend build check
+- 已有最小 Playwright smoke E2E
+
+因此后续前端工作应默认视为“在已有 scaffold 上继续开发”，而不是重新搭项目前端。
 
 ## 3. 当前后端已完成范围
 

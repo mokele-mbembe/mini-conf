@@ -239,7 +239,49 @@ pnpm --dir apps/web run format:check
 
 这类问题不影响页面渲染，但会影响提交前校验。
 
-## 10. 推荐的提交前最小检查
+### 9.3 路由守卫可能把 `/login` 误判成受保护路由
+
+已观察到：
+
+- `/login` 父路由如果没有显式 `meta.requiresAuth = false`
+- 守卫又使用“不是 false 就算需要鉴权”的判断方式
+- 未登录访问 `/` 时可能会无限重定向到 `/login`
+- 浏览器控制台会出现 `Infinite redirect in navigation guard`
+
+这类问题会直接导致白屏。
+
+### 9.4 本地或 CI 的 smoke 不能只看 `/api/healthz`
+
+已观察到：
+
+- `/api/healthz` 可以正常返回
+- 但如果后端启动时没有真正建立 `db_pool`
+- 登录接口和项目接口仍然可能统一返回 `503 database_unavailable`
+
+因此：
+
+- 前端 smoke 不能只把健康检查通过当成“服务已可用”
+- 至少还要确认登录或项目列表这一类真实管理端接口可访问
+
+## 10. 本地复现前端 smoke CI 的推荐方式
+
+如果要在 push 前尽量模拟 CI，推荐按这组端口和步骤执行：
+
+```bash
+pnpm --dir apps/web build
+just dev-seed-demo
+APP_ENV=dev HTTP_ADDR=127.0.0.1:18080 INIT_DB_ON_BOOT=true cargo run --bin server
+VITE_API_TARGET=http://127.0.0.1:18080 pnpm --dir apps/web preview --port 4173 --strictPort
+PLAYWRIGHT_BASE_URL=http://127.0.0.1:4173 pnpm --dir apps/web test:e2e
+```
+
+这样复现的目标是：
+
+- 不依赖 dev server 的额外行为
+- 尽量贴近 GitHub Actions 里的 `frontend-smoke` job
+- 在 push 前发现代理、登录、预览页和主链路问题
+
+## 11. 推荐的提交前最小检查
 
 提交前至少跑：
 

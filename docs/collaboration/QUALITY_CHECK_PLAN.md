@@ -217,12 +217,28 @@ CI 对应关系：
 
 ### 3.2 前端 lint / typecheck / test / e2e
 
-当前前端还没进入真实开发阶段，因此 CI 虽然有 pnpm 安装入口，但还不适合把完整前端质量门槛拉满。
+当前前端已经进入真实开发阶段，但仍处在 scaffold + 第一批页面阶段。
 
-建议正式引入时机：
+当前已经启用：
 
-- `apps/web` 开始有真实页面和组件
-- 登录页、项目页、Draft 编辑页、预览页至少有一条真实主链路
+- frontend lint
+- frontend format check
+- frontend typecheck
+- frontend build
+- 最小 Playwright smoke E2E
+
+当前仍然保持占位或暂缓引入：
+
+- Vitest 单元测试
+- 更完整的页面级 E2E 套件
+- 多浏览器矩阵
+- 截图回归
+
+下一步值得正式收紧的时机：
+
+- Draft 编辑页和预览页进入真实主链路
+- 发布确认、Release 历史、Diff 开始落地
+- 项目成员、配置文件、部署实例列表页全部进入稳定状态
 
 ### 3.3 强制 SQLx prepare
 

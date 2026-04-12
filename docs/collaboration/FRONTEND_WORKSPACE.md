@@ -1,92 +1,156 @@
-# 前端 Workspace 最小脚手架
+# 前端 Workspace 与运行方式
 
 ## 1. 文档目标
 
-这份文档说明 `mini-conf` 在前端工程真正初始化之前，为什么先保留根级 `package.json` 和 `pnpm-workspace.yaml`。
+这份文档说明当前仓库里的前端工程已经落地到什么程度，以及本地开发、联调和 CI 现在依赖哪些入口。
 
-目标是：
+目标：
 
-- 先把 Node / pnpm 工作区基础设施放进仓库
-- 让 `just`、CI、格式化和前端脚本有统一入口
-- 等后续在 Linux / WSL2 开工时，再把 `apps/web` 真正初始化出来
+- 让新开发机能快速把 `apps/web` 跑起来
+- 说明当前前端工程的技术栈和脚本入口
+- 记录本地联调与 CI 现在已经具备的最小能力
 
-## 2. 当前仓库中的最小前端基线
+## 2. 当前仓库中的前端基线
 
-当前已经提供：
+当前仓库已经同时具备：
 
 - 根级 `package.json`
 - 根级 `pnpm-workspace.yaml`
+- `apps/web`
 
-作用：
+这意味着前端已经从“只有 workspace 壳子”进入“已有真实应用 scaffold”的阶段。
 
-- 固定包管理器版本
-- 统一前端脚本入口
-- 让 `pnpm exec prettier` 和 CI 基线可以工作
+## 3. 当前前端工程结构
 
-## 3. 为什么现在就放根级 package.json
-
-即使 `apps/web` 还没初始化，根级 `package.json` 仍然有价值：
-
-- `just fmt-frontend` 有可依赖的执行环境
-- GitHub Actions 可以提前安装 pnpm 并识别前端工作区
-- 后续新增 `apps/web` 时不需要再重构整个前端工具链入口
-
-## 4. pnpm-workspace 结构
-
-当前约定：
-
-```yaml
-packages:
-  - apps/*
-```
-
-这样后续可以自然容纳：
+当前前端应用位于：
 
 - `apps/web`
 
-如果后面需要独立的前端管理台、文档站或演示应用，也可以继续放在 `apps/` 下。
-
-## 5. 后续在 Linux / WSL2 的实际初始化步骤
-
-建议顺序：
-
-1. 在 Linux / WSL2 中重新拉取仓库
-2. 执行 `pnpm install`
-3. 初始化 `apps/web`
-4. 给 `apps/web/package.json` 补齐 `lint`、`typecheck`、`test`、`test:e2e`
-5. 让根级脚本继续作为统一入口
-
-## 6. 后续前端工程建议
-
-`apps/web` 初始化后建议至少具备：
+当前已落地的基础能力包括：
 
 - Vue 3
 - Vite
 - TypeScript
-- Element Plus
-- Pinia
 - Vue Router
-- Monaco Editor
-- Vitest
-- Playwright
+- Pinia
+- Element Plus
 - ESLint
 - Prettier
+- Playwright 最小 smoke E2E
 
-## 7. 与 just / CI 的关系
+当前已落地的页面基础包括：
 
-当前 `justfile` 和 GitHub Actions 已经假设：
+- 登录页
+- 项目列表页
+- 项目详情骨架页
 
-- 根级存在 `package.json`
-- 后续可能存在 `apps/web/package.json`
+## 4. 包管理与脚本入口
 
-所以这份最小脚手架不是占位垃圾，而是为了让后续工程初始化更顺滑。
+根级仍然保留统一入口，目的是让 `just`、CI 和本地脚本都不用再分叉处理。
 
-进入真实前端开发前，建议同步准备一套本机 runtime DB 和 demo 数据：
+常用入口：
 
-- `just dev-db-prepare-local`
-- `just run-server-local`
+- `pnpm install`
+- `pnpm --dir apps/web dev`
+- `pnpm --dir apps/web build`
+- `pnpm --dir apps/web lint`
+- `pnpm --dir apps/web typecheck`
+- `pnpm --dir apps/web test:e2e`
+
+根级脚本和 `justfile` 仍然是团队推荐入口：
+
 - `just dev-web`
+- `just lint`
+- `just test-e2e`
 
-如果当前本机 PostgreSQL 账号没有单独建库权限，也可以先用“同一 database 下的独立 schema”承载 runtime 数据，只要保证它和 `TEST_DATABASE_URL` 不共用同一个 `search_path` 即可。
+## 5. 本地启动顺序
 
-这样前端页面开发默认能看到非空状态、角色差异、发布历史、预览、同步记录和心跳，而不是长期对着空表结构搭页面。
+推荐顺序：
+
+```bash
+pnpm install
+just dev-db-prepare-local
+just run-server-local
+just dev-web
+```
+
+说明：
+
+- `pnpm install`
+  - 安装根级和 `apps/web` 依赖
+- `just dev-db-prepare-local`
+  - 准备 runtime DB
+  - 执行 migrations
+  - 写入 demo 数据
+- `just run-server-local`
+  - 启动后端
+- `just dev-web`
+  - 启动 Vite dev server
+
+## 6. 当前本地联调约定
+
+当前本地联调约定依赖：
+
+- 前端 dev server 默认端口：`5173`
+- 后端默认监听端口：`8080`
+- Vite `/api` 代理默认指向：`http://127.0.0.1:8080`
+
+如果后端监听端口不是默认值，可以通过环境变量覆盖：
+
+```bash
+VITE_API_TARGET=http://127.0.0.1:9090 pnpm --dir apps/web dev
+```
+
+更详细的联调与排障方式见：
+
+- [FRONTEND_PAGE_TESTING.md](./FRONTEND_PAGE_TESTING.md)
+
+## 7. 当前 CI 已覆盖的前端能力
+
+当前 GitHub Actions 已覆盖：
+
+- pnpm install
+- frontend lint
+- frontend format check
+- frontend typecheck
+- frontend build
+- 最小 Playwright smoke E2E
+
+这意味着前端现在已经具备：
+
+- 静态质量门槛
+- 构建门槛
+- 一条真实浏览器主路径 smoke
+
+但仍未全面展开：
+
+- Vitest 单元测试
+- 多浏览器矩阵
+- 截图回归
+- 大量页面级 E2E
+
+## 8. 当前脚手架阶段最重要的约束
+
+虽然 `apps/web` 已存在，但它仍然处在 scaffold + 第一批页面阶段。
+
+因此后续开发应优先遵守：
+
+- 先看 `FRONTEND_TASK_ROUTING`
+- 先让 Codex 出规格，不直接让模型自由发挥写页面
+- 复杂页面先做任务拆分，再分流给 Copilot
+- 联调或白屏问题优先按 `FRONTEND_PAGE_TESTING` 的顺序排查
+
+## 9. 续工建议
+
+如果下次在新会话或其他开发机继续，建议最少先读：
+
+- [FRONTEND_TASK_ROUTING.md](./FRONTEND_TASK_ROUTING.md)
+- [FRONTEND_HANDOFF.md](./FRONTEND_HANDOFF.md)
+- [FRONTEND_IMPLEMENTATION_PLAN.md](./FRONTEND_IMPLEMENTATION_PLAN.md)
+- [FRONTEND_PAGE_TESTING.md](./FRONTEND_PAGE_TESTING.md)
+
+这样能最快恢复：
+
+- 当前前端已经做到哪里
+- 当前怎么跑本地联调
+- 当前怎么继续按 Codex / Copilot 分工推进
