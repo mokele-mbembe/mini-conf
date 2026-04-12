@@ -138,9 +138,7 @@ MVP 默认采用 `DeploymentInstance` 作为配置组织模型，因为它最贴
 
 ## 开发环境约束
 
-当前这个 Windows 仓库主要用于设计和规划，不作为实际开发环境。
-
-后续实际编码、联调、测试和部署以 Linux 主机或本机 WSL2 实例为准。这意味着：
+实际编码、联调、测试和部署以 Linux 主机或本机 WSL2 实例为准。这意味着：
 
 - 脚本优先提供 shell / `just` 版本
 - 本地调试流程优先针对 Linux / WSL2 编写
@@ -178,7 +176,7 @@ MVP 默认采用 `DeploymentInstance` 作为配置组织模型，因为它最贴
 ## 文档导航
 
 - 文档总索引与分类说明：[docs/README.md](./docs/README.md)
-- 项目启动与里程碑：[KICKOFF.md](./KICKOFF.md)
+- 未完成工作索引与续工入口：[KICKOFF.md](./KICKOFF.md)
 - 单人 `main` 开发每日清单：[MAIN_DEV_CHECKLIST.md](./MAIN_DEV_CHECKLIST.md)
 - 对外公开与使用侧文档：[docs/public/README.md](./docs/public/README.md)
 - 项目约束与产品边界：[docs/constraints/README.md](./docs/constraints/README.md)
@@ -195,15 +193,23 @@ MVP 默认采用 `DeploymentInstance` 作为配置组织模型，因为它最贴
 - 补齐 alpha 黑盒回归、覆盖率与后续工程收口
 - 继续固化产品边界、协作流程与部署约定
 
+当前前端基线已经不是“待初始化”状态，而是：
+
+- `apps/web` 已存在并可运行
+- 已有登录页、项目列表页、项目详情骨架页
+- 已接入前端 `lint / format:check / typecheck / build`
+- 已接入最小 Playwright smoke E2E
+- 前端协作入口已收口到 `docs/collaboration/FRONTEND_*`
+
 ## 后续优先事项
 
 建议按这个顺序推进：
 
-1. 固化 README、部署实例模型、消费协议和开发环境文档
-2. 初始化 Rust workspace 和前端工程
-3. 建立 PostgreSQL migrations
-4. 建立 `justfile`、lint、test、CI 基线
-5. 从开放消费端最小协议倒推管理端实现
+1. 推进前端下一批页面：配置文件、部署实例、模板创建实例、Draft 主路径
+2. 保持后端权限、审计、preview / release / diff 主路径稳定
+3. 持续补 alpha 黑盒、覆盖率和前端单元 / 组件测试基线
+4. 评估 `sqlx-check` 恢复为强制检查的时机
+5. 继续收口部署、协作和环境文档
 
 ## License
 

@@ -76,7 +76,7 @@
 
 确认文档已经写清楚：
 
-- Windows 仓库当前只用于设计与规划
+- 实际开发与测试环境以 Linux / WSL2 为准
 - 真正开发和测试在 Linux / WSL2 中进行
 - 脚本优先使用 shell / `just`
 - 不以 PowerShell 作为主工作流

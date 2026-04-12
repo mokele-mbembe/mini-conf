@@ -17,7 +17,7 @@
 
 - 叙述性 markdown 放在按受众分类的目录里。
 - `OpenAPI` 这类生成 JSON 产物单独放到 `artifacts/`。
-- 根目录 `README.md` 与 `KICKOFF.md` 继续保留为项目总览和项目启动上下文。
+- 根目录 `README.md`、`KICKOFF.md` 与 `DEVELOPMENT_LOG.md` 分别承担项目总览、未完成工作索引和开发进度交接。
 
 关于 `OpenAPI` 是否应和 markdown 分开：
 

@@ -274,7 +274,7 @@ pnpm install
 pnpm dlx lefthook install
 ```
 
-当前仓库里 `apps/web` 还没有初始化，所以这里的 `pnpm install` 只会安装根目录依赖，目前主要是 `prettier` 和相关工具。
+当前仓库里 `apps/web` 已经初始化完成，`pnpm install` 会同时安装根级工具和前端应用依赖；首次联调前建议再执行 `just dev-db-prepare-local`、`just run-server-local` 和 `just dev-web`。
 
 ### 4.9 最终验收
 

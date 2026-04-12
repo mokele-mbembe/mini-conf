@@ -134,7 +134,7 @@ OPENAPI_EXPORT_PATH=docs/artifacts/openapi.json
 8. Diff 对比页
 9. 部署实例同步记录页
 
-在真正开始前端开发前，建议先补一套本机长期保留的 runtime DB，用于观察真实页面状态，而不是一直复用测试库。
+在继续推进前端页面前，建议先补一套本机长期保留的 runtime DB，用于观察真实页面状态，而不是一直复用测试库。
 
 ## 7. 自动化命令建议
 

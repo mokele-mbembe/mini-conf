@@ -184,7 +184,11 @@ Codex 负责：
 7. 确认当前要继续的是哪个页面或模块
 8. 先让 Codex出规格，再发给 Copilot
 
-## 10. 给 Codex 的推荐 kickoff prompt
+## 10. 统一 kickoff prompt
+
+这个 prompt 作为当前仓库里前端续工的主入口模板。
+
+其他文档如果需要引用 kickoff prompt，优先直接指向这里，不再重复维护一份近似版本。
 
 ```text
 请按以下文件协作：

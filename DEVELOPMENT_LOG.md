@@ -2,7 +2,7 @@
 
 ## 1. 文档目的
 
-这份文档用于记录当前后端开发进度，并为下一个会话提供直接可执行的起手上下文。
+这份文档用于记录当前开发进度，并为下一个会话提供直接可执行的起手上下文。
 
 适用场景：
 
@@ -37,6 +37,27 @@
 - `cargo test --workspace` 通过
 - `just lint-backend` 通过
 - `docs/artifacts/openapi.json` 已重新导出
+
+2026-04-13 本轮已完成前端首版 scaffold、前端 CI 基线和前端协作文档收口：
+
+- 新增 `apps/web`，完成 `Vue 3 + Vite + TypeScript + Pinia + Vue Router + Element Plus` 首版管理台骨架
+- 已实现登录页、项目列表页、项目详情骨架页，以及基础 `AppShell / AuthLayout / ProjectLayout`
+- 已接通 `POST /api/auth/login`、`GET /api/auth/me`、`POST /api/auth/logout`、`GET /api/projects`、`GET /api/projects/{id}`
+- 已补 `loading / empty / error / forbidden / not-found` 通用状态组件
+- 已修复登录页无限重定向、Vite 代理端口错误、`format:check` 被 `dist/` 污染等联调问题
+- 新增 `docs/collaboration/FRONTEND_PAGE_TESTING.md`，记录本地页面测试顺序、白屏排查方法和前端 smoke 复现方式
+- 新增 `docs/collaboration/FRONTEND_TASK_ROUTING.md`，把原先 `.tmp/CODEX_FRONTEND_TASK_ROUTING.md` 正式收编到文档体系
+- 已更新 `FRONTEND_HANDOFF / FRONTEND_WORKSPACE / QUALITY_CHECK_PLAN / docs/collaboration/README.md`，与当前前端真实状态对齐
+- GitHub Actions 已接入前端 `build` 检查和最小 Playwright smoke E2E
+- 本地已按接近 CI 的方式跑通 `login -> projects -> project detail` smoke 主路径
+
+本轮本地验证结果：
+
+- `pnpm --dir apps/web build` 通过
+- `pnpm --dir apps/web run format:check` 通过
+- `pnpm --dir apps/web typecheck` 通过
+- `PLAYWRIGHT_BASE_URL=http://127.0.0.1:4173 pnpm --dir apps/web test:e2e` 通过
+- 浏览器手工联调已确认 `/login -> /projects -> /projects/:id` 主路径可访问，Console 无新错误
 
 ## 2. 当前进度 Checklist
 
@@ -113,7 +134,9 @@
 - [x] OpenAPI 导出检查
 - [x] 性能 smoke 检查
 - [x] 覆盖率基线
-- [ ] 前端测试基线
+- [x] 前端 build 基线
+- [x] 前端 smoke E2E 基线
+- [ ] 前端单元 / 组件测试基线
 - [ ] compile-time SQLx metadata 检查
 
 ## 3. 当前剩余工作
@@ -135,8 +158,8 @@
 
 ### 3.3 前端未来主路径
 
-- [ ] 登录页
-- [ ] 项目列表 / 详情页
+- [x] 登录页
+- [x] 项目列表 / 详情页骨架
 - [ ] 配置文件列表 / 编辑页
 - [ ] 部署实例列表 / 详情页
 - [ ] 模板创建实例流程
@@ -149,15 +172,25 @@
 
 推荐顺序：
 
-1. 前端管理台主路径
+1. 前端管理台下一批页面
 2. `sqlx-check` 恢复为强制检查的时机评估
 3. 黑盒与覆盖率基线的持续补量
 
 理由：
 
 - 后端主路径、项目级权限、审计日志、管理端同步/心跳查询和开放接口活跃态约束已经完成
-- 当前更大的风险已从“后端功能缺失”转向“前端接线、覆盖率持续抬升和 compile-time SQLx metadata 时机”
+- 当前更大的风险已从“后端功能缺失”转向“前端主路径继续铺开、覆盖率持续抬升和 compile-time SQLx metadata 时机”
 - alpha 黑盒已覆盖成员权限、审计查询、模板 clone、二次发布 diff 和 token 失效回归
+- 前端首版 scaffold、build 和最小 smoke 已就位，下一步应继续按文档切片推进配置文件、部署实例和 Draft / Release 主路径
+
+前端下一批推荐顺序：
+
+1. 配置文件列表 / 编辑页
+2. 部署实例列表 / 详情页
+3. 模板创建实例流程
+4. Draft 编辑页
+5. preview-bundle 预览页
+6. release history / diff 页
 
 ## 5. 下一个会话建议先跑的命令
 
@@ -168,6 +201,22 @@ git status --short
 cargo test --workspace
 bash scripts/export-openapi.sh
 just coverage-check
+```
+
+如果要继续前端主路径，先起本地环境：
+
+```bash
+pnpm install
+just dev-db-prepare-local
+just run-server-local
+just dev-web
+```
+
+如果要按接近 CI 的方式复现前端 smoke，再跑：
+
+```bash
+pnpm --dir apps/web build
+PLAYWRIGHT_BASE_URL=http://127.0.0.1:4173 pnpm --dir apps/web test:e2e
 ```
 
 如果要在本地复现 CI 基线，再跑：
@@ -190,6 +239,10 @@ just ci-local-db
 
 - [项目脚手架与启动清单](./docs/public/BOOTSTRAP.md)
 - [质量检查与测试收口计划](./docs/collaboration/QUALITY_CHECK_PLAN.md)
+- [前端任务分流与协作流程](./docs/collaboration/FRONTEND_TASK_ROUTING.md)
+- [前端接手说明](./docs/collaboration/FRONTEND_HANDOFF.md)
+- [前端工作区与运行方式](./docs/collaboration/FRONTEND_WORKSPACE.md)
+- [前端页面测试与白屏排查](./docs/collaboration/FRONTEND_PAGE_TESTING.md)
 - [产品澄清目录](./docs/constraints/product-qa/README.md)
 - [必选配置与预览澄清](./docs/constraints/product-qa/0002-required-configs-and-preview.md)
 - [部署实例 Token 重置澄清](./docs/constraints/product-qa/0004-token-reset.md)
@@ -213,11 +266,19 @@ just ci-local-db
 - OpenAPI 导出现在是强制检查项；接口或 schema 改动后，需要同步更新 `docs/artifacts/openapi.json`
 - `sqlx-check` 当前是条件启用，不是 CI runner 不支持，而是当前仓库尚未进入 compile-time SQLx metadata 阶段
 - 当前工作区还有未提交改动时，不要只提交代码不提交 OpenAPI 产物
+- 前端后续任务默认先按 `FRONTEND_TASK_ROUTING.md` 输出任务规范，再分流给 Copilot 实现，最后回到 Codex 验收
+- 前端白屏或联调异常时，不要只看 `/api/healthz`；至少同时验证 `/api/auth/me`、登录链路和浏览器 Console
+- 前端 smoke 依赖后端真正建立 `db_pool`；CI / 本地复现都不要把 `INIT_DB_ON_BOOT` 设成会禁用数据库初始化的值
 
 ## 8. 建议的交接语句
 
-如果下一个会话需要快速恢复上下文，可以直接从这里开始：
+为避免在多个文档里维护近似但不完全一致的 prompt，完整 kickoff 模板统一以 [docs/collaboration/FRONTEND_TASK_ROUTING.md](./docs/collaboration/FRONTEND_TASK_ROUTING.md) 第 10 节为准。
+
+如果下一个会话需要快速恢复上下文，可以直接先贴这一段：
 
 ```text
-先阅读 DEVELOPMENT_LOG.md、docs/collaboration/QUALITY_CHECK_PLAN.md、docs/constraints/product-qa/0005-project-members-permissions-audit.md，然后继续补 alpha-full 黑盒回归或转入前端管理台主路径。
+请先阅读 DEVELOPMENT_LOG.md，然后按 docs/collaboration/FRONTEND_TASK_ROUTING.md 第 10 节的统一 kickoff prompt 继续。
+
+本轮任务是：
+[把这里替换成具体页面或模块]
 ```

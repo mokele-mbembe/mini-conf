@@ -1,5 +1,7 @@
 # 仓库初始化清单
 
+> 注：这份文档主要服务于“从空仓或早期骨架阶段初始化仓库”的场景。当前 `mini-conf` 已经完成初始化并进入前端主路径阶段；继续开发时请优先看 `DEVELOPMENT_LOG.md`、`FRONTEND_TASK_ROUTING.md` 和 `FRONTEND_WORKSPACE.md`。
+
 ## 1. 文档目标
 
 这份清单用于指导你在 Linux 主机或 WSL2 中重新拉取 `mini-conf` 后，按顺序完成真正的工程初始化。

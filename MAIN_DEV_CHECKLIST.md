@@ -41,6 +41,14 @@ just ci-local-full
 ```bash
 just dev-db-prepare-local
 just run-server-local
+just dev-web
+```
+
+如果这轮改动触及前端主路径，提交前额外建议执行：
+
+```bash
+pnpm --dir apps/web build
+pnpm --dir apps/web run test:e2e
 ```
 
 ## 推荐节奏
