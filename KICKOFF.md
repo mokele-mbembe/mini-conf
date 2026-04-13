@@ -146,6 +146,9 @@ PLAYWRIGHT_BASE_URL=http://127.0.0.1:4173 pnpm --dir apps/web test:e2e
 - KICKOFF.md
 - DEVELOPMENT_LOG.md
 
+对仓库的分支使用策略请参照规范:
+- MAIN_DEV_CHECKLIST.md
+
 如果本轮涉及前端，再补读：
 - docs/collaboration/FRONTEND_TASK_ROUTING.md
 - docs/collaboration/FRONTEND_HANDOFF.md
