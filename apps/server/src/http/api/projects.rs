@@ -225,7 +225,7 @@ pub(crate) async fn update_project(
             status = $5,
             updated_at = NOW()
         WHERE id = $1
-        RETURNING id, code, name, description, status
+        RETURNING id, code, name, description, status, 'admin'::varchar AS current_user_role
         "#,
     )
     .bind(id)

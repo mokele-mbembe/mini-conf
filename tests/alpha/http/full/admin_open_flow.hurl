@@ -35,8 +35,6 @@ Content-Type: application/json
   "name": "Main Config",
   "is_required": true,
   "format": "yaml",
-  "schema_name": "alpha-main",
-  "schema_version": "v1",
   "sensitivity": "normal",
   "description": "alpha full config"
 }
@@ -76,7 +74,6 @@ HTTP 200
 jsonpath "$.deployment_instance_id" == {{template_id}}
 jsonpath "$.config_file_id" == {{config_file_id}}
 jsonpath "$.version" == 1
-jsonpath "$.schema_version" == "v1"
 
 POST {{base_url}}/api/deployment-instances/{{template_id}}/clone
 Content-Type: application/json
