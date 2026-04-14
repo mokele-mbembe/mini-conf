@@ -56,6 +56,12 @@ test-backend-db:
 test-backend-db-local:
   @if [ -f Cargo.toml ]; then source scripts/local-db-env.sh && just test-backend-db; else echo "Skipping backend db tests: Cargo.toml not found"; fi
 
+db-list-test-schemas-local:
+  @if [ -f scripts/db-clean-test-schemas.sh ]; then source scripts/local-db-env.sh && bash scripts/db-clean-test-schemas.sh --dry-run; else echo "Skipping test schema listing: scripts/db-clean-test-schemas.sh not found"; fi
+
+db-clean-test-schemas-local:
+  @if [ -f scripts/db-clean-test-schemas.sh ]; then source scripts/local-db-env.sh && bash scripts/db-clean-test-schemas.sh --apply; else echo "Skipping test schema cleanup: scripts/db-clean-test-schemas.sh not found"; fi
+
 test-frontend:
   @if [ -f apps/web/package.json ]; then pnpm --dir apps/web test; \
   elif [ -f package.json ] || [ -f pnpm-workspace.yaml ]; then pnpm test; \

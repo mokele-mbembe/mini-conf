@@ -161,8 +161,12 @@
 
 - 为 `Local Preview / UI Dev` 单独配置 `MINI_CONF_LOCAL_DB_*`
 - 不要把页面联调长期绑定在 `MINI_CONF_LOCAL_TEST_DB_*` 上
-- 推荐使用单独数据库名，例如 `mini_conf_ui_dev`
-- 如果当前本机 DB 用户没有 `CREATEDB` 权限，可先退回到“同一数据库下的独立 schema + `search_path`”方案
+- 推荐使用单独 database 名，例如 `mini_conf_ui_dev`、`mini_conf_test`、`mini_conf_ci`、`mini_conf_staging`
+- 如果当前本机 DB 用户没有 `CREATEDB` 权限，可先退回到“同一 database 下的显式 schema + `search_path`”方案
+- 当前本机若使用 `mini_conf?options=-csearch_path%3Dmini_conf_ui_dev`，则应把 `mini_conf.mini_conf_ui_dev` 视为前端联调常驻 schema
+- 当前 schema 方案只作为前端开发期的便利形态；前端主路径完成后，应迁移回独立 database：`mini_conf_ui_dev` 作为 runtime DB，`mini_conf_test` 作为测试 base DB
+- `public` 不应承载 mini-conf 应用数据；如果发现 `mini_conf.public` 有业务表，通常是历史默认连接串或误用无 `search_path` 连接留下的数据
+- `mini_conf_<test-prefix>_<数字时间戳>` 这类 schema 是数据库集成测试临时 schema；确认没有本地测试运行时，可用 `just db-clean-test-schemas-local` 清理
 
 ## 5. 命令分层
 

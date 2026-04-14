@@ -156,6 +156,8 @@ OPENAPI_EXPORT_PATH=docs/artifacts/openapi.json
 - `just ci-local-db`
 - `just ci-local-full`
 - `just db-reset-dev`
+- `just db-list-test-schemas-local`
+- `just db-clean-test-schemas-local`
 
 当前仓库约定：
 
@@ -173,10 +175,14 @@ OPENAPI_EXPORT_PATH=docs/artifacts/openapi.json
 - `scripts/local-db-env.sh` 只负责本机 local wrapper 的 DSN 解析
 - `scripts/dev-db-env.sh` 仅保留为兼容壳
 - Rust 数据库测试代码本身只读取 `TEST_DATABASE_URL`
-- 数据库名不绑定产品名，推荐按场景显式命名，例如 `mini_conf_dev`、`mini_conf_ci`、`mini_conf_staging`
+- 数据库名不绑定产品名，推荐按场景显式命名，例如 `mini_conf_ui_dev`、`mini_conf_test`、`mini_conf_ci`、`mini_conf_staging`
 - 前端联调推荐额外保留一套独立运行库，例如 `mini_conf_ui_dev`
 - demo 数据脚本只写运行库，不写测试库
-- 如果本机数据库账号没有 `CREATEDB` 权限，可先使用同一 database 下的独立 schema，并通过 `DATABASE_URL` 的 `search_path` 指向它
+- 如果本机数据库账号没有 `CREATEDB` 权限，可先使用同一 database 下的显式 schema，并通过 `DATABASE_URL` 的 `search_path` 指向它
+- 同一 database 下显式 schema 只是前端开发期的便利形态；前端主路径完成后，回归独立 database 命名，至少拆出 `mini_conf_ui_dev` 和 `mini_conf_test`
+- `public` schema 不承载 mini-conf 应用数据；如果本机看到 `mini_conf.public` 有业务表，通常是历史默认连接串或误用无 `search_path` 连接留下的数据
+- GitHub Actions 的 PostgreSQL service 是一次性容器；Actions 缓存只覆盖依赖和工具缓存，不会把 CI 数据库内容写回本机或长期保存
+- 本机残留的 `mini_conf_<test-prefix>_<数字时间戳>` schema 来自本地数据库测试中断或异常退出，不是 CI 缓存数据；确认无本地测试运行后可用 `just db-clean-test-schemas-local` 清理
 
 数据库集成测试约定：
 

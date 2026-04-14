@@ -194,6 +194,11 @@ jobs:
       - name: Run backend DB tests
         run: just test-backend-db
 
+      - name: Clean leftover backend DB test schemas
+        if: ${{ always() }}
+        continue-on-error: true
+        run: bash scripts/db-clean-test-schemas.sh --apply
+
   alpha-smoke:
     if: ${{ github.event_name == 'pull_request' && needs.changes.outputs.alpha == 'true' }}
     needs: changes
