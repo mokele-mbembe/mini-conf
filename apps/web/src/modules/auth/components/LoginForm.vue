@@ -6,19 +6,19 @@
     label-position="top"
     @submit.prevent="handleSubmit"
   >
-    <el-form-item label="用户名" prop="username">
+    <el-form-item :label="t('login.username')" prop="username">
       <el-input
         v-model="form.username"
-        placeholder="请输入用户名"
+        :placeholder="t('login.usernamePlaceholder')"
         :prefix-icon="User"
         autocomplete="username"
       />
     </el-form-item>
-    <el-form-item label="密码" prop="password">
+    <el-form-item :label="t('login.password')" prop="password">
       <el-input
         v-model="form.password"
         type="password"
-        placeholder="请输入密码"
+        :placeholder="t('login.passwordPlaceholder')"
         :prefix-icon="Lock"
         show-password
         autocomplete="current-password"
@@ -32,7 +32,7 @@
         style="width: 100%"
         native-type="submit"
       >
-        登录
+        {{ t("login.submit") }}
       </el-button>
     </el-form-item>
   </el-form>
@@ -42,6 +42,7 @@
 import { reactive, ref } from "vue";
 import { User, Lock } from "@element-plus/icons-vue";
 import type { FormInstance, FormRules } from "element-plus";
+import { useI18nText } from "@/shared/i18n";
 
 const emit = defineEmits<{
   submit: [username: string, password: string];
@@ -51,6 +52,8 @@ defineProps<{
   loading: boolean;
 }>();
 
+const { t } = useI18nText();
+
 const formRef = ref<FormInstance>();
 const form = reactive({
   username: "",
@@ -58,8 +61,20 @@ const form = reactive({
 });
 
 const rules: FormRules = {
-  username: [{ required: true, message: "请输入用户名", trigger: "blur" }],
-  password: [{ required: true, message: "请输入密码", trigger: "blur" }],
+  username: [
+    {
+      required: true,
+      message: t("validation.login.usernameRequired"),
+      trigger: "blur",
+    },
+  ],
+  password: [
+    {
+      required: true,
+      message: t("validation.login.passwordRequired"),
+      trigger: "blur",
+    },
+  ],
 };
 
 async function handleSubmit() {

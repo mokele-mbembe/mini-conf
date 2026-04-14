@@ -1,13 +1,28 @@
+import { t } from "@/shared/i18n";
+
 export const ERROR_MESSAGES: Record<string, string> = {
-  auth_invalid_credentials: "用户名或密码错误",
-  auth_session_expired: "登录状态已过期，请重新登录",
-  project_permission_denied: "你当前角色没有执行这个操作的权限",
-  project_code_conflict: "项目编码已存在",
-  project_not_found: "项目不存在",
-  network_error: "网络连接失败，请检查网络后重试",
-  unknown_error: "发生未知错误，请稍后重试",
+  auth_invalid_credentials: "error.auth_invalid_credentials",
+  auth_session_expired: "error.auth_session_expired",
+  invalid_request: "error.invalid_request",
+  project_permission_denied: "error.project_permission_denied",
+  project_code_conflict: "error.project_code_conflict",
+  project_not_found: "error.project_not_found",
+  config_file_code_conflict: "error.config_file_code_conflict",
+  config_file_not_found: "error.config_file_not_found",
+  network_error: "error.network_error",
+  unknown_error: "error.unknown_error",
 };
 
-export function getErrorMessage(code: string): string {
-  return ERROR_MESSAGES[code] ?? ERROR_MESSAGES.unknown_error;
+const ERROR_DETAIL_MESSAGES: Record<string, string> = {
+  "invalid config file format": "error.detail.invalidConfigFileFormat",
+  "invalid config file status": "error.detail.invalidConfigFileStatus",
+};
+
+export function getErrorMessage(code: string, detail?: string): string {
+  if (detail && ERROR_DETAIL_MESSAGES[detail]) {
+    return t(ERROR_DETAIL_MESSAGES[detail]);
+  }
+
+  const key = ERROR_MESSAGES[code] ?? ERROR_MESSAGES.unknown_error;
+  return t(key);
 }

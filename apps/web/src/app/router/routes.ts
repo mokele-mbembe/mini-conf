@@ -7,6 +7,8 @@ import AppShell from "@/app/layouts/AppShell.vue";
 import LoginPage from "@/modules/auth/pages/LoginPage.vue";
 import ProjectListPage from "@/modules/projects/pages/ProjectListPage.vue";
 import ProjectOverviewPage from "@/modules/projects/pages/ProjectOverviewPage.vue";
+import ProjectSectionPlaceholderPage from "@/modules/projects/pages/ProjectSectionPlaceholderPage.vue";
+import ConfigFileListPage from "@/modules/config-files/pages/ConfigFileListPage.vue";
 
 export const routes: RouteRecordRaw[] = [
   {
@@ -40,6 +42,41 @@ export const routes: RouteRecordRaw[] = [
         path: ROUTE_PATHS.PROJECT,
         name: ROUTE_NAMES.PROJECT_OVERVIEW,
         component: ProjectOverviewPage,
+      },
+      {
+        path: ROUTE_PATHS.CONFIG_FILE_LIST,
+        name: ROUTE_NAMES.CONFIG_FILE_LIST,
+        component: ConfigFileListPage,
+      },
+      {
+        path: ROUTE_PATHS.DEPLOYMENT_LIST,
+        name: ROUTE_NAMES.DEPLOYMENT_LIST,
+        component: ProjectSectionPlaceholderPage,
+      },
+      {
+        path: ROUTE_PATHS.RELEASE_LIST,
+        name: ROUTE_NAMES.RELEASE_LIST,
+        component: ProjectSectionPlaceholderPage,
+      },
+      {
+        path: ROUTE_PATHS.PROJECT_MEMBERS,
+        name: ROUTE_NAMES.PROJECT_MEMBERS,
+        component: ProjectSectionPlaceholderPage,
+      },
+      {
+        path: ROUTE_PATHS.SYNC_RECORD_LIST,
+        name: ROUTE_NAMES.SYNC_RECORD_LIST,
+        component: ProjectSectionPlaceholderPage,
+      },
+      {
+        path: ROUTE_PATHS.HEARTBEAT_LIST,
+        name: ROUTE_NAMES.HEARTBEAT_LIST,
+        component: ProjectSectionPlaceholderPage,
+      },
+      {
+        path: ROUTE_PATHS.AUDIT_LOG_LIST,
+        name: ROUTE_NAMES.AUDIT_LOG_LIST,
+        component: ProjectSectionPlaceholderPage,
       },
     ],
   },

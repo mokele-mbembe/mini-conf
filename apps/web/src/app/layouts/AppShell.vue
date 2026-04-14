@@ -3,8 +3,9 @@
     <el-header class="app-shell__header">
       <div class="app-shell__brand" @click="goHome">mini-conf</div>
       <div class="app-shell__user">
+        <LocaleSelect class-name="app-shell__locale" />
         <span v-if="authSession.user">{{ authSession.user.username }}</span>
-        <el-button text @click="handleLogout">登出</el-button>
+        <el-button text @click="handleLogout">{{ t("app.logout") }}</el-button>
       </div>
     </el-header>
     <el-main class="app-shell__main">
@@ -17,9 +18,12 @@
 import { useRouter } from "vue-router";
 import { useAuthSession } from "@/modules/auth/composables/useAuthSession";
 import { ROUTE_NAMES } from "@/shared/constants/routes";
+import { useI18nText } from "@/shared/i18n";
+import LocaleSelect from "@/shared/components/LocaleSelect.vue";
 
 const router = useRouter();
 const authSession = useAuthSession();
+const { t } = useI18nText();
 
 function goHome() {
   router.push({ name: ROUTE_NAMES.PROJECTS });
@@ -58,6 +62,9 @@ async function handleLogout() {
   gap: var(--spacing-sm);
   font-size: var(--font-size-base);
   color: var(--color-text-regular);
+}
+.app-shell__locale {
+  width: 116px;
 }
 .app-shell__main {
   padding: 0;

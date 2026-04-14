@@ -3,6 +3,7 @@ import { defineStore } from "pinia";
 import type { AuthUser } from "@/api/types/auth";
 import * as authApi from "@/api/auth";
 import { isApiError } from "@/api/error";
+import { t } from "@/shared/i18n";
 
 export type SessionCheckResult = "authenticated" | "unauthenticated" | "error";
 
@@ -27,7 +28,7 @@ export const useAuthSession = defineStore("authSession", () => {
         return "unauthenticated";
       }
       // Network error or 5xx — do NOT clear user, do NOT treat as logged-out
-      sessionError.value = "系统异常，无法确认登录状态";
+      sessionError.value = t("login.sessionCheckFailed");
       return "error";
     }
   }

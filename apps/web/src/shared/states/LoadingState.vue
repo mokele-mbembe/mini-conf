@@ -1,16 +1,18 @@
 <template>
   <div class="loading-state">
     <el-icon class="loading-state__icon" :size="40"><Loading /></el-icon>
-    <p v-if="text" class="loading-state__text">{{ text }}</p>
+    <p v-if="resolvedText" class="loading-state__text">{{ resolvedText }}</p>
   </div>
 </template>
 
 <script setup lang="ts">
 import { Loading } from "@element-plus/icons-vue";
+import { computed } from "vue";
+import { useI18nText } from "@/shared/i18n";
 
-withDefaults(defineProps<{ text?: string }>(), {
-  text: "加载中…",
-});
+const props = defineProps<{ text?: string }>();
+const { t } = useI18nText();
+const resolvedText = computed(() => props.text ?? t("state.loading"));
 </script>
 
 <style scoped>

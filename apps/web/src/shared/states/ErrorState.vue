@@ -1,9 +1,13 @@
 <template>
   <div class="error-state">
-    <el-result icon="error" :title="title" :sub-title="subtitle">
+    <el-result
+      icon="error"
+      :title="title || t('state.error.title')"
+      :sub-title="subtitle || t('state.error.subtitle')"
+    >
       <template #extra>
         <el-button v-if="retryable" type="primary" @click="$emit('retry')">
-          重试
+          {{ t("state.error.retry") }}
         </el-button>
       </template>
     </el-result>
@@ -11,6 +15,10 @@
 </template>
 
 <script setup lang="ts">
+import { useI18nText } from "@/shared/i18n";
+
+const { t } = useI18nText();
+
 withDefaults(
   defineProps<{
     title?: string;
@@ -18,8 +26,8 @@ withDefaults(
     retryable?: boolean;
   }>(),
   {
-    title: "加载失败",
-    subtitle: "请稍后重试",
+    title: "",
+    subtitle: "",
     retryable: true,
   },
 );

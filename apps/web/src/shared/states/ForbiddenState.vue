@@ -1,17 +1,25 @@
 <template>
   <div class="forbidden-state">
-    <el-result icon="warning" title="权限不足" :sub-title="subtitle">
+    <el-result
+      icon="warning"
+      :title="t('state.forbidden.title')"
+      :sub-title="subtitle || t('state.forbidden.subtitle')"
+    >
       <template #extra>
-        <el-button type="primary" @click="$router.back()"> 返回 </el-button>
+        <el-button type="primary" @click="$router.back()">
+          {{ t("state.back") }}
+        </el-button>
       </template>
     </el-result>
   </div>
 </template>
 
 <script setup lang="ts">
-withDefaults(defineProps<{ subtitle?: string }>(), {
-  subtitle: "你当前角色没有执行这个操作的权限",
-});
+import { useI18nText } from "@/shared/i18n";
+
+const { t } = useI18nText();
+
+defineProps<{ subtitle?: string }>();
 </script>
 
 <style scoped>

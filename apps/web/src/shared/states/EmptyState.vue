@@ -1,15 +1,17 @@
 <template>
   <div class="empty-state">
-    <el-empty :description="description">
+    <el-empty :description="description || t('state.empty.description')">
       <slot />
     </el-empty>
   </div>
 </template>
 
 <script setup lang="ts">
-withDefaults(defineProps<{ description?: string }>(), {
-  description: "暂无数据",
-});
+import { useI18nText } from "@/shared/i18n";
+
+const { t } = useI18nText();
+
+defineProps<{ description?: string }>();
 </script>
 
 <style scoped>

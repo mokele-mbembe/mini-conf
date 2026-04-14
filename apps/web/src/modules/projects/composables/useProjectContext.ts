@@ -2,6 +2,7 @@ import { ref, readonly } from "vue";
 import type { ProjectSummary } from "@/api/types/project";
 import * as projectsApi from "@/api/projects";
 import { ApiRequestError } from "@/api/error";
+import { t } from "@/shared/i18n";
 
 export function useProjectContext() {
   const project = ref<ProjectSummary | null>(null);
@@ -20,7 +21,7 @@ export function useProjectContext() {
       } else {
         error.value = new ApiRequestError(0, {
           code: "unknown_error",
-          message: "Failed to fetch project",
+          message: t("project.loadFailed"),
         });
       }
     } finally {

@@ -1,17 +1,23 @@
 <template>
   <div class="project-list-page">
-    <PageHeader title="项目列表" subtitle="管理你参与的项目" />
+    <PageHeader
+      :title="t('projects.list.title')"
+      :subtitle="t('projects.list.subtitle')"
+    />
 
     <LoadingState v-if="loading" />
 
     <ErrorState
       v-else-if="error"
-      :title="error.message"
-      :subtitle="getErrorMessage(error.code)"
+      :title="t('projects.list.loadFailed')"
+      :subtitle="getErrorMessage(error.code, error.message)"
       @retry="fetchProjects"
     />
 
-    <EmptyState v-else-if="projects.length === 0" description="暂无项目" />
+    <EmptyState
+      v-else-if="projects.length === 0"
+      :description="t('projects.list.empty')"
+    />
 
     <div v-else class="project-list-page__grid">
       <el-card
@@ -29,7 +35,7 @@
         </template>
         <h3 class="project-list-page__card-name">{{ item.name }}</h3>
         <p class="project-list-page__card-desc">
-          {{ item.description || "暂无描述" }}
+          {{ item.description || t("project.emptyDescription") }}
         </p>
       </el-card>
     </div>
@@ -49,8 +55,10 @@ import LoadingState from "@/shared/states/LoadingState.vue";
 import EmptyState from "@/shared/states/EmptyState.vue";
 import ErrorState from "@/shared/states/ErrorState.vue";
 import { ROUTE_NAMES } from "@/shared/constants/routes";
+import { useI18nText } from "@/shared/i18n";
 
 const router = useRouter();
+const { t } = useI18nText();
 
 const projects = ref<ProjectSummary[]>([]);
 const loading = ref(false);
@@ -68,7 +76,7 @@ async function fetchProjects() {
     } else {
       error.value = new ApiRequestError(0, {
         code: "unknown_error",
-        message: "Failed to load projects",
+        message: t("projects.list.loadFailed"),
       });
     }
   } finally {

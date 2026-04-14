@@ -1,7 +1,10 @@
 <template>
   <div class="login-page">
     <div class="login-page__card">
-      <h2 class="login-page__title">mini-conf 管理台</h2>
+      <div class="login-page__toolbar">
+        <LocaleSelect class-name="login-page__locale" />
+      </div>
+      <h2 class="login-page__title">{{ t("login.title") }}</h2>
       <el-alert
         v-if="errorMsg"
         :title="errorMsg"
@@ -23,9 +26,12 @@ import { useAuthSession } from "../composables/useAuthSession";
 import { isApiError } from "@/api/error";
 import { getErrorMessage } from "@/shared/constants/error-messages";
 import { ROUTE_NAMES } from "@/shared/constants/routes";
+import { useI18nText } from "@/shared/i18n";
+import LocaleSelect from "@/shared/components/LocaleSelect.vue";
 
 const router = useRouter();
 const authSession = useAuthSession();
+const { t } = useI18nText();
 
 const submitting = ref(false);
 const errorMsg = ref("");
@@ -35,7 +41,7 @@ onMounted(async () => {
   if (result === "authenticated") {
     router.replace({ name: ROUTE_NAMES.PROJECTS });
   } else if (result === "error") {
-    errorMsg.value = authSession.sessionError ?? "系统异常，无法确认登录状态";
+    errorMsg.value = authSession.sessionError ?? t("login.sessionCheckFailed");
   }
 });
 
@@ -47,7 +53,7 @@ async function handleLogin(username: string, password: string) {
     router.replace({ name: ROUTE_NAMES.PROJECTS });
   } catch (err) {
     if (isApiError(err)) {
-      errorMsg.value = getErrorMessage(err.code);
+      errorMsg.value = getErrorMessage(err.code, err.message);
     } else {
       errorMsg.value = getErrorMessage("unknown_error");
     }
@@ -73,6 +79,14 @@ async function handleLogin(username: string, password: string) {
   background: var(--color-bg-card);
   border-radius: var(--border-radius-lg);
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+.login-page__toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--spacing-sm);
+}
+.login-page__locale {
+  width: 116px;
 }
 .login-page__title {
   font-size: var(--font-size-xl);
