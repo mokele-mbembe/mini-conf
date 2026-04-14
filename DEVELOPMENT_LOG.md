@@ -27,10 +27,11 @@
 - 管理端列表已补 `projects/config-files` 的 `status` 过滤和 `deployment-instances` 的 `keyword` 过滤
 - open consumer 侧 `resolve / release / config-bundle / sync-record / heartbeat` 已统一只接受 `project/config/deployment` 均为 `active` 的资源
 - 新增 `GET /api/deployment-heartbeats`
-- Draft 保存、clone 与发布前已接入格式解析和可插拔 schema validator
+- Draft 保存、clone 与发布前已接入 `yaml / json / toml` 基础格式合法性校验；MVP 不再暴露独立业务规则校验器能力
 - 管理端 `release detail / diff` 已对 secret 配置做脱敏返回，并返回 redaction 标记字段
 - `alpha-full` 已补多用户 seed、项目成员、同步记录、心跳、模板 clone、二次发布 diff、旧 token 失效回归
 - 本机与 CI 已补后端覆盖率基线入口：`just coverage-check`
+- 配置文件契约已完成产品语义收口：`text` 拒绝写入，TOML 全链路支持，`config_files.status` 收口为 `active | archived`，schema 字段从表结构、接口、OpenAPI、seed 和验收资产中移除
 
 本轮本地验证结果：
 
@@ -46,7 +47,7 @@
 - 已补 `loading / empty / error / forbidden / not-found` 通用状态组件
 - 已修复登录页无限重定向、Vite 代理端口错误、`format:check` 被 `dist/` 污染等联调问题
 - 新增 `docs/collaboration/FRONTEND_PAGE_TESTING.md`，记录本地页面测试顺序、白屏排查方法和前端 smoke 复现方式
-- 新增 `docs/collaboration/FRONTEND_TASK_ROUTING.md`，把原先 `.tmp/CODEX_FRONTEND_TASK_ROUTING.md` 正式收编到文档体系
+- 新增 `docs/collaboration/FRONTEND_TASK_WORKFLOW.md`，用于记录前端续工流程和统一 kickoff prompt
 - 已更新 `FRONTEND_HANDOFF / FRONTEND_WORKSPACE / QUALITY_CHECK_PLAN / docs/collaboration/README.md`，与当前前端真实状态对齐
 - GitHub Actions 已接入前端 `build` 检查和最小 Playwright smoke E2E
 - 本地已按接近 CI 的方式跑通 `login -> projects -> project detail` smoke 主路径
@@ -160,7 +161,7 @@
 
 - [x] 登录页
 - [x] 项目列表 / 详情页骨架
-- [ ] 配置文件列表 / 编辑页
+- [x] 配置文件列表 / 编辑页
 - [ ] 部署实例列表 / 详情页
 - [ ] 模板创建实例流程
 - [ ] Draft 编辑页
@@ -185,12 +186,12 @@
 
 前端下一批推荐顺序：
 
-1. 配置文件列表 / 编辑页
-2. 部署实例列表 / 详情页
-3. 模板创建实例流程
-4. Draft 编辑页
-5. preview-bundle 预览页
-6. release history / diff 页
+1. 部署实例列表 / 详情页
+2. 模板创建实例流程
+3. Draft 编辑页
+4. preview-bundle 预览页
+5. release history / diff 页
+6. 项目成员页与审计 / 同步 / 心跳页面
 
 ## 5. 下一个会话建议先跑的命令
 
@@ -239,7 +240,7 @@ just ci-local-db
 
 - [项目脚手架与启动清单](./docs/public/BOOTSTRAP.md)
 - [质量检查与测试收口计划](./docs/collaboration/QUALITY_CHECK_PLAN.md)
-- [前端任务分流与协作流程](./docs/collaboration/FRONTEND_TASK_ROUTING.md)
+- [前端任务执行与续工流程](./docs/collaboration/FRONTEND_TASK_WORKFLOW.md)
 - [前端接手说明](./docs/collaboration/FRONTEND_HANDOFF.md)
 - [前端工作区与运行方式](./docs/collaboration/FRONTEND_WORKSPACE.md)
 - [前端页面测试与白屏排查](./docs/collaboration/FRONTEND_PAGE_TESTING.md)
@@ -266,18 +267,18 @@ just ci-local-db
 - OpenAPI 导出现在是强制检查项；接口或 schema 改动后，需要同步更新 `docs/artifacts/openapi.json`
 - `sqlx-check` 当前是条件启用，不是 CI runner 不支持，而是当前仓库尚未进入 compile-time SQLx metadata 阶段
 - 当前工作区还有未提交改动时，不要只提交代码不提交 OpenAPI 产物
-- 前端后续任务默认先按 `FRONTEND_TASK_ROUTING.md` 输出任务规范，再分流给 Copilot 实现，最后回到 Codex 验收
+- 前端后续任务默认先按 `FRONTEND_TASK_WORKFLOW.md` 输出任务规范和执行计划，再由 Codex 本地实现并自验
 - 前端白屏或联调异常时，不要只看 `/api/healthz`；至少同时验证 `/api/auth/me`、登录链路和浏览器 Console
 - 前端 smoke 依赖后端真正建立 `db_pool`；CI / 本地复现都不要把 `INIT_DB_ON_BOOT` 设成会禁用数据库初始化的值
 
 ## 8. 建议的交接语句
 
-为避免在多个文档里维护近似但不完全一致的 prompt，完整 kickoff 模板统一以 [docs/collaboration/FRONTEND_TASK_ROUTING.md](./docs/collaboration/FRONTEND_TASK_ROUTING.md) 第 10 节为准。
+为避免在多个文档里维护近似但不完全一致的 prompt，完整 kickoff 模板统一以 [docs/collaboration/FRONTEND_TASK_WORKFLOW.md](./docs/collaboration/FRONTEND_TASK_WORKFLOW.md) 第 10 节为准。
 
 如果下一个会话需要快速恢复上下文，可以直接先贴这一段：
 
 ```text
-请先阅读 DEVELOPMENT_LOG.md，然后按 docs/collaboration/FRONTEND_TASK_ROUTING.md 第 10 节的统一 kickoff prompt 继续。
+请先阅读 DEVELOPMENT_LOG.md，然后按 docs/collaboration/FRONTEND_TASK_WORKFLOW.md 第 10 节的统一 kickoff prompt 继续。
 
 本轮任务是：
 [把这里替换成具体页面或模块]

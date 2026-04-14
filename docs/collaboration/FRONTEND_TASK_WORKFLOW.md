@@ -1,16 +1,16 @@
-# 前端任务分发与续工手册
+# 前端任务执行与续工手册
 
 ## 1. 文档目标
 
-这份文档把前端开发阶段的模型协作方式正式收编到仓库里。
+这份文档把前端开发阶段的本地 Codex 执行方式正式收编到仓库里。
 
 目标：
 
-- 固定 Codex 和 Copilot 在前端阶段的职责边界
-- 避免每次开工都重复解释“先出规格，再施工，再验收”
-- 让下一次在其他开发主机或新会话里，也能快速恢复这套分发节奏
+- 固定本地 Codex 在前端阶段的工作顺序
+- 避免每次开工都重复解释“先出规格，再实现，再验收”
+- 让下一次在其他开发主机或新会话里，也能快速恢复这套执行节奏
 
-这份文档替代本地临时文件 `.tmp/CODEX_FRONTEND_TASK_ROUTING.md` 作为长期入口。
+这份文档是本地 Codex 前端执行工作流的长期入口。
 
 ## 2. 当前已落地状态
 
@@ -26,9 +26,9 @@
 
 ## 3. 开工前必读
 
-前端任务开始前，Codex 和 Copilot 至少都应该先读这些文件：
+前端任务开始前，Codex 至少应该先读这些文件：
 
-- [FRONTEND_TASK_ROUTING.md](./FRONTEND_TASK_ROUTING.md)
+- [FRONTEND_TASK_WORKFLOW.md](./FRONTEND_TASK_WORKFLOW.md)
 - [FRONTEND_HANDOFF.md](./FRONTEND_HANDOFF.md)
 - [FRONTEND_IMPLEMENTATION_PLAN.md](./FRONTEND_IMPLEMENTATION_PLAN.md)
 - [FRONTEND_WORKSPACE.md](./FRONTEND_WORKSPACE.md)
@@ -41,34 +41,35 @@
 - [0005-project-members-permissions-audit.md](../constraints/product-qa/0005-project-members-permissions-audit.md)
 - [ADMIN_API.md](../constraints/ADMIN_API.md)
 
-一句话分工：
+一句话定位：
 
-- `FRONTEND_TASK_ROUTING`：怎么分配 Codex / Copilot 的职责
+- `FRONTEND_TASK_WORKFLOW`：Codex 怎么按规格、实现、验收的顺序推进
 - `FRONTEND_HANDOFF`：前端不能只靠接口猜的业务语义
 - `FRONTEND_IMPLEMENTATION_PLAN`：按什么顺序推进页面最顺
 - `FRONTEND_WORKSPACE`：工程结构、脚本、CI 和本地运行方式
 - `FRONTEND_PAGE_TESTING`：怎么联调、怎么查白屏、怎么复现 smoke
 
-## 4. 任务分流总原则
+## 4. 任务执行总原则
 
-前端开发阶段，默认不要把“让 Codex 直接写页面代码”作为第一反应。
+前端开发阶段，默认由本地 Codex 直接完成代码实现，但不要第一步就进入写页面代码。
 
 优先采用这个节奏：
 
 1. 先让 Codex 基于当前仓库状态输出任务规范
-2. 再让 Codex 把任务规范整理成给 Copilot 的执行 prompt
-3. 让 Copilot 完成局部实现
-4. 回到 Codex 做 review、验收、风险补洞和必要小修
+2. 再让 Codex 把任务规范拆成可执行步骤和允许修改范围
+3. 由 Codex 在本地实现
+4. Codex 自查、跑必要检查、补状态分支和风险点
+5. 如果需要浏览器手工测试，再启动服务交给用户验证
 
 核心目标：
 
-- 把 Codex 的上下文预算留给全局设计和关键判断
-- 把重复实现、样板接线、稳定 CRUD 页面交给 Copilot
-- 避免两个模型同时重复做同一段探索
+- 保留“先对齐业务语义和验收标准”的质量门
+- 减少跨模型交接带来的上下文丢失和执行偏差
+- 让实现、联调和验收由同一个本地上下文闭环完成
 
-## 5. Codex 与 Copilot 的职责
+## 5. Codex 的职责
 
-### 5.1 优先留给 Codex 的任务
+### 5.1 规格与设计
 
 - 页面信息架构、路由结构、导航分层
 - 跨页面状态模型和数据流设计
@@ -76,9 +77,8 @@
 - 后端语义到前端交互的映射
 - Draft / Preview / Publish / Diff 这类高业务密度流程
 - 多页面一致性和抽象边界判断
-- 最终验收、风险盘点、回归检查
 
-### 5.2 优先分流给 Copilot 的任务
+### 5.2 本地实现
 
 - 静态页面骨架和布局实现
 - 明确字段定义的列表页、详情页、筛选栏
@@ -88,7 +88,17 @@
 - 样式细化、响应式修补
 - 已有明确输入输出的小组件
 
-### 5.3 不适合直接分流的任务
+### 5.3 验收与收口
+
+- 代码审阅
+- 语义一致性检查
+- 状态分支补漏
+- 权限处理检查
+- 风险提示
+- 必要的小修
+- `typecheck / build / lint / smoke` 等检查
+
+### 5.4 不适合直接开写的任务
 
 - 目标本身还没想清楚
 - 涉及核心业务语义澄清
@@ -112,9 +122,9 @@
 - 实现顺序
 - 验收标准
 
-### 阶段 B：Codex 输出给 Copilot 的实现 prompt
+### 阶段 B：Codex 输出本地执行计划
 
-prompt 至少要包含：
+执行计划至少要包含：
 
 - 必读文件
 - 目标页面或模块
@@ -124,9 +134,9 @@ prompt 至少要包含：
 - 不允许改动的边界
 - 自测要求
 
-### 阶段 C：Copilot 执行实现
+### 阶段 C：Codex 本地实现
 
-Copilot 负责：
+Codex 负责：
 
 - 页面编码
 - 小组件抽取
@@ -134,7 +144,7 @@ Copilot 负责：
 - 基础测试
 - 样式落地
 
-### 阶段 D：Codex 回收验收
+### 阶段 D：Codex 自验与交付
 
 Codex 负责：
 
@@ -153,23 +163,24 @@ Codex 负责：
 
 1. 明确让 Codex 先读本文件和 `docs/collaboration/*`
 2. 让 Codex 输出任务规范，不直接写代码
-3. 让 Codex 再生成给 Copilot 的 prompt
-4. Copilot 实现后，把结果贴回给 Codex 做验收
+3. 让 Codex 输出本地执行计划和验收标准
+4. 让 Codex 按计划实现、运行检查、给出交付说明
 
 ## 8. 当前阶段最适合的下一批任务
 
 基于当前 scaffold 和页面现状，后续继续推进时，建议优先顺序是：
 
-1. 配置文件列表页
-2. 部署实例列表页
-3. 项目成员页
-4. Draft 编辑页
-5. Preview / Publish / Release 历史 / Diff
+1. 部署实例列表页
+2. 项目成员页
+3. Draft 编辑页
+4. Preview / Publish / Release 历史 / Diff
+5. sync records / heartbeats / audit logs 页面
 
-继续分流时仍然要遵守：
+继续推进时仍然要遵守：
 
-- 低风险 CRUD 和列表页优先交给 Copilot
-- 高业务密度页面先让 Codex 出规格
+- 低风险 CRUD 和列表页也由 Codex 直接落地
+- 高业务密度页面必须先让 Codex 出规格和验收标准
+- 单轮过大的页面要拆成可验证的小批次，不要一次性铺太宽
 
 ## 9. 下次续工的最短 checklist
 
@@ -182,7 +193,7 @@ Codex 负责：
 5. 执行 `just dev-web`
 6. 先读本文件、`FRONTEND_HANDOFF`、`FRONTEND_IMPLEMENTATION_PLAN`、`FRONTEND_PAGE_TESTING`
 7. 确认当前要继续的是哪个页面或模块
-8. 先让 Codex出规格，再发给 Copilot
+8. 先让 Codex 出规格和执行计划，再由 Codex 本地实现
 
 ## 10. 统一 kickoff prompt
 
@@ -192,7 +203,7 @@ Codex 负责：
 
 ```text
 请按以下文件协作：
-- docs/collaboration/FRONTEND_TASK_ROUTING.md
+- docs/collaboration/FRONTEND_TASK_WORKFLOW.md
 - docs/collaboration/FRONTEND_HANDOFF.md
 - docs/collaboration/FRONTEND_IMPLEMENTATION_PLAN.md
 - docs/collaboration/FRONTEND_WORKSPACE.md
@@ -207,15 +218,15 @@ Codex 负责：
 
 你先不要直接写前端代码。
 
-这轮请把自己当成前端总控和验收负责人，而不是第一时间亲自施工的人。优先做这些事：
+这轮请按“先规格、再实现、再验收”的本地 Codex 流程推进。优先做这些事：
 1. 基于现有仓库状态，输出本轮任务的页面范围、接口映射、状态矩阵、权限规则和验收标准
-2. 再把任务整理成可交给 Copilot 执行的详细 prompt
-3. 等我贴回 Copilot 的实现结果后，你再负责 review、验收、查漏补缺和必要的小修
+2. 再输出本地执行计划，说明准备修改哪些文件、按什么顺序实现、跑哪些检查
+3. 等我确认或直接要求开始后，你负责本地实现、review、验收、查漏补缺和必要的小修
 
 要求：
 - 以当前仓库真实实现和文档为准
 - 明确指出哪些业务逻辑不是接口设计本身能表达出来的
-- 不要先直接进入写页面代码
+- 在输出规格和计划前，不要先直接进入写页面代码
 
 本轮任务是：
 [把这里替换成具体页面或模块]
@@ -223,4 +234,4 @@ Codex 负责：
 
 ## 11. 一句话策略
 
-把 Codex 当成总设计师和验收官，把 Copilot 当成按规范施工的执行者。
+把 Codex 当成本地闭环负责人：先对齐规格，再直接实现，最后自验和交付。

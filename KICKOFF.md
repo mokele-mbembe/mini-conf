@@ -18,7 +18,7 @@
 
 - 后端 MVP 主链路已基本完成
 - 项目级权限、审计日志、开放接口主路径已落地
-- `apps/web` 已初始化，已有登录页、项目列表页、项目详情骨架页
+- `apps/web` 已初始化，已有登录页、项目列表页、项目详情骨架页和配置文件列表 / 编辑页
 - 前端已接入 `lint / format:check / typecheck / build`
 - GitHub Actions 已接入前端 build 和最小 Playwright smoke E2E
 
@@ -30,7 +30,7 @@
 
 优先级最高，建议继续按模块切片推进：
 
-- [ ] 配置文件列表 / 编辑页
+- [x] 配置文件列表 / 编辑页
 - [ ] 部署实例列表 / 详情页
 - [ ] 模板创建实例流程
 - [ ] Draft 编辑页
@@ -60,7 +60,7 @@
 优先读这些：
 
 - [DEVELOPMENT_LOG.md](./DEVELOPMENT_LOG.md)
-- [FRONTEND_TASK_ROUTING.md](./docs/collaboration/FRONTEND_TASK_ROUTING.md)
+- [FRONTEND_TASK_WORKFLOW.md](./docs/collaboration/FRONTEND_TASK_WORKFLOW.md)
 - [FRONTEND_HANDOFF.md](./docs/collaboration/FRONTEND_HANDOFF.md)
 - [FRONTEND_WORKSPACE.md](./docs/collaboration/FRONTEND_WORKSPACE.md)
 - [FRONTEND_PAGE_TESTING.md](./docs/collaboration/FRONTEND_PAGE_TESTING.md)
@@ -126,12 +126,12 @@ PLAYWRIGHT_BASE_URL=http://127.0.0.1:4173 pnpm --dir apps/web test:e2e
 
 ### 5.1 前端续工主入口
 
-前端续工不要再在多个文档里找 prompt，统一以 [FRONTEND_TASK_ROUTING.md](./docs/collaboration/FRONTEND_TASK_ROUTING.md) 第 10 节为准。
+前端续工不要再在多个文档里找 prompt，统一以 [FRONTEND_TASK_WORKFLOW.md](./docs/collaboration/FRONTEND_TASK_WORKFLOW.md) 第 10 节为准。
 
 下次可以直接先贴这一段：
 
 ```text
-请先阅读 DEVELOPMENT_LOG.md，然后按 docs/collaboration/FRONTEND_TASK_ROUTING.md 第 10 节的统一 kickoff prompt 继续。
+请先阅读 DEVELOPMENT_LOG.md，然后按 docs/collaboration/FRONTEND_TASK_WORKFLOW.md 第 10 节的统一 kickoff prompt 继续。
 
 本轮任务是：
 [把这里替换成具体页面或模块]
@@ -151,7 +151,7 @@ PLAYWRIGHT_BASE_URL=http://127.0.0.1:4173 pnpm --dir apps/web test:e2e
 - MAIN_DEV_CHECKLIST.md
 
 如果本轮涉及前端，再补读：
-- docs/collaboration/FRONTEND_TASK_ROUTING.md
+- docs/collaboration/FRONTEND_TASK_WORKFLOW.md
 - docs/collaboration/FRONTEND_HANDOFF.md
 - docs/collaboration/FRONTEND_WORKSPACE.md
 - docs/collaboration/FRONTEND_PAGE_TESTING.md
@@ -170,7 +170,7 @@ PLAYWRIGHT_BASE_URL=http://127.0.0.1:4173 pnpm --dir apps/web test:e2e
 
 ## 6. 使用规则
 
-- 如果要继续前端任务，默认先走任务规范，再生成给 Copilot 的 prompt，再回到 Codex 验收
+- 如果要继续前端任务，默认先走任务规范和执行计划，再由 Codex 本地实现并自验
 - 如果产品语义要改，先更新 `docs/constraints/product-qa/*` 或相关约束文档，再改代码
 - 如果继续收口配置文件页的格式、状态、schema 痕迹、中文字段命名或后续 i18n 入口，先看 `0006-config-file-format-and-ux-alignment.md`
 - 如果前端出现白屏或联调异常，不要只看 `/api/healthz`，至少同时验证 `/api/auth/me`、登录链路和浏览器 Console

@@ -230,7 +230,6 @@ Authorization: Bearer <token>
   },
   "content": "log_level: info\npoll_interval_sec: 30\n",
   "metadata": {
-    "schema_version": "v1",
     "change_summary": "adjust polling interval"
   }
 }

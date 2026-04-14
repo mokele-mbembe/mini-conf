@@ -135,16 +135,16 @@ VITE_API_TARGET=http://127.0.0.1:9090 pnpm --dir apps/web dev
 
 因此后续开发应优先遵守：
 
-- 先看 `FRONTEND_TASK_ROUTING`
+- 先看 `FRONTEND_TASK_WORKFLOW`
 - 先让 Codex 出规格，不直接让模型自由发挥写页面
-- 复杂页面先做任务拆分，再分流给 Copilot
+- 复杂页面先做任务拆分，再由 Codex 分批本地实现
 - 联调或白屏问题优先按 `FRONTEND_PAGE_TESTING` 的顺序排查
 
 ## 9. 续工建议
 
 如果下次在新会话或其他开发机继续，建议最少先读：
 
-- [FRONTEND_TASK_ROUTING.md](./FRONTEND_TASK_ROUTING.md)
+- [FRONTEND_TASK_WORKFLOW.md](./FRONTEND_TASK_WORKFLOW.md)
 - [FRONTEND_HANDOFF.md](./FRONTEND_HANDOFF.md)
 - [FRONTEND_IMPLEMENTATION_PLAN.md](./FRONTEND_IMPLEMENTATION_PLAN.md)
 - [FRONTEND_PAGE_TESTING.md](./FRONTEND_PAGE_TESTING.md)
@@ -153,4 +153,4 @@ VITE_API_TARGET=http://127.0.0.1:9090 pnpm --dir apps/web dev
 
 - 当前前端已经做到哪里
 - 当前怎么跑本地联调
-- 当前怎么继续按 Codex / Copilot 分工推进
+- 当前怎么继续按 Codex 本地闭环流程推进

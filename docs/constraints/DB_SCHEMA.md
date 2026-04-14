@@ -68,8 +68,6 @@
 - `code` varchar(64) not null
 - `name` varchar(128) not null
 - `format` varchar(16) not null
-- `schema_name` varchar(128) null
-- `schema_version` varchar(64) null
 - `sensitivity` varchar(16) not null default 'normal'
 - `secret_paths` jsonb null
 - `description` text null
@@ -80,8 +78,11 @@
 
 说明：
 
+- `format` MVP 当前只接受 `yaml`、`json`、`toml`
+- `status` 对配置文件当前只采用 `active`、`archived`
 - `sensitivity` 首版可取 `normal` 或 `secret`
 - `secret_paths` 用于记录需要脱敏显示的字段路径
+- MVP 只做基础格式合法性校验，不保留 `schema_name / schema_version` 字段
 - MVP 先做脱敏展示和日志裁剪，不强制要求字段级加密存储
 
 ### deployment_instances
@@ -114,7 +115,6 @@
 - `content` text not null
 - `content_hash` char(64) not null
 - `format` varchar(16) not null
-- `schema_version` varchar(64) null
 - `version` bigint not null default 1
 - `editor_user_id` bigint not null
 - `updated_at` timestamptz not null default now()
@@ -228,7 +228,7 @@
 
 1. 一个项目可以创建多个模板部署实例
 2. 模板部署实例本质上仍然是部署实例，只是 `is_template = true`
-3. 新部署实例可以从模板部署实例克隆全部 Draft 或最新 Release 内容
+3. 新部署实例可以从模板部署实例克隆全部 Draft；模板实例不发布 Release，也不作为 `latest_release` clone 来源
 4. 克隆完成后，新部署实例与模板不再联动
 
 这样做的原因：

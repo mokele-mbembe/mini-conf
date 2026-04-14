@@ -5,9 +5,9 @@
 近期在配置文件页联调中，已经暴露出一组“实现可做 / 文档似乎暗示 / 产品实际并不想要”之间的偏差：
 
 - `text` 被前端误暴露为可选格式，但它不在当前预期范围内
-- `toml` 按计划应进入 MVP，需要一次性拉齐前后端与文档
+- `toml` 按计划应进入 MVP，目前已一次性拉齐前后端与文档
 - `config_files.status` 前端曾暴露 `inactive`，但后端当前资源语义并不按它工作
-- `schema_name / schema_version` 当前代码里仍有痕迹，但实际更像 demo 期内置校验，不适合作为 MVP 对外能力表述
+- `schema_name / schema_version` 曾有 demo 期痕迹，但不适合作为 MVP 对外能力表述，目前已从主链路清理
 - `code` 在中文里写成“编码”容易被理解成字符编码
 - 后续希望支持中英文切换，但目前文案仍大量散落在页面组件中
 
@@ -30,9 +30,9 @@ MVP 当前不再对外承诺：
 
 说明：
 
-- 当前代码里仍存在 `schema_name / schema_version` 字段和内置 validator 痕迹，但它们更接近 demo 期内嵌规则，不应继续作为 MVP 业务卖点或前端字段。
-- 当前做法只是让用户输入名称和版本字符串，并不是真正的 schema 资源关联模型；如果未来真的要扩展 schema 能力，仍然需要重新设计表结构、资源模型和业务逻辑。
-- 因此本轮建议不是“先把 UI 藏起来、数据库列继续保留”，而是直接从表结构、接口、seed、OpenAPI 和文档里一起清理干净。
+- 已清理的 `schema_name / schema_version` 字段和内置 validator 痕迹，更接近 demo 期内嵌规则，不应继续作为 MVP 业务卖点或前端字段。
+- 已移除的旧做法只是让用户输入名称和版本字符串，并不是真正的 schema 资源关联模型；如果未来真的要扩展 schema 能力，仍然需要重新设计表结构、资源模型和业务逻辑。
+- 本轮执行结果不是“先把 UI 藏起来、数据库列继续保留”，而是已从表结构、接口、seed、OpenAPI 和文档里一起清理干净。
 - 后续如需恢复更完整的 schema 能力，应单独立题，并按“独立 schema 资源 + 明确关联方式”重新设计，而不是恢复当前这套自由文本字段。
 
 ### 2. `text` 明确移出当前 MVP
@@ -54,8 +54,8 @@ MVP 当前不再对外承诺：
 当前结论：
 
 - `toml` 不像 `text` 那样被彻底移除
-- TOML 应按专项批次一次性拉齐前端、后端、测试、OpenAPI、文档
-- 当下面这些能力全部补齐后，TOML 视为当前 MVP 已支持：
+- TOML 已按专项批次一次性拉齐前端、后端、测试、OpenAPI、文档
+- 下面这些能力已补齐，TOML 视为当前 MVP 已支持：
 
 - 配置文件格式白名单接受 `toml`
 - Draft 保存支持 TOML 格式解析
@@ -124,42 +124,42 @@ MVP 当前不再对外承诺：
 
 ### 文档
 
-- [ ] `README.md`
+- [x] `README.md`
   - 把“schema 校验”收口成“基础格式合法性校验”
-- [ ] `docs/constraints/FRONTEND_MVP_BLUEPRINT.md`
+- [x] `docs/constraints/FRONTEND_MVP_BLUEPRINT.md`
   - 配置文件表单字段移除 `schema_name / schema_version`
   - `code` 的中文语义统一改成 `配置标识`
-- [ ] `docs/collaboration/FRONTEND_HANDOFF.md`
+- [x] `docs/collaboration/FRONTEND_HANDOFF.md`
   - 删除“schema validator 已作为前端主路径能力落地”的误导性表述
   - 明确 `text` 已移除、`toml` 已支持、`inactive` 不适用于配置文件
-- [ ] `docs/constraints/ADMIN_API.md`
+- [x] `docs/constraints/ADMIN_API.md`
   - 配置文件 API 示例移除 `schema_name / schema_version`
   - 明确 `format` 与 `status` 的正式集合
-- [ ] 如有配置文件页专项规范或 handoff，再统一引用本篇，不重复维护平行结论
+- [x] 如有配置文件页专项规范或 handoff，再统一引用本篇，不重复维护平行结论
 
 ### 后端
 
-- [ ] `config_files.format` 增加显式白名单校验
-- [ ] 当前阶段至少拒绝 `text`
-- [ ] `config_files.status` 的写接口继续按 `active | archived` 收口
-- [ ] Draft 保存、clone、发布前只保留基础格式合法性校验
-- [ ] 删除 `schema_name / schema_version` 相关表字段、查询字段和响应字段
-- [ ] 删除当前 schema-specific 内置 validator 及其对 Draft / Publish 的影响
+- [x] `config_files.format` 增加显式白名单校验
+- [x] 当前阶段至少拒绝 `text`
+- [x] `config_files.status` 的写接口继续按 `active | archived` 收口
+- [x] Draft 保存、clone、发布前只保留基础格式合法性校验
+- [x] 删除 `schema_name / schema_version` 相关表字段、查询字段和响应字段
+- [x] 删除当前 schema-specific 内置 validator 及其对 Draft / Publish 的影响
 
 ### 前端
 
-- [ ] 配置文件表单移除 `Schema 名称 / Schema 版本`
-- [ ] `code` 字段中文统一显示为 `配置标识`
-- [ ] `text` 不再暴露
-- [ ] `inactive` 不再出现在配置文件状态筛选或编辑状态中
-- [ ] `invalid_request` 及格式/状态非法值需给出明确业务提示，不再只落成“未知错误”
-- [ ] 后续新增文案尽量先进入统一常量或字典层
+- [x] 配置文件表单移除 `Schema 名称 / Schema 版本`
+- [x] `code` 字段中文统一显示为 `配置标识`
+- [x] `text` 不再暴露
+- [x] `inactive` 不再出现在配置文件状态筛选或编辑状态中
+- [x] `invalid_request` 及格式/状态非法值需给出明确业务提示，不再只落成“未知错误”
+- [x] 后续新增文案尽量先进入统一常量或字典层
 
 ### OpenAPI / 示例数据
 
-- [ ] `docs/artifacts/openapi.json`
+- [x] `docs/artifacts/openapi.json`
   - 配置文件格式与状态的表达与当前正式集合一致
-- [ ] demo seed 与本地演示数据
+- [x] demo seed 与本地演示数据
   - 清理误导性的 `text` 示例
   - 删除 `schema_name / schema_version` 痕迹
 
@@ -251,7 +251,7 @@ TOML 已按独立批次一次性拉齐前后端、测试、OpenAPI、文档，�
 至少新增或调整这些测试：
 
 - `config_files` 创建 / 更新
-  - 接受 `yaml/json`
+  - 接受 `yaml / json`
   - 接受 `toml`
   - 始终拒绝 `text`
 - `drafts`
@@ -270,7 +270,6 @@ TOML 已按独立批次一次性拉齐前后端、测试、OpenAPI、文档，�
 - 更新 `ADMIN_API.md`
 - 更新前端 handoff / blueprint 中的格式说明
 - 更新 demo seed，至少补一条合法 TOML 示例
-- 如 TOML 暂未支持精细 redaction，要在产品文档里明确写出限制
 - 确认仓库中不再残留 `schema_name / schema_version` 的对外语义描述
 
 ## 后续续工建议
@@ -279,10 +278,9 @@ TOML 已按独立批次一次性拉齐前后端、测试、OpenAPI、文档，�
 
 建议顺序：
 
-1. 先以本篇为准收口文档和产品语义
-2. 再收紧后端 `format / status` 契约
-3. 再调整前端表单和错误提示
-4. 最后单独立题补 TOML
+1. 先确认是否有新的产品语义偏差
+2. 再补对应后端契约、前端交互和验收测试
+3. 最后同步 OpenAPI、demo seed 和文档
 
 避免再次出现：
 

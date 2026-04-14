@@ -15,7 +15,7 @@
 
 建议按这个顺序阅读：
 
-1. [`docs/collaboration/FRONTEND_TASK_ROUTING.md`](./FRONTEND_TASK_ROUTING.md)
+1. [`docs/collaboration/FRONTEND_TASK_WORKFLOW.md`](./FRONTEND_TASK_WORKFLOW.md)
 2. [`docs/collaboration/FRONTEND_HANDOFF.md`](./FRONTEND_HANDOFF.md)
 3. [`docs/collaboration/FRONTEND_IMPLEMENTATION_PLAN.md`](./FRONTEND_IMPLEMENTATION_PLAN.md)
 4. [`docs/collaboration/FRONTEND_WORKSPACE.md`](./FRONTEND_WORKSPACE.md)

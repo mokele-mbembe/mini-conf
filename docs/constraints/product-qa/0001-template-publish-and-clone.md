@@ -67,22 +67,28 @@
 
 ## Q5: 某些配置文件能不能做更严格的校验？
 
-方向上可以，而且当前首版校验主路径已经落地。
+方向上可以，但不属于当前 MVP 对外能力。
 
 当前已有：
 
+- `config_files.sensitivity`
+- `secret_paths` 局部脱敏
+- 保存 Draft 时的基础格式解析
+- Draft clone 时的基础格式解析
+- 发布前的二次基础格式解析
+
+当前明确不再保留的是：
+
 - `config_files.schema_name`
 - `config_files.schema_version`
-- `config_files.sensitivity`
-- 保存 Draft 时的格式解析和 schema 校验
-- Draft clone 时的格式解析和 schema 校验
-- 发布前的二次格式解析和 schema 校验
+- 基于用户输入 schema 名称 / 版本选择 validator 的主路径
 
-当前仍未做的是更复杂的扩展能力，例如：
+如果后续要做更严格校验，应单独设计为完整能力，例如：
 
-- 更复杂的配置文件专属业务规则
-- 自定义 validator 的更丰富注册机制
-- 超出当前 `(schema_name, schema_version)` 的高级校验策略
+- 独立 schema 资源
+- 明确的 schema 与配置文件关联关系
+- 可审计、可版本化的 validator 或规则集
+- 前端可理解的校验错误结构
 
 ## Q6: Template 是否应该允许发布 Release？
 
