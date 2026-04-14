@@ -26,7 +26,7 @@ jobs:
 
       - name: Filter alpha-relevant changes
         id: filter
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4.0.1
         with:
           filters: |
             alpha:
