@@ -23,7 +23,6 @@ struct ReleaseLookup {
     published_at: String,
     apply_mode: String,
     content: String,
-    schema_version: Option<String>,
     change_summary: Option<String>,
 }
 
@@ -106,7 +105,6 @@ async fn find_release(
             to_char(r.published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS published_at,
             r.apply_mode,
             r.content,
-            cf.schema_version,
             r.change_summary
         FROM releases r
         JOIN projects p ON p.id = r.project_id
@@ -138,7 +136,6 @@ async fn find_release(
         published_at: row.get("published_at"),
         apply_mode: row.get("apply_mode"),
         content: row.get("content"),
-        schema_version: row.get("schema_version"),
         change_summary: row.get("change_summary"),
     }))
 }
@@ -187,7 +184,6 @@ fn release_response(release: ReleaseLookup) -> Response {
         },
         content: release.content,
         metadata: ReleaseMetadata {
-            schema_version: release.schema_version,
             change_summary: release.change_summary,
         },
     })

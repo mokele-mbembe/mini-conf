@@ -150,12 +150,10 @@ async fn seed_config_file(pool: &PgPool, project_id: i64, code: &str) -> TestRes
             code,
             name,
             format,
-            schema_name,
-            schema_version,
             sensitivity,
             status
         )
-        VALUES ($1, $2, $3, 'yaml', 'coffee-main', 'v1', 'normal', 'active')
+        VALUES ($1, $2, $3, 'yaml', 'normal', 'active')
         RETURNING id
         "#,
     )
@@ -609,11 +607,10 @@ async fn clone_deployment_instance_copies_template_drafts() -> TestResult {
             content,
             content_hash,
             format,
-            schema_version,
             version,
             editor_user_id
         )
-        VALUES ($1, $2, $3, $4, repeat('a', 64), 'yaml', 'v1', 4, $5)
+        VALUES ($1, $2, $3, $4, repeat('a', 64), 'yaml', 4, $5)
         "#,
     )
     .bind(project_id)
@@ -645,19 +642,14 @@ async fn clone_deployment_instance_copies_template_drafts() -> TestResult {
     assert_eq!(payload.template_source_id, Some(template_id));
     assert!(!payload.is_template);
 
-    let row = sqlx::query(
-        "SELECT content, format, schema_version, version FROM drafts WHERE deployment_instance_id = $1 AND config_file_id = $2",
-    )
+    let row =
+        sqlx::query("SELECT content, format, version FROM drafts WHERE deployment_instance_id = $1 AND config_file_id = $2")
     .bind(payload.id)
     .bind(config_file_id)
     .fetch_one(&pool)
     .await?;
     assert_eq!(row.get::<String, _>("content"), "poll_interval_ms: 5000\n");
     assert_eq!(row.get::<String, _>("format"), "yaml");
-    assert_eq!(
-        row.get::<Option<String>, _>("schema_version").as_deref(),
-        Some("v1")
-    );
     assert_eq!(row.get::<i64, _>("version"), 1);
 
     teardown(&database_url, &schema, pool).await
@@ -744,11 +736,10 @@ async fn preview_bundle_prefers_draft_and_marks_missing_required() -> TestResult
             content,
             content_hash,
             format,
-            schema_version,
             version,
             editor_user_id
         )
-        VALUES ($1, $2, $3, $4, repeat('a', 64), 'yaml', 'v1', 2, $5)
+        VALUES ($1, $2, $3, $4, repeat('a', 64), 'yaml', 2, $5)
         "#,
     )
     .bind(project_id)

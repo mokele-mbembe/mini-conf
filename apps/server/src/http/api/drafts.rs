@@ -3,7 +3,7 @@ use crate::{
     authorization::{ProjectRole, authenticate_user, require_project_role},
     error::ApiError,
     state::AppState,
-    validation::ValidatorRegistry,
+    validation::validate_content,
 };
 use axum::{
     Json, Router,
@@ -46,8 +46,6 @@ struct ValidatedCloneDraftRequest {
 struct DraftContext {
     project_id: i64,
     format: String,
-    schema_name: Option<String>,
-    schema_version: Option<String>,
 }
 
 #[derive(Debug)]
@@ -55,7 +53,6 @@ struct DraftCloneSource {
     content: String,
     content_hash: String,
     format: String,
-    schema_version: Option<String>,
 }
 
 pub fn router() -> Router<AppState> {
@@ -121,7 +118,6 @@ pub(crate) async fn get_draft(
             format,
             content,
             version,
-            schema_version,
             to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at
         FROM drafts
         WHERE deployment_instance_id = $1
@@ -224,9 +220,8 @@ pub(crate) async fn put_draft(
                 content = $3,
                 content_hash = $4,
                 format = $5,
-                schema_version = $6,
                 version = version + 1,
-                editor_user_id = $7,
+                editor_user_id = $6,
                 updated_at = NOW()
             WHERE deployment_instance_id = $1
               AND config_file_id = $2
@@ -236,7 +231,6 @@ pub(crate) async fn put_draft(
                 format,
                 content,
                 version,
-                schema_version,
                 to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at
             "#,
         )
@@ -245,7 +239,6 @@ pub(crate) async fn put_draft(
         .bind(&payload.content)
         .bind(hash_content(&payload.content))
         .bind(&payload.format)
-        .bind(context.schema_version)
         .bind(auth.user_id)
         .fetch_one(&mut *tx)
         .await
@@ -267,18 +260,16 @@ pub(crate) async fn put_draft(
                 content,
                 content_hash,
                 format,
-                schema_version,
                 version,
                 editor_user_id
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8)
+            VALUES ($1, $2, $3, $4, $5, $6, 1, $7)
             RETURNING
                 deployment_instance_id,
                 config_file_id,
                 format,
                 content,
                 version,
-                schema_version,
                 to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at
             "#,
         )
@@ -288,7 +279,6 @@ pub(crate) async fn put_draft(
         .bind(&payload.content)
         .bind(hash_content(&payload.content))
         .bind(&payload.format)
-        .bind(context.schema_version)
         .bind(auth.user_id)
         .fetch_one(&mut *tx)
         .await
@@ -472,7 +462,7 @@ async fn load_draft_context(
 
     let row = sqlx::query(
         r#"
-        SELECT project_id, format, schema_name, schema_version
+        SELECT project_id, format
         FROM config_files
         WHERE id = $1
         LIMIT 1
@@ -495,8 +485,6 @@ async fn load_draft_context(
     Ok(DraftContext {
         project_id: config_project_id,
         format: row.get("format"),
-        schema_name: row.get("schema_name"),
-        schema_version: row.get("schema_version"),
     })
 }
 
@@ -549,7 +537,7 @@ async fn load_clone_source(
         "draft" => {
             let row = sqlx::query(
                 r#"
-                SELECT content, btrim(content_hash) AS content_hash, format, schema_version
+                SELECT content, btrim(content_hash) AS content_hash, format
                 FROM drafts
                 WHERE deployment_instance_id = $1
                   AND config_file_id = $2
@@ -567,13 +555,12 @@ async fn load_clone_source(
                 content: row.get("content"),
                 content_hash: row.get("content_hash"),
                 format: row.get("format"),
-                schema_version: row.get("schema_version"),
             })
         }
         "latest_release" => {
             let row = sqlx::query(
                 r#"
-                SELECT content, btrim(content_hash) AS content_hash, format, NULL::varchar AS schema_version
+                SELECT content, btrim(content_hash) AS content_hash, format
                 FROM releases
                 WHERE deployment_instance_id = $1
                   AND config_file_id = $2
@@ -592,7 +579,6 @@ async fn load_clone_source(
                 content: row.get("content"),
                 content_hash: row.get("content_hash"),
                 format: row.get("format"),
-                schema_version: row.get("schema_version"),
             })
         }
         _ => unreachable!("validated source kind should only allow supported variants"),
@@ -629,9 +615,8 @@ async fn upsert_draft(
                 content = $3,
                 content_hash = $4,
                 format = $5,
-                schema_version = $6,
-                version = $7,
-                editor_user_id = $8,
+                version = $6,
+                editor_user_id = $7,
                 updated_at = NOW()
             WHERE deployment_instance_id = $1
               AND config_file_id = $2
@@ -641,7 +626,6 @@ async fn upsert_draft(
                 format,
                 content,
                 version,
-                schema_version,
                 to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS updated_at
             "#,
         )
@@ -650,7 +634,6 @@ async fn upsert_draft(
         .bind(&source.content)
         .bind(&source.content_hash)
         .bind(&source.format)
-        .bind(source.schema_version.clone().or_else(|| context.schema_version.clone()))
         .bind(existing_version + 1)
         .bind(editor_user_id)
         .fetch_one(&mut **tx)
@@ -666,18 +649,16 @@ async fn upsert_draft(
                 content,
                 content_hash,
                 format,
-                schema_version,
                 version,
                 editor_user_id
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8)
+            VALUES ($1, $2, $3, $4, $5, $6, 1, $7)
             RETURNING
                 deployment_instance_id,
                 config_file_id,
                 format,
                 content,
                 version,
-                schema_version,
                 to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS updated_at
             "#,
         )
@@ -687,7 +668,6 @@ async fn upsert_draft(
         .bind(&source.content)
         .bind(&source.content_hash)
         .bind(&source.format)
-        .bind(source.schema_version.clone().or_else(|| context.schema_version.clone()))
         .bind(editor_user_id)
         .fetch_one(&mut **tx)
         .await
@@ -702,7 +682,6 @@ fn map_draft_row(row: sqlx::postgres::PgRow) -> DraftResponse {
         format: row.get("format"),
         content: row.get("content"),
         version: row.get("version"),
-        schema_version: row.get("schema_version"),
         updated_at: row.get("updated_at"),
     }
 }
@@ -718,12 +697,7 @@ fn validate_draft_payload(
         ));
     }
 
-    ValidatorRegistry::validate_content(
-        &context.format,
-        &payload.content,
-        context.schema_name.as_deref(),
-        context.schema_version.as_deref(),
-    )?;
+    validate_content(&context.format, &payload.content)?;
 
     Ok(())
 }
@@ -739,12 +713,7 @@ fn validate_cloned_draft(
         ));
     }
 
-    ValidatorRegistry::validate_content(
-        &context.format,
-        &source.content,
-        context.schema_name.as_deref(),
-        context.schema_version.as_deref(),
-    )?;
+    validate_content(&context.format, &source.content)?;
 
     Ok(())
 }

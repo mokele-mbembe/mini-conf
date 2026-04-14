@@ -142,7 +142,7 @@ async fn seed_open_access_fixture(
     .await?;
 
     let config_file_id: i64 = sqlx::query_scalar(
-        "INSERT INTO config_files (project_id, code, name, format, schema_version) VALUES ($1, 'main', 'Main', 'yaml', 'v1') RETURNING id",
+        "INSERT INTO config_files (project_id, code, name, format) VALUES ($1, 'main', 'Main', 'yaml') RETURNING id",
     )
     .bind(project_id)
     .fetch_one(pool)

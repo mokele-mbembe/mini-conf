@@ -1,0 +1,6 @@
+ALTER TABLE config_files
+    ADD COLUMN IF NOT EXISTS schema_name VARCHAR(128) NULL,
+    ADD COLUMN IF NOT EXISTS schema_version VARCHAR(64) NULL;
+
+ALTER TABLE drafts
+    ADD COLUMN IF NOT EXISTS schema_version VARCHAR(64) NULL;

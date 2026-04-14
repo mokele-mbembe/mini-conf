@@ -185,9 +185,8 @@ pub struct CreateConfigFileRequestBody {
     pub code: String,
     pub name: String,
     pub is_required: Option<bool>,
+    #[schema(example = "toml")]
     pub format: String,
-    pub schema_name: Option<String>,
-    pub schema_version: Option<String>,
     pub sensitivity: Option<String>,
     pub secret_paths: Option<Vec<String>>,
     pub description: Option<String>,
@@ -226,6 +225,7 @@ pub struct UpdateDeploymentInstanceRequestBody {
 #[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
 pub struct UpdateDraftRequestBody {
     pub content: String,
+    #[schema(example = "toml")]
     pub format: String,
     pub base_version: Option<i64>,
 }
@@ -242,9 +242,8 @@ pub struct UpdateConfigFileRequestBody {
     pub code: String,
     pub name: String,
     pub is_required: Option<bool>,
+    #[schema(example = "toml")]
     pub format: String,
-    pub schema_name: Option<String>,
-    pub schema_version: Option<String>,
     pub sensitivity: Option<String>,
     pub secret_paths: Option<Vec<String>>,
     pub description: Option<String>,

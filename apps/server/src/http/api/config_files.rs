@@ -27,8 +27,6 @@ pub(crate) struct CreateConfigFileRequest {
     name: Option<String>,
     is_required: Option<bool>,
     format: Option<String>,
-    schema_name: Option<String>,
-    schema_version: Option<String>,
     sensitivity: Option<String>,
     secret_paths: Option<Vec<String>>,
     description: Option<String>,
@@ -41,8 +39,6 @@ struct ValidatedCreateConfigFileRequest {
     name: String,
     is_required: bool,
     format: String,
-    schema_name: Option<String>,
-    schema_version: Option<String>,
     sensitivity: String,
     secret_paths: Option<Vec<String>>,
     description: Option<String>,
@@ -55,8 +51,6 @@ pub(crate) struct UpdateConfigFileRequest {
     name: Option<String>,
     is_required: Option<bool>,
     format: Option<String>,
-    schema_name: Option<String>,
-    schema_version: Option<String>,
     sensitivity: Option<String>,
     secret_paths: Option<Vec<String>>,
     description: Option<String>,
@@ -70,8 +64,6 @@ struct ValidatedUpdateConfigFileRequest {
     name: String,
     is_required: bool,
     format: String,
-    schema_name: Option<String>,
-    schema_version: Option<String>,
     sensitivity: String,
     secret_paths: Option<Vec<String>>,
     description: Option<String>,
@@ -128,8 +120,6 @@ pub(crate) async fn list_config_files(
             cf.name,
             cf.is_required,
             cf.format,
-            cf.schema_name,
-            cf.schema_version,
             cf.sensitivity,
             cf.secret_paths,
             cf.description,
@@ -215,14 +205,12 @@ pub(crate) async fn create_config_file(
             name,
             is_required,
             format,
-            schema_name,
-            schema_version,
             sensitivity,
             secret_paths,
             description,
             status
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'active')
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active')
         RETURNING
             id,
             project_id,
@@ -230,8 +218,6 @@ pub(crate) async fn create_config_file(
             name,
             is_required,
             format,
-            schema_name,
-            schema_version,
             sensitivity,
             secret_paths,
             description,
@@ -243,8 +229,6 @@ pub(crate) async fn create_config_file(
     .bind(payload.name)
     .bind(payload.is_required)
     .bind(payload.format)
-    .bind(payload.schema_name)
-    .bind(payload.schema_version)
     .bind(payload.sensitivity)
     .bind(payload.secret_paths.map(SqlxJson))
     .bind(payload.description)
@@ -263,7 +247,7 @@ pub(crate) async fn create_config_file(
             resource_id: summary.id.to_string(),
             detail: Some(serde_json::json!({
                 "config_file_id": summary.id,
-                "changed_fields": ["code", "name", "is_required", "format", "schema_name", "schema_version", "sensitivity", "description"]
+                "changed_fields": ["code", "name", "is_required", "format", "sensitivity", "description"]
             })),
         },
     )
@@ -315,8 +299,6 @@ pub(crate) async fn get_config_file(
             cf.name,
             cf.is_required,
             cf.format,
-            cf.schema_name,
-            cf.schema_version,
             cf.sensitivity,
             cf.secret_paths,
             cf.description,
@@ -423,12 +405,10 @@ pub(crate) async fn update_config_file(
             name = $4,
             is_required = $5,
             format = $6,
-            schema_name = $7,
-            schema_version = $8,
-            sensitivity = $9,
-            secret_paths = $10,
-            description = $11,
-            status = $12,
+            sensitivity = $7,
+            secret_paths = $8,
+            description = $9,
+            status = $10,
             updated_at = NOW()
         WHERE id = $1
         RETURNING
@@ -438,8 +418,6 @@ pub(crate) async fn update_config_file(
             name,
             is_required,
             format,
-            schema_name,
-            schema_version,
             sensitivity,
             secret_paths,
             description,
@@ -452,8 +430,6 @@ pub(crate) async fn update_config_file(
     .bind(payload.name)
     .bind(payload.is_required)
     .bind(payload.format)
-    .bind(payload.schema_name)
-    .bind(payload.schema_version)
     .bind(payload.sensitivity)
     .bind(payload.secret_paths.map(SqlxJson))
     .bind(payload.description)
@@ -474,7 +450,7 @@ pub(crate) async fn update_config_file(
             resource_id: summary.id.to_string(),
             detail: Some(serde_json::json!({
                 "config_file_id": summary.id,
-                "changed_fields": ["code", "name", "is_required", "format", "schema_name", "schema_version", "sensitivity", "description", "status"]
+                "changed_fields": ["code", "name", "is_required", "format", "sensitivity", "description", "status"]
             })),
         },
     )
@@ -492,9 +468,7 @@ impl CreateConfigFileRequest {
             code: required(self.code, "code")?,
             name: required(self.name, "name")?,
             is_required: self.is_required.unwrap_or(false),
-            format: required(self.format, "format")?,
-            schema_name: normalize_optional(self.schema_name),
-            schema_version: normalize_optional(self.schema_version),
+            format: validate_format(self.format)?,
             sensitivity: validate_sensitivity(self.sensitivity)?,
             secret_paths: normalize_secret_paths(self.secret_paths),
             description: normalize_optional(self.description),
@@ -509,9 +483,7 @@ impl UpdateConfigFileRequest {
             code: required(self.code, "code")?,
             name: required(self.name, "name")?,
             is_required: self.is_required.unwrap_or(false),
-            format: required(self.format, "format")?,
-            schema_name: normalize_optional(self.schema_name),
-            schema_version: normalize_optional(self.schema_version),
+            format: validate_format(self.format)?,
             sensitivity: validate_sensitivity(self.sensitivity)?,
             secret_paths: normalize_secret_paths(self.secret_paths),
             description: normalize_optional(self.description),
@@ -532,8 +504,6 @@ fn map_config_file_row(row: sqlx::postgres::PgRow) -> ConfigFileSummary {
         name: row.get("name"),
         is_required: row.get("is_required"),
         format: row.get("format"),
-        schema_name: row.get("schema_name"),
-        schema_version: row.get("schema_version"),
         sensitivity: row.get("sensitivity"),
         secret_paths,
         description: row.get("description"),
@@ -612,6 +582,23 @@ fn validate_sensitivity(value: Option<String>) -> Result<String, ApiError> {
         _ => Err(ApiError::bad_request(
             "invalid_request",
             "invalid config file sensitivity",
+        )),
+    }
+}
+
+fn validate_format(value: Option<String>) -> Result<String, ApiError> {
+    let Some(value) = normalize_optional(value) else {
+        return Err(ApiError::bad_request(
+            "invalid_request",
+            invalid_body_message("format"),
+        ));
+    };
+
+    match value.as_str() {
+        "yaml" | "json" | "toml" => Ok(value),
+        _ => Err(ApiError::bad_request(
+            "invalid_request",
+            "invalid config file format",
         )),
     }
 }

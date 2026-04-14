@@ -3,7 +3,7 @@ use crate::{
     authorization::{ProjectRole, authenticate_user, require_project_role},
     error::ApiError,
     state::AppState,
-    validation::{ValidatorRegistry, redact_content},
+    validation::{redact_content, validate_content},
 };
 use axum::{
     Json, Router,
@@ -46,8 +46,6 @@ struct ValidatedPublishReleaseRequest {
 struct ReleasePublishContext {
     format: String,
     is_template: bool,
-    schema_name: Option<String>,
-    schema_version: Option<String>,
 }
 
 #[derive(Debug)]
@@ -208,12 +206,7 @@ pub(crate) async fn publish_release(
             "draft format no longer matches config file",
         ));
     }
-    ValidatorRegistry::validate_content(
-        &context.format,
-        &draft.content,
-        context.schema_name.as_deref(),
-        context.schema_version.as_deref(),
-    )?;
+    validate_content(&context.format, &draft.content)?;
     let previous_release =
         find_latest_release(pool, payload.deployment_instance_id, payload.config_file_id).await?;
     let diff_summary = build_diff_summary(
@@ -522,7 +515,7 @@ async fn load_publish_context(
 
     let row = sqlx::query(
         r#"
-        SELECT project_id, format, schema_name, schema_version
+        SELECT project_id, format
         FROM config_files
         WHERE id = $1
         LIMIT 1
@@ -544,8 +537,6 @@ async fn load_publish_context(
     Ok(ReleasePublishContext {
         format: row.get("format"),
         is_template: deployment_row.get("is_template"),
-        schema_name: row.get("schema_name"),
-        schema_version: row.get("schema_version"),
     })
 }
 

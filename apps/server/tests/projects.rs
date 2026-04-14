@@ -327,6 +327,7 @@ async fn get_project_returns_project_detail_for_authenticated_session() -> TestR
     assert_eq!(payload.code, "coffee-legacy");
     assert_eq!(payload.name, "Coffee Legacy");
     assert_eq!(payload.description.as_deref(), Some("Retail edge rollout"));
+    assert_eq!(payload.current_user_role, "admin");
 
     teardown(&database_url, &schema, pool).await
 }
@@ -392,6 +393,7 @@ async fn update_project_updates_existing_project() -> TestResult {
     let payload: ProjectSummary = read_json(response).await?;
     assert_eq!(payload.code, "coffee-retail");
     assert_eq!(payload.status, "archived");
+    assert_eq!(payload.current_user_role, "admin");
 
     let row = sqlx::query("SELECT code, name, description, status FROM projects WHERE id = $1")
         .bind(project_id)

@@ -225,7 +225,7 @@ async fn create_config_file_creates_row_with_secret_paths() -> TestResult {
                 .header(header::COOKIE, cookie)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(format!(
-                    r#"{{"project_id":{project_id},"code":"main","name":"Main Config","is_required":true,"format":"yaml","schema_name":"coffee-main","schema_version":"v1","sensitivity":"secret","secret_paths":["$.wifi.password","$.third_party.api_key"],"description":"Primary device configuration"}}"#
+                    r#"{{"project_id":{project_id},"code":"main","name":"Main Config","is_required":true,"format":"yaml","sensitivity":"secret","secret_paths":["$.wifi.password","$.third_party.api_key"],"description":"Primary device configuration"}}"#
                 )))?,
         )
         .await?;
@@ -246,22 +246,13 @@ async fn create_config_file_creates_row_with_secret_paths() -> TestResult {
         )
     );
 
-    let row = sqlx::query(
-        "SELECT code, is_required, schema_name, schema_version, sensitivity, secret_paths FROM config_files WHERE id = $1",
-    )
+    let row = sqlx::query("SELECT code, is_required, format, sensitivity, secret_paths FROM config_files WHERE id = $1")
     .bind(payload.id)
     .fetch_one(&pool)
     .await?;
     assert_eq!(row.get::<String, _>("code"), "main");
     assert!(row.get::<bool, _>("is_required"));
-    assert_eq!(
-        row.get::<Option<String>, _>("schema_name").as_deref(),
-        Some("coffee-main")
-    );
-    assert_eq!(
-        row.get::<Option<String>, _>("schema_version").as_deref(),
-        Some("v1")
-    );
+    assert_eq!(row.get::<String, _>("format"), "yaml");
     assert_eq!(row.get::<String, _>("sensitivity"), "secret");
 
     teardown(&database_url, &schema, pool).await
@@ -346,6 +337,73 @@ async fn create_config_file_returns_project_not_found_for_unknown_project() -> T
 }
 
 #[tokio::test]
+async fn create_config_file_rejects_unsupported_format() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    let project_id: i64 = sqlx::query_scalar(
+        "INSERT INTO projects (code, name, status) VALUES ('coffee-legacy', 'Coffee Legacy', 'active') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await?;
+
+    let cookie = login(&app).await?;
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/config-files")
+                .header(header::COOKIE, cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(format!(
+                    r#"{{"project_id":{project_id},"code":"main","name":"Main Config","format":"text"}}"#
+                )))?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let payload: ErrorResponse = read_json(response).await?;
+    assert_eq!(payload.code, "invalid_request");
+    assert_eq!(payload.message, "invalid config file format");
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn create_config_file_accepts_toml_format() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    let project_id: i64 = sqlx::query_scalar(
+        "INSERT INTO projects (code, name, status) VALUES ('coffee-legacy', 'Coffee Legacy', 'active') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await?;
+
+    let cookie = login(&app).await?;
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/config-files")
+                .header(header::COOKIE, cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(format!(
+                    r#"{{"project_id":{project_id},"code":"vision","name":"Vision Config","format":"toml"}}"#
+                )))?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let payload: ConfigFileSummary = read_json(response).await?;
+    assert_eq!(payload.format, "toml");
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
 async fn get_config_file_returns_detail_for_authenticated_session() -> TestResult {
     let Some((app, pool, database_url, schema)) = setup_app().await? else {
         return Ok(());
@@ -411,7 +469,7 @@ async fn update_config_file_updates_existing_row() -> TestResult {
                 .header(header::COOKIE, cookie)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(format!(
-                    r#"{{"project_id":{project_id},"code":"main-v2","name":"Main Config V2","is_required":true,"format":"json","schema_name":"coffee-main","schema_version":"v2","sensitivity":"secret","secret_paths":["$.wifi.password"],"description":"Updated config","status":"archived"}}"#
+                    r#"{{"project_id":{project_id},"code":"main-v2","name":"Main Config V2","is_required":true,"format":"json","sensitivity":"secret","secret_paths":["$.wifi.password"],"description":"Updated config","status":"archived"}}"#
                 )))?,
         )
         .await?;
@@ -424,7 +482,7 @@ async fn update_config_file_updates_existing_row() -> TestResult {
     assert_eq!(payload.status, "archived");
 
     let row = sqlx::query(
-        "SELECT code, is_required, format, schema_version, sensitivity, status FROM config_files WHERE id = $1",
+        "SELECT code, is_required, format, sensitivity, status FROM config_files WHERE id = $1",
     )
     .bind(config_file_id)
     .fetch_one(&pool)
@@ -432,12 +490,87 @@ async fn update_config_file_updates_existing_row() -> TestResult {
     assert_eq!(row.get::<String, _>("code"), "main-v2");
     assert!(row.get::<bool, _>("is_required"));
     assert_eq!(row.get::<String, _>("format"), "json");
-    assert_eq!(
-        row.get::<Option<String>, _>("schema_version").as_deref(),
-        Some("v2")
-    );
     assert_eq!(row.get::<String, _>("sensitivity"), "secret");
     assert_eq!(row.get::<String, _>("status"), "archived");
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn update_config_file_rejects_unsupported_status() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    let project_id: i64 = sqlx::query_scalar(
+        "INSERT INTO projects (code, name, status) VALUES ('coffee-legacy', 'Coffee Legacy', 'active') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await?;
+    let config_file_id: i64 = sqlx::query_scalar(
+        "INSERT INTO config_files (project_id, code, name, format, sensitivity, status) VALUES ($1, 'main', 'Main Config', 'yaml', 'normal', 'active') RETURNING id",
+    )
+    .bind(project_id)
+    .fetch_one(&pool)
+    .await?;
+
+    let cookie = login(&app).await?;
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/api/config-files/{config_file_id}"))
+                .header(header::COOKIE, cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(format!(
+                    r#"{{"project_id":{project_id},"code":"main","name":"Main Config","is_required":false,"format":"yaml","status":"inactive"}}"#
+                )))?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let payload: ErrorResponse = read_json(response).await?;
+    assert_eq!(payload.code, "invalid_request");
+    assert_eq!(payload.message, "invalid config file status");
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn update_config_file_accepts_toml_format() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    let project_id: i64 = sqlx::query_scalar(
+        "INSERT INTO projects (code, name, status) VALUES ('coffee-legacy', 'Coffee Legacy', 'active') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await?;
+    let config_file_id: i64 = sqlx::query_scalar(
+        "INSERT INTO config_files (project_id, code, name, format, sensitivity, status) VALUES ($1, 'vision', 'Vision Config', 'yaml', 'normal', 'active') RETURNING id",
+    )
+    .bind(project_id)
+    .fetch_one(&pool)
+    .await?;
+
+    let cookie = login(&app).await?;
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/api/config-files/{config_file_id}"))
+                .header(header::COOKIE, cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(format!(
+                    r#"{{"project_id":{project_id},"code":"vision","name":"Vision Config","is_required":false,"format":"toml","status":"active"}}"#
+                )))?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: ConfigFileSummary = read_json(response).await?;
+    assert_eq!(payload.format, "toml");
 
     teardown(&database_url, &schema, pool).await
 }

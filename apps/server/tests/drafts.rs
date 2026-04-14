@@ -130,6 +130,13 @@ async fn login(app: &axum::Router) -> TestResult<String> {
 }
 
 async fn seed_project_config_deployment(pool: &PgPool) -> TestResult<(i64, i64, i64)> {
+    seed_project_config_deployment_with_format(pool, "yaml").await
+}
+
+async fn seed_project_config_deployment_with_format(
+    pool: &PgPool,
+    format: &str,
+) -> TestResult<(i64, i64, i64)> {
     let project_id: i64 = sqlx::query_scalar(
         "INSERT INTO projects (code, name, status) VALUES ('coffee-legacy', 'Coffee Legacy', 'active') RETURNING id",
     )
@@ -142,16 +149,15 @@ async fn seed_project_config_deployment(pool: &PgPool) -> TestResult<(i64, i64, 
             code,
             name,
             format,
-            schema_name,
-            schema_version,
             sensitivity,
             status
         )
-        VALUES ($1, 'main', 'Main Config', 'yaml', 'coffee-main', 'v1', 'normal', 'active')
+        VALUES ($1, 'main', 'Main Config', $2, 'normal', 'active')
         RETURNING id
         "#,
     )
     .bind(project_id)
+    .bind(format)
     .fetch_one(pool)
     .await?;
     let deployment_id: i64 = sqlx::query_scalar(
@@ -259,7 +265,6 @@ async fn put_draft_creates_and_get_returns_current_draft() -> TestResult {
     assert_eq!(payload.deployment_instance_id, deployment_id);
     assert_eq!(payload.config_file_id, config_file_id);
     assert_eq!(payload.version, 1);
-    assert_eq!(payload.schema_version.as_deref(), Some("v1"));
 
     let response = app
         .oneshot(
@@ -418,7 +423,7 @@ async fn put_draft_rejects_invalid_yaml_content() -> TestResult {
                 .header(header::COOKIE, &cookie)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
-                    r#"{"content":"poll_interval_ms: [","format":"yaml"}"#,
+                    r#"{"content":"poll_interval_ms: [\n","format":"yaml"}"#,
                 ))?,
         )
         .await?;
@@ -432,11 +437,12 @@ async fn put_draft_rejects_invalid_yaml_content() -> TestResult {
 }
 
 #[tokio::test]
-async fn put_draft_rejects_schema_validation_failure() -> TestResult {
+async fn put_draft_accepts_valid_toml_content() -> TestResult {
     let Some((app, pool, database_url, schema)) = setup_app().await? else {
         return Ok(());
     };
-    let (_, config_file_id, deployment_id) = seed_project_config_deployment(&pool).await?;
+    let (_, config_file_id, deployment_id) =
+        seed_project_config_deployment_with_format(&pool, "toml").await?;
 
     let cookie = login(&app).await?;
     let response = app
@@ -447,7 +453,37 @@ async fn put_draft_rejects_schema_validation_failure() -> TestResult {
                 .header(header::COOKIE, &cookie)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
-                    r#"{"content":"poll_interval_ms: -1\n","format":"yaml"}"#,
+                    r#"{"content":"poll_interval_ms = 5000\n","format":"toml"}"#,
+                ))?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: DraftResponse = read_json(response).await?;
+    assert_eq!(payload.content, "poll_interval_ms = 5000\n");
+    assert_eq!(payload.format, "toml");
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn put_draft_rejects_invalid_toml_content() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+    let (_, config_file_id, deployment_id) =
+        seed_project_config_deployment_with_format(&pool, "toml").await?;
+
+    let cookie = login(&app).await?;
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/api/drafts/{deployment_id}/{config_file_id}"))
+                .header(header::COOKIE, &cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"content":"poll_interval_ms = ","format":"toml"}"#,
                 ))?,
         )
         .await?;
@@ -455,10 +491,7 @@ async fn put_draft_rejects_schema_validation_failure() -> TestResult {
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
     let payload: ErrorResponse = read_json(response).await?;
     assert_eq!(payload.code, "draft_validation_failed");
-    assert_eq!(
-        payload.message,
-        "poll_interval_ms must be greater than zero"
-    );
+    assert_eq!(payload.message, "draft content is not valid toml");
 
     teardown(&database_url, &schema, pool).await
 }
@@ -525,6 +558,69 @@ async fn clone_draft_copies_latest_release_into_target_draft() -> TestResult {
     assert_eq!(payload.draft.deployment_instance_id, target_deployment_id);
     assert_eq!(payload.draft.content, "poll_interval_ms: 7000\n");
     assert_eq!(payload.draft.version, 1);
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn clone_draft_copies_latest_toml_release_into_target_draft() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+    let (project_id, config_file_id, source_deployment_id) =
+        seed_project_config_deployment_with_format(&pool, "toml").await?;
+    let target_deployment_id = seed_second_deployment(&pool, project_id, "store-002").await?;
+    let publisher_user_id: i64 =
+        sqlx::query_scalar("SELECT id FROM users WHERE username = 'admin' LIMIT 1")
+            .fetch_one(&pool)
+            .await?;
+    sqlx::query(
+        r#"
+        INSERT INTO releases (
+            project_id,
+            config_file_id,
+            deployment_instance_id,
+            revision,
+            content,
+            content_hash,
+            format,
+            change_summary,
+            diff_summary,
+            apply_mode,
+            published_by
+        )
+        VALUES
+            ($1, $2, $3, '20260407.0001', $4, repeat('c', 64), 'toml', NULL, NULL, 'soft', $5)
+        "#,
+    )
+    .bind(project_id)
+    .bind(config_file_id)
+    .bind(source_deployment_id)
+    .bind("poll_interval_ms = 7000\n")
+    .bind(publisher_user_id)
+    .execute(&pool)
+    .await?;
+
+    let cookie = login(&app).await?;
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/drafts/{target_deployment_id}/{config_file_id}/clone"
+                ))
+                .header(header::COOKIE, &cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(format!(
+                    r#"{{"source_deployment_instance_id":{source_deployment_id},"source_kind":"latest_release"}}"#
+                )))?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: DraftCloneResponse = read_json(response).await?;
+    assert_eq!(payload.draft.content, "poll_interval_ms = 7000\n");
+    assert_eq!(payload.draft.format, "toml");
 
     teardown(&database_url, &schema, pool).await
 }

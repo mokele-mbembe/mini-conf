@@ -86,7 +86,7 @@ pub(crate) async fn list_projects(
 
     let rows = sqlx::query(
         r#"
-        SELECT DISTINCT p.id, p.code, p.name, p.description, p.status
+        SELECT DISTINCT p.id, p.code, p.name, p.description, p.status, pm.role AS current_user_role
         FROM projects p
         JOIN project_members pm
           ON pm.project_id = p.id
@@ -146,7 +146,7 @@ pub(crate) async fn get_project(
 
     let row = sqlx::query(
         r#"
-        SELECT p.id, p.code, p.name, p.description, p.status
+        SELECT p.id, p.code, p.name, p.description, p.status, pm.role AS current_user_role
         FROM projects p
         JOIN project_members pm
           ON pm.project_id = p.id
@@ -298,7 +298,7 @@ pub(crate) async fn create_project(
         r#"
         INSERT INTO projects (code, name, description, status)
         VALUES ($1, $2, $3, 'active')
-        RETURNING id, code, name, description, status
+        RETURNING id, code, name, description, status, 'admin'::varchar AS current_user_role
         "#,
     )
     .bind(&payload.code)
@@ -372,6 +372,7 @@ fn map_project_row(row: &sqlx::postgres::PgRow) -> ProjectSummary {
         name: row.get("name"),
         description: row.get("description"),
         status: row.get("status"),
+        current_user_role: row.get("current_user_role"),
     }
 }
 

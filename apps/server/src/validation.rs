@@ -1,31 +1,15 @@
 use crate::error::ApiError;
-use serde_json::{Map as JsonMap, Value as JsonValue};
+use serde_json::Value as JsonValue;
 
 const REDACTED_PLACEHOLDER: &str = "***REDACTED***";
-type SchemaValidator = fn(&JsonValue) -> Result<(), ApiError>;
-
-pub struct ValidatorRegistry;
 
 pub struct RedactedContent {
     pub content: String,
     pub redacted: bool,
 }
 
-impl ValidatorRegistry {
-    pub fn validate_content(
-        format: &str,
-        content: &str,
-        schema_name: Option<&str>,
-        schema_version: Option<&str>,
-    ) -> Result<(), ApiError> {
-        let document = parse_document(format, content)?;
-
-        if let Some(validator) = lookup_validator(schema_name, schema_version) {
-            validator(&document)?;
-        }
-
-        Ok(())
-    }
+pub fn validate_content(format: &str, content: &str) -> Result<(), ApiError> {
+    parse_document(format, content).map(|_| ())
 }
 
 pub fn redact_content(
@@ -85,6 +69,14 @@ pub fn parse_document(format: &str, content: &str) -> Result<JsonValue, ApiError
                 )
             })
             .and_then(yaml_to_json),
+        "toml" => toml::from_str::<toml::Value>(content)
+            .map_err(|_| {
+                ApiError::unprocessable_entity(
+                    "draft_validation_failed",
+                    "draft content is not valid toml",
+                )
+            })
+            .and_then(toml_to_json),
         _ => Err(ApiError::unprocessable_entity(
             "draft_validation_failed",
             "unsupported config file format",
@@ -96,6 +88,8 @@ fn serialize_document(format: &str, document: &JsonValue) -> Result<String, ApiE
     match normalize_format(format) {
         "json" => serde_json::to_string_pretty(document).map_err(|_| ApiError::internal()),
         "yaml" | "yml" => serde_yaml::to_string(document).map_err(|_| ApiError::internal()),
+        "toml" => json_to_toml(document)
+            .and_then(|value| toml::to_string_pretty(&value).map_err(|_| ApiError::internal())),
         _ => Err(ApiError::internal()),
     }
 }
@@ -105,93 +99,15 @@ fn normalize_format(format: &str) -> &str {
         "yaml" => "yaml",
         "yml" => "yml",
         "json" => "json",
+        "toml" => "toml",
         _ => format,
-    }
-}
-
-fn lookup_validator(
-    schema_name: Option<&str>,
-    schema_version: Option<&str>,
-) -> Option<SchemaValidator> {
-    match (schema_name, schema_version) {
-        (Some("coffee-main"), Some("v1" | "v2")) => Some(validate_main_config),
-        (Some("alpha-main"), Some("v1")) => Some(validate_main_config),
-        _ => None,
-    }
-}
-
-fn validate_main_config(document: &JsonValue) -> Result<(), ApiError> {
-    let object = document.as_object().ok_or_else(|| {
-        ApiError::unprocessable_entity(
-            "draft_validation_failed",
-            "schema validation requires a top-level object",
-        )
-    })?;
-
-    validate_positive_integer_field(object, "poll_interval_ms")?;
-    validate_positive_integer_field(object, "poll_interval_sec")?;
-
-    if let Some(value) = object.get("log_level")
-        && !value.is_string()
-    {
-        return Err(ApiError::unprocessable_entity(
-            "draft_validation_failed",
-            "log_level must be a string",
-        ));
-    }
-
-    Ok(())
-}
-
-fn validate_positive_integer_field(
-    object: &JsonMap<String, JsonValue>,
-    field: &'static str,
-) -> Result<(), ApiError> {
-    let Some(value) = object.get(field) else {
-        return Ok(());
-    };
-
-    let Some(number) = extract_integral_number(value) else {
-        return Err(ApiError::unprocessable_entity(
-            "draft_validation_failed",
-            match field {
-                "poll_interval_ms" => "poll_interval_ms must be an integer",
-                "poll_interval_sec" => "poll_interval_sec must be an integer",
-                _ => "field must be an integer",
-            },
-        ));
-    };
-
-    if number <= 0 {
-        return Err(ApiError::unprocessable_entity(
-            "draft_validation_failed",
-            match field {
-                "poll_interval_ms" => "poll_interval_ms must be greater than zero",
-                "poll_interval_sec" => "poll_interval_sec must be greater than zero",
-                _ => "field must be greater than zero",
-            },
-        ));
-    }
-
-    Ok(())
-}
-
-fn extract_integral_number(value: &JsonValue) -> Option<i64> {
-    match value {
-        JsonValue::Number(number) => number.as_i64().or_else(|| {
-            number
-                .as_f64()
-                .filter(|value| value.fract() == 0.0)
-                .map(|value| value as i64)
-        }),
-        JsonValue::String(value) => value.trim().parse::<i64>().ok(),
-        _ => None,
     }
 }
 
 fn fully_redacted(format: &str) -> RedactedContent {
     let content = match normalize_format(format) {
         "json" => serde_json::json!({ "redacted": REDACTED_PLACEHOLDER }).to_string(),
+        "toml" => format!("redacted = \"{REDACTED_PLACEHOLDER}\"\n"),
         _ => format!("redacted: {REDACTED_PLACEHOLDER}\n"),
     };
 
@@ -255,37 +171,36 @@ fn yaml_to_json(value: serde_yaml::Value) -> Result<JsonValue, ApiError> {
     })
 }
 
+fn toml_to_json(value: toml::Value) -> Result<JsonValue, ApiError> {
+    serde_json::to_value(value).map_err(|_| {
+        ApiError::unprocessable_entity(
+            "draft_validation_failed",
+            "toml content contains unsupported value types",
+        )
+    })
+}
+
+fn json_to_toml(value: &JsonValue) -> Result<toml::Value, ApiError> {
+    toml::Value::try_from(value.clone()).map_err(|_| ApiError::internal())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{REDACTED_PLACEHOLDER, ValidatorRegistry, redact_content};
+    use super::{REDACTED_PLACEHOLDER, redact_content, validate_content};
 
     #[test]
-    fn validates_known_schema() {
-        assert!(
-            ValidatorRegistry::validate_content(
-                "yaml",
-                "poll_interval_ms: 5000\n",
-                Some("coffee-main"),
-                Some("v1"),
-            )
-            .is_ok()
-        );
+    fn validates_basic_yaml_content() {
+        assert!(validate_content("yaml", "log_level: info\n").is_ok());
     }
 
     #[test]
-    fn rejects_non_positive_yaml_integer_values() {
-        let error = ValidatorRegistry::validate_content(
-            "yaml",
-            "poll_interval_ms: -1\n",
-            Some("coffee-main"),
-            Some("v1"),
-        )
-        .err();
+    fn rejects_invalid_yaml_content() {
+        let error = validate_content("yaml", "log_level: [\n").err();
 
         assert!(error.is_some());
         assert_eq!(
             error.map(|error| error.into_body().message),
-            Some("poll_interval_ms must be greater than zero".to_owned())
+            Some("draft content is not valid yaml".to_owned())
         );
     }
 
@@ -294,6 +209,36 @@ mod tests {
         let result = redact_content(
             "yaml",
             "wifi:\n  password: secret\n",
+            "secret",
+            Some(&["$.wifi.password".to_owned()]),
+        );
+
+        assert!(result.redacted);
+        assert!(result.content.contains(REDACTED_PLACEHOLDER));
+        assert!(!result.content.contains("secret"));
+    }
+
+    #[test]
+    fn validates_basic_toml_content() {
+        assert!(validate_content("toml", "log_level = \"info\"\n").is_ok());
+    }
+
+    #[test]
+    fn rejects_invalid_toml_content() {
+        let error = validate_content("toml", "log_level = ").err();
+
+        assert!(error.is_some());
+        assert_eq!(
+            error.map(|error| error.into_body().message),
+            Some("draft content is not valid toml".to_owned())
+        );
+    }
+
+    #[test]
+    fn redacts_toml_secret_paths() {
+        let result = redact_content(
+            "toml",
+            "[wifi]\npassword = \"secret\"\n",
             "secret",
             Some(&["$.wifi.password".to_owned()]),
         );

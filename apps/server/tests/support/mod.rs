@@ -144,12 +144,10 @@ pub async fn seed_config_file(pool: &PgPool, project_id: i64, code: &str) -> Tes
             code,
             name,
             format,
-            schema_name,
-            schema_version,
             sensitivity,
             status
         )
-        VALUES ($1, $2, $3, 'yaml', 'coffee-main', 'v1', 'normal', 'active')
+        VALUES ($1, $2, $3, 'yaml', 'normal', 'active')
         RETURNING id
         "#,
     )

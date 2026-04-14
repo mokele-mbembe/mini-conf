@@ -36,11 +36,10 @@ async fn seed_draft(
             content,
             content_hash,
             format,
-            schema_version,
             version,
             editor_user_id
         )
-        VALUES ($1, $2, $3, 'log_level: info\n', 'abc123', 'yaml', 'v1', 1, $4)
+        VALUES ($1, $2, $3, 'log_level: info\n', 'abc123', 'yaml', 1, $4)
         "#,
     )
     .bind(project_id)

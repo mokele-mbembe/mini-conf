@@ -112,6 +112,60 @@ async fn seed_bundle(pool: &PgPool) -> TestResult {
     Ok(())
 }
 
+async fn seed_toml_bundle(pool: &PgPool) -> TestResult {
+    let project_id: i64 = sqlx::query_scalar(
+        "INSERT INTO projects (code, name) VALUES ('coffee-toml', 'Coffee TOML') RETURNING id",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let config_file_id: i64 = sqlx::query_scalar(
+        "INSERT INTO config_files (project_id, code, name, format) VALUES ($1, 'main', 'Main', 'toml') RETURNING id",
+    )
+    .bind(project_id)
+    .fetch_one(pool)
+    .await?;
+
+    let deployment_id: i64 = sqlx::query_scalar(
+        "INSERT INTO deployment_instances (project_id, environment, deployment_key, name) VALUES ($1, 'prod', 'store-toml', 'Store TOML') RETURNING id",
+    )
+    .bind(project_id)
+    .fetch_one(pool)
+    .await?;
+
+    sqlx::query(
+        "INSERT INTO releases (
+            project_id,
+            config_file_id,
+            deployment_instance_id,
+            revision,
+            content,
+            content_hash,
+            format,
+            change_summary,
+            apply_mode,
+            published_by,
+            published_at
+        ) VALUES
+            ($1, $2, $3, '20260405.1001', 'log_level = \"warn\"\npoll_interval_sec = 45\n', 'toml-hash', 'toml', 'toml release', 'soft', 1, '2026-04-05T12:15:00Z')",
+    )
+    .bind(project_id)
+    .bind(config_file_id)
+    .bind(deployment_id)
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        "INSERT INTO deployment_credentials (deployment_instance_id, credential_name, token_hash) VALUES ($1, 'default', $2)",
+    )
+    .bind(deployment_id)
+    .bind(server::auth::hash_bearer_token(TEST_TOKEN))
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
 async fn seed_deployment_without_releases(pool: &PgPool) -> TestResult {
     let project_id: i64 = sqlx::query_scalar(
         "INSERT INTO projects (code, name) VALUES ('empty-project', 'Empty Project') RETURNING id",
@@ -269,6 +323,36 @@ async fn config_bundle_returns_not_found_for_archived_deployment() -> TestResult
             code: "deployment_not_found".to_owned(),
             message: "deployment instance not found".to_owned(),
         }
+    );
+
+    teardown(&database_url, &schema, pool).await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn config_bundle_returns_toml_release_content() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    seed_toml_bundle(&pool).await?;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/open/deployments/store-toml/config-bundle?project=coffee-toml&environment=prod")
+                .header(header::AUTHORIZATION, format!("Bearer {TEST_TOKEN}"))
+                .body(Body::empty())?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: ConfigBundleResponse = read_json(response).await?;
+    assert_eq!(payload.configs.len(), 1);
+    assert_eq!(payload.configs[0].format, "toml");
+    assert_eq!(
+        payload.configs[0].content,
+        "log_level = \"warn\"\npoll_interval_sec = 45\n"
     );
 
     teardown(&database_url, &schema, pool).await?;

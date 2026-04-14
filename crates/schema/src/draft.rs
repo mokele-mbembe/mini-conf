@@ -8,7 +8,6 @@ pub struct DraftResponse {
     pub format: String,
     pub content: String,
     pub version: i64,
-    pub schema_version: Option<String>,
     pub updated_at: String,
 }
 
@@ -31,7 +30,6 @@ mod tests {
             format: "yaml".to_owned(),
             content: "poll_interval_ms: 5000".to_owned(),
             version: 4,
-            schema_version: Some("v1".to_owned()),
             updated_at: "2026-04-05T12:00:00Z".to_owned(),
         })
         .expect("response should serialize");
@@ -44,7 +42,6 @@ mod tests {
                 "format": "yaml",
                 "content": "poll_interval_ms: 5000",
                 "version": 4,
-                "schema_version": "v1",
                 "updated_at": "2026-04-05T12:00:00Z"
             })
         );
@@ -59,7 +56,6 @@ mod tests {
                 format: "yaml".to_owned(),
                 content: "poll_interval_ms: 5000".to_owned(),
                 version: 4,
-                schema_version: Some("v1".to_owned()),
                 updated_at: "2026-04-05T12:00:00Z".to_owned(),
             },
             source_deployment_instance_id: 2,
@@ -76,7 +72,6 @@ mod tests {
                     "format": "yaml",
                     "content": "poll_interval_ms: 5000",
                     "version": 4,
-                    "schema_version": "v1",
                     "updated_at": "2026-04-05T12:00:00Z"
                 },
                 "source_deployment_instance_id": 2,

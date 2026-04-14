@@ -1089,7 +1089,6 @@ async fn clone_drafts_from_template(
             content,
             content_hash,
             format,
-            schema_version,
             version,
             editor_user_id
         )
@@ -1100,7 +1099,6 @@ async fn clone_drafts_from_template(
             content,
             content_hash,
             format,
-            schema_version,
             1,
             $3
         FROM drafts

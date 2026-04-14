@@ -54,7 +54,6 @@ pub struct ReleaseConfig {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct ReleaseMetadata {
-    pub schema_version: Option<String>,
     pub change_summary: Option<String>,
 }
 
@@ -156,7 +155,6 @@ mod tests {
             },
             content: "log_level: info\n".to_owned(),
             metadata: ReleaseMetadata {
-                schema_version: Some("v1".to_owned()),
                 change_summary: Some("adjust polling interval".to_owned()),
             },
         };
@@ -183,7 +181,6 @@ mod tests {
                 },
                 "content": "log_level: info\n",
                 "metadata": {
-                    "schema_version": "v1",
                     "change_summary": "adjust polling interval"
                 }
             })

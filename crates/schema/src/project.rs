@@ -8,6 +8,7 @@ pub struct ProjectSummary {
     pub name: String,
     pub description: Option<String>,
     pub status: String,
+    pub current_user_role: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -28,6 +29,7 @@ mod tests {
                 name: "Coffee Legacy".to_owned(),
                 description: Some("Retail edge project".to_owned()),
                 status: "active".to_owned(),
+                current_user_role: "admin".to_owned(),
             }],
         })
         .expect("response should serialize");
@@ -41,7 +43,8 @@ mod tests {
                         "code": "coffee-legacy",
                         "name": "Coffee Legacy",
                         "description": "Retail edge project",
-                        "status": "active"
+                        "status": "active",
+                        "current_user_role": "admin"
                     }
                 ]
             })

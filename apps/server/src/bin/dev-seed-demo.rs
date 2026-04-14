@@ -99,8 +99,6 @@ async fn seed_demo_data(pool: &PgPool) -> SeedResult<SeedSummary> {
             code: "main",
             name: "Main Config",
             format: "yaml",
-            schema_name: Some("coffee-main"),
-            schema_version: Some("v1"),
             sensitivity: "normal",
             secret_paths: None,
             description: Some("Primary device runtime settings."),
@@ -116,8 +114,6 @@ async fn seed_demo_data(pool: &PgPool) -> SeedResult<SeedSummary> {
             code: "device-auth",
             name: "Device Auth",
             format: "yaml",
-            schema_name: Some("coffee-main"),
-            schema_version: Some("v1"),
             sensitivity: "secret",
             secret_paths: Some(serde_json::json!(["$.wifi.password", "$.cloud.api_key"])),
             description: Some("Secret device credentials; management reads should be redacted."),
@@ -132,12 +128,10 @@ async fn seed_demo_data(pool: &PgPool) -> SeedResult<SeedSummary> {
             project_id: coffee_project_id,
             code: "vision",
             name: "Vision",
-            format: "yaml",
-            schema_name: Some("coffee-main"),
-            schema_version: Some("v1"),
+            format: "toml",
             sensitivity: "normal",
             secret_paths: None,
-            description: Some("Optional vision worker settings."),
+            description: Some("Optional vision worker settings in TOML."),
             is_required: false,
             status: "active",
         },
@@ -150,8 +144,6 @@ async fn seed_demo_data(pool: &PgPool) -> SeedResult<SeedSummary> {
             code: "ad-screen",
             name: "Ad Screen",
             format: "yaml",
-            schema_name: Some("coffee-main"),
-            schema_version: Some("v1"),
             sensitivity: "normal",
             secret_paths: None,
             description: Some("Archived config to exercise status filters."),
@@ -167,8 +159,6 @@ async fn seed_demo_data(pool: &PgPool) -> SeedResult<SeedSummary> {
             code: "main",
             name: "Main Config",
             format: "yaml",
-            schema_name: Some("alpha-main"),
-            schema_version: Some("v1"),
             sensitivity: "normal",
             secret_paths: None,
             description: Some("Secondary project config for project switch testing."),
@@ -335,8 +325,8 @@ async fn seed_demo_data(pool: &PgPool) -> SeedResult<SeedSummary> {
             config_file_id: vision_config_id,
             deployment_instance_id: store_001_id,
             revision: "20260409.0104",
-            content: "enabled: true\ncamera_count: 2\n",
-            format: "yaml",
+            content: "enabled = true\ncamera_count = 2\n",
+            format: "toml",
             change_summary: Some("Enable dual-camera vision"),
             diff_summary: serde_json::json!({
                 "is_initial": true,
@@ -421,7 +411,6 @@ async fn seed_demo_data(pool: &PgPool) -> SeedResult<SeedSummary> {
             deployment_instance_id: template_id,
             content: "log_level: info\npoll_interval_ms: 4500\n",
             format: "yaml",
-            schema_version: Some("v1"),
             version: 2,
             editor_user_id: admin_user_id,
         },
@@ -435,7 +424,6 @@ async fn seed_demo_data(pool: &PgPool) -> SeedResult<SeedSummary> {
             deployment_instance_id: template_id,
             content: "wifi:\n  ssid: template-wifi\n  password: template-secret\ncloud:\n  api_key: template-api-key\n",
             format: "yaml",
-            schema_version: Some("v1"),
             version: 1,
             editor_user_id: admin_user_id,
         },
@@ -447,9 +435,8 @@ async fn seed_demo_data(pool: &PgPool) -> SeedResult<SeedSummary> {
             project_id: coffee_project_id,
             config_file_id: vision_config_id,
             deployment_instance_id: template_id,
-            content: "enabled: true\ncamera_count: 1\n",
-            format: "yaml",
-            schema_version: Some("v1"),
+            content: "enabled = true\ncamera_count = 1\n",
+            format: "toml",
             version: 1,
             editor_user_id: admin_user_id,
         },
@@ -463,7 +450,6 @@ async fn seed_demo_data(pool: &PgPool) -> SeedResult<SeedSummary> {
             deployment_instance_id: store_001_id,
             content: "log_level: error\npoll_interval_ms: 6000\n",
             format: "yaml",
-            schema_version: Some("v1"),
             version: 3,
             editor_user_id: alice_user_id,
         },
@@ -475,9 +461,8 @@ async fn seed_demo_data(pool: &PgPool) -> SeedResult<SeedSummary> {
             project_id: coffee_project_id,
             config_file_id: vision_config_id,
             deployment_instance_id: store_002_id,
-            content: "enabled: false\ncamera_count: 0\n",
-            format: "yaml",
-            schema_version: Some("v1"),
+            content: "enabled = false\ncamera_count = 0\n",
+            format: "toml",
             version: 1,
             editor_user_id: alice_user_id,
         },
@@ -671,8 +656,6 @@ struct ConfigSeed<'a> {
     code: &'a str,
     name: &'a str,
     format: &'a str,
-    schema_name: Option<&'a str>,
-    schema_version: Option<&'a str>,
     sensitivity: &'a str,
     secret_paths: Option<serde_json::Value>,
     description: Option<&'a str>,
@@ -710,7 +693,6 @@ struct DraftSeed<'a> {
     deployment_instance_id: i64,
     content: &'a str,
     format: &'a str,
-    schema_version: Option<&'a str>,
     version: i64,
     editor_user_id: i64,
 }
@@ -841,21 +823,17 @@ async fn upsert_config_file(
             code,
             name,
             format,
-            schema_name,
-            schema_version,
             sensitivity,
             secret_paths,
             description,
             is_required,
             status
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         ON CONFLICT (project_id, code)
         DO UPDATE SET
             name = EXCLUDED.name,
             format = EXCLUDED.format,
-            schema_name = EXCLUDED.schema_name,
-            schema_version = EXCLUDED.schema_version,
             sensitivity = EXCLUDED.sensitivity,
             secret_paths = EXCLUDED.secret_paths,
             description = EXCLUDED.description,
@@ -869,8 +847,6 @@ async fn upsert_config_file(
     .bind(seed.code)
     .bind(seed.name)
     .bind(seed.format)
-    .bind(seed.schema_name)
-    .bind(seed.schema_version)
     .bind(seed.sensitivity)
     .bind(seed.secret_paths)
     .bind(seed.description)
@@ -983,17 +959,15 @@ async fn upsert_draft(tx: &mut Transaction<'_, Postgres>, seed: DraftSeed<'_>) -
             content,
             content_hash,
             format,
-            schema_version,
             version,
             editor_user_id
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         ON CONFLICT (config_file_id, deployment_instance_id)
         DO UPDATE SET
             content = EXCLUDED.content,
             content_hash = EXCLUDED.content_hash,
             format = EXCLUDED.format,
-            schema_version = EXCLUDED.schema_version,
             version = EXCLUDED.version,
             editor_user_id = EXCLUDED.editor_user_id,
             updated_at = NOW()
@@ -1005,7 +979,6 @@ async fn upsert_draft(tx: &mut Transaction<'_, Postgres>, seed: DraftSeed<'_>) -
     .bind(seed.content)
     .bind(hash_bearer_token(seed.content))
     .bind(seed.format)
-    .bind(seed.schema_version)
     .bind(seed.version)
     .bind(seed.editor_user_id)
     .execute(tx.as_mut())

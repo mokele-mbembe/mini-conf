@@ -48,7 +48,7 @@ async fn teardown(database_url: &str, schema: &str, pool: PgPool) -> TestResult 
     Ok(())
 }
 
-async fn seed_release(pool: &PgPool, config_code: &str) -> TestResult {
+async fn seed_release(pool: &PgPool, config_code: &str, format: &str, content: &str) -> TestResult {
     let project_id: i64 = sqlx::query_scalar(
         "INSERT INTO projects (code, name) VALUES ('coffee-legacy', 'Coffee Legacy') RETURNING id",
     )
@@ -56,10 +56,11 @@ async fn seed_release(pool: &PgPool, config_code: &str) -> TestResult {
     .await?;
 
     let config_file_id: i64 = sqlx::query_scalar(
-        "INSERT INTO config_files (project_id, code, name, format) VALUES ($1, $2, 'Main', 'yaml') RETURNING id",
+        "INSERT INTO config_files (project_id, code, name, format) VALUES ($1, $2, 'Main', $3) RETURNING id",
     )
     .bind(project_id)
     .bind(config_code)
+    .bind(format)
     .fetch_one(pool)
     .await?;
 
@@ -82,11 +83,13 @@ async fn seed_release(pool: &PgPool, config_code: &str) -> TestResult {
             change_summary,
             apply_mode,
             published_by
-        ) VALUES ($1, $2, $3, '20260405.0001', 'log_level: info\n', 'abc123', 'yaml', 'initial', 'soft', 1)",
+        ) VALUES ($1, $2, $3, '20260405.0001', $4, 'abc123', $5, 'initial', 'soft', 1)",
     )
     .bind(project_id)
     .bind(config_file_id)
     .bind(deployment_id)
+    .bind(content)
+    .bind(format)
     .execute(pool)
     .await?;
 
@@ -115,7 +118,7 @@ async fn resolve_returns_release_payload_and_etag() -> TestResult {
         return Ok(());
     };
 
-    seed_release(&pool, "main").await?;
+    seed_release(&pool, "main", "yaml", "log_level: info\n").await?;
 
     let response = app
         .oneshot(
@@ -153,7 +156,7 @@ async fn resolve_returns_unauthorized_when_bearer_token_is_missing() -> TestResu
         return Ok(());
     };
 
-    seed_release(&pool, "main").await?;
+    seed_release(&pool, "main", "yaml", "log_level: info\n").await?;
 
     let response = app
         .oneshot(
@@ -186,7 +189,7 @@ async fn resolve_returns_not_modified_when_client_already_has_latest_revision() 
         return Ok(());
     };
 
-    seed_release(&pool, "main").await?;
+    seed_release(&pool, "main", "yaml", "log_level: info\n").await?;
 
     let response = app
         .oneshot(
@@ -219,7 +222,7 @@ async fn resolve_returns_config_file_not_found_when_config_is_missing() -> TestR
         return Ok(());
     };
 
-    seed_release(&pool, "main").await?;
+    seed_release(&pool, "main", "yaml", "log_level: info\n").await?;
 
     let response = app
         .oneshot(
@@ -253,7 +256,7 @@ async fn resolve_returns_not_found_for_archived_deployment() -> TestResult {
         return Ok(());
     };
 
-    seed_release(&pool, "main").await?;
+    seed_release(&pool, "main", "yaml", "log_level: info\n").await?;
     sqlx::query(
         "UPDATE deployment_instances SET status = 'archived' WHERE deployment_key = 'store-001'",
     )
@@ -281,5 +284,36 @@ async fn resolve_returns_not_found_for_archived_deployment() -> TestResult {
 
     teardown(&database_url, &schema, pool).await?;
 
+    Ok(())
+}
+
+#[tokio::test]
+async fn resolve_returns_toml_release_metadata() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    seed_release(
+        &pool,
+        "main",
+        "toml",
+        "log_level = \"info\"\npoll_interval_sec = 30\n",
+    )
+    .await?;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/open/configs/resolve?project=coffee-legacy&environment=prod&deployment_key=store-001&config=main")
+                .header(header::AUTHORIZATION, format!("Bearer {TEST_TOKEN}"))
+                .body(Body::empty())?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: serde_json::Value = read_json(response).await?;
+    assert_eq!(payload["release"]["format"], "toml");
+
+    teardown(&database_url, &schema, pool).await?;
     Ok(())
 }

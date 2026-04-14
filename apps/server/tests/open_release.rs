@@ -49,7 +49,7 @@ async fn teardown(database_url: &str, schema: &str, pool: PgPool) -> TestResult 
     Ok(())
 }
 
-async fn seed_release(pool: &PgPool, revision: &str) -> TestResult {
+async fn seed_release(pool: &PgPool, revision: &str, format: &str, content: &str) -> TestResult {
     let project_id: i64 = sqlx::query_scalar(
         "INSERT INTO projects (code, name) VALUES ('coffee-legacy', 'Coffee Legacy') RETURNING id",
     )
@@ -57,9 +57,10 @@ async fn seed_release(pool: &PgPool, revision: &str) -> TestResult {
     .await?;
 
     let config_file_id: i64 = sqlx::query_scalar(
-        "INSERT INTO config_files (project_id, code, name, format, schema_version) VALUES ($1, 'main', 'Main', 'yaml', 'v1') RETURNING id",
+        "INSERT INTO config_files (project_id, code, name, format) VALUES ($1, 'main', 'Main', $2) RETURNING id",
     )
     .bind(project_id)
+    .bind(format)
     .fetch_one(pool)
     .await?;
 
@@ -82,12 +83,14 @@ async fn seed_release(pool: &PgPool, revision: &str) -> TestResult {
             change_summary,
             apply_mode,
             published_by
-        ) VALUES ($1, $2, $3, $4, 'log_level: info\npoll_interval_sec: 30\n', 'abc123', 'yaml', 'adjust polling interval', 'soft', 1)",
+        ) VALUES ($1, $2, $3, $4, $5, 'abc123', $6, 'adjust polling interval', 'soft', 1)",
     )
     .bind(project_id)
     .bind(config_file_id)
     .bind(deployment_id)
     .bind(revision)
+    .bind(content)
+    .bind(format)
     .execute(pool)
     .await?;
 
@@ -116,7 +119,13 @@ async fn release_returns_payload_and_cache_headers() -> TestResult {
         return Ok(());
     };
 
-    seed_release(&pool, "20260405.0001").await?;
+    seed_release(
+        &pool,
+        "20260405.0001",
+        "yaml",
+        "log_level: info\npoll_interval_sec: 30\n",
+    )
+    .await?;
 
     let response = app
         .oneshot(
@@ -147,7 +156,6 @@ async fn release_returns_payload_and_cache_headers() -> TestResult {
     assert_eq!(payload.deployment.deployment_key, "store-001");
     assert_eq!(payload.config.name, "main");
     assert_eq!(payload.content, "log_level: info\npoll_interval_sec: 30\n");
-    assert_eq!(payload.metadata.schema_version.as_deref(), Some("v1"));
     assert_eq!(
         payload.metadata.change_summary.as_deref(),
         Some("adjust polling interval")
@@ -164,7 +172,13 @@ async fn release_returns_not_modified_when_etag_matches() -> TestResult {
         return Ok(());
     };
 
-    seed_release(&pool, "20260405.0001").await?;
+    seed_release(
+        &pool,
+        "20260405.0001",
+        "yaml",
+        "log_level: info\npoll_interval_sec: 30\n",
+    )
+    .await?;
 
     let response = app
         .oneshot(
@@ -202,7 +216,13 @@ async fn release_returns_not_found_for_unknown_revision() -> TestResult {
         return Ok(());
     };
 
-    seed_release(&pool, "20260405.0001").await?;
+    seed_release(
+        &pool,
+        "20260405.0001",
+        "yaml",
+        "log_level: info\npoll_interval_sec: 30\n",
+    )
+    .await?;
 
     let response = app
         .oneshot(
@@ -236,7 +256,13 @@ async fn release_returns_not_found_for_archived_config() -> TestResult {
         return Ok(());
     };
 
-    seed_release(&pool, "20260405.0001").await?;
+    seed_release(
+        &pool,
+        "20260405.0001",
+        "yaml",
+        "log_level: info\npoll_interval_sec: 30\n",
+    )
+    .await?;
     sqlx::query("UPDATE config_files SET status = 'archived' WHERE code = 'main'")
         .execute(&pool)
         .await?;
@@ -262,5 +288,40 @@ async fn release_returns_not_found_for_archived_config() -> TestResult {
 
     teardown(&database_url, &schema, pool).await?;
 
+    Ok(())
+}
+
+#[tokio::test]
+async fn release_returns_toml_payload() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    seed_release(
+        &pool,
+        "20260405.0010",
+        "toml",
+        "log_level = \"info\"\npoll_interval_sec = 30\n",
+    )
+    .await?;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/open/releases/20260405.0010")
+                .header(header::AUTHORIZATION, format!("Bearer {TEST_TOKEN}"))
+                .body(Body::empty())?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: ReleaseContentResponse = read_json(response).await?;
+    assert_eq!(payload.release.format, "toml");
+    assert_eq!(
+        payload.content,
+        "log_level = \"info\"\npoll_interval_sec = 30\n"
+    );
+
+    teardown(&database_url, &schema, pool).await?;
     Ok(())
 }

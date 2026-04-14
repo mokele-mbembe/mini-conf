@@ -131,6 +131,15 @@ async fn login(app: &axum::Router) -> TestResult<String> {
 }
 
 async fn seed_project_config_deployment(pool: &PgPool) -> TestResult<(i64, i64, i64)> {
+    seed_project_config_deployment_with_format(pool, "yaml", "normal", None).await
+}
+
+async fn seed_project_config_deployment_with_format(
+    pool: &PgPool,
+    format: &str,
+    sensitivity: &str,
+    secret_paths: Option<&serde_json::Value>,
+) -> TestResult<(i64, i64, i64)> {
     let project_id: i64 = sqlx::query_scalar(
         "INSERT INTO projects (code, name, status) VALUES ('coffee-legacy', 'Coffee Legacy', 'active') RETURNING id",
     )
@@ -143,16 +152,18 @@ async fn seed_project_config_deployment(pool: &PgPool) -> TestResult<(i64, i64, 
             code,
             name,
             format,
-            schema_name,
-            schema_version,
             sensitivity,
+            secret_paths,
             status
         )
-        VALUES ($1, 'main', 'Main Config', 'yaml', 'coffee-main', 'v1', 'normal', 'active')
+        VALUES ($1, 'main', 'Main Config', $2, $3, $4, 'active')
         RETURNING id
         "#,
     )
     .bind(project_id)
+    .bind(format)
+    .bind(sensitivity)
+    .bind(secret_paths)
     .fetch_one(pool)
     .await?;
     let deployment_id: i64 = sqlx::query_scalar(
@@ -213,12 +224,10 @@ async fn seed_required_config_file(pool: &PgPool, project_id: i64, code: &str) -
             name,
             is_required,
             format,
-            schema_name,
-            schema_version,
             sensitivity,
             status
         )
-        VALUES ($1, $2, $3, true, 'yaml', 'coffee-main', 'v1', 'normal', 'active')
+        VALUES ($1, $2, $3, true, 'yaml', 'normal', 'active')
         RETURNING id
         "#,
     )
@@ -236,17 +245,20 @@ async fn save_draft(
     deployment_id: i64,
     config_file_id: i64,
     content: &str,
+    format: &str,
     base_version: Option<i64>,
 ) -> TestResult<DraftResponse> {
     let body = if let Some(base_version) = base_version {
         format!(
-            r#"{{"content":{},"format":"yaml","base_version":{base_version}}}"#,
-            serde_json::to_string(content)?
+            r#"{{"content":{},"format":{},"base_version":{base_version}}}"#,
+            serde_json::to_string(content)?,
+            serde_json::to_string(format)?
         )
     } else {
         format!(
-            r#"{{"content":{},"format":"yaml"}}"#,
-            serde_json::to_string(content)?
+            r#"{{"content":{},"format":{}}}"#,
+            serde_json::to_string(content)?,
+            serde_json::to_string(format)?
         )
     };
 
@@ -312,6 +324,7 @@ async fn publish_release_creates_release_from_current_draft() -> TestResult {
         deployment_id,
         config_file_id,
         "poll_interval_ms: 5000\n",
+        "yaml",
         None,
     )
     .await?;
@@ -376,6 +389,7 @@ async fn publish_release_generates_new_revision_for_identical_draft_content() ->
         deployment_id,
         config_file_id,
         "poll_interval_ms: 5000\n",
+        "yaml",
         None,
     )
     .await?;
@@ -425,12 +439,10 @@ async fn publish_release_succeeds_for_template_clone_target() -> TestResult {
             name,
             is_required,
             format,
-            schema_name,
-            schema_version,
             sensitivity,
             status
         )
-        VALUES ($1, 'main', 'Main Config', true, 'yaml', 'alpha-main', 'v1', 'normal', 'active')
+        VALUES ($1, 'main', 'Main Config', true, 'yaml', 'normal', 'active')
         RETURNING id
         "#,
     )
@@ -446,6 +458,7 @@ async fn publish_release_succeeds_for_template_clone_target() -> TestResult {
         template_id,
         config_file_id,
         "poll_interval_ms: 5000\n",
+        "yaml",
         None,
     )
     .await?;
@@ -557,6 +570,7 @@ async fn list_releases_filters_by_deployment_instance() -> TestResult {
         deployment_id,
         config_file_id,
         "poll_interval_ms: 5000\n",
+        "yaml",
         None,
     )
     .await?;
@@ -566,6 +580,7 @@ async fn list_releases_filters_by_deployment_instance() -> TestResult {
         second_deployment_id,
         config_file_id,
         "poll_interval_ms: 8000\n",
+        "yaml",
         None,
     )
     .await?;
@@ -624,6 +639,7 @@ async fn get_release_detail_returns_content_and_metadata() -> TestResult {
         deployment_id,
         config_file_id,
         "poll_interval_ms: 5000\n",
+        "yaml",
         None,
     )
     .await?;
@@ -733,6 +749,7 @@ async fn get_release_diff_returns_initial_release_shape_for_first_publish() -> T
         deployment_id,
         config_file_id,
         "poll_interval_ms: 5000\n",
+        "yaml",
         None,
     )
     .await?;
@@ -784,6 +801,7 @@ async fn get_release_diff_returns_previous_release_content_and_summary() -> Test
         deployment_id,
         config_file_id,
         "poll_interval_ms: 3000\nmode: steady\n",
+        "yaml",
         None,
     )
     .await?;
@@ -802,6 +820,7 @@ async fn get_release_diff_returns_previous_release_content_and_summary() -> Test
         deployment_id,
         config_file_id,
         "poll_interval_ms: 5000\nmode: steady\nfeature_flag: true\n",
+        "yaml",
         Some(1),
     )
     .await?;
@@ -862,6 +881,7 @@ async fn get_release_diff_marks_identical_republish_as_no_change() -> TestResult
         deployment_id,
         config_file_id,
         "poll_interval_ms: 5000\n",
+        "yaml",
         None,
     )
     .await?;
@@ -961,6 +981,7 @@ async fn publish_release_rejects_template_deployment_instances() -> TestResult {
         deployment_id,
         config_file_id,
         "poll_interval_ms: 5000\n",
+        "yaml",
         None,
     )
     .await?;
@@ -1005,6 +1026,7 @@ async fn publish_release_rejects_when_required_config_is_missing() -> TestResult
         deployment_id,
         config_file_id,
         "poll_interval_ms: 5000\n",
+        "yaml",
         None,
     )
     .await?;
@@ -1078,6 +1100,7 @@ async fn publish_release_allows_required_config_when_it_has_existing_release() -
         deployment_id,
         config_file_id,
         "poll_interval_ms: 5000\n",
+        "yaml",
         None,
     )
     .await?;
@@ -1097,7 +1120,7 @@ async fn publish_release_allows_required_config_when_it_has_existing_release() -
 }
 
 #[tokio::test]
-async fn publish_release_rejects_invalid_schema_in_existing_draft() -> TestResult {
+async fn publish_release_rejects_invalid_yaml_in_existing_draft() -> TestResult {
     let Some((app, pool, database_url, schema)) = setup_app().await? else {
         return Ok(());
     };
@@ -1115,17 +1138,16 @@ async fn publish_release_rejects_invalid_schema_in_existing_draft() -> TestResul
             content,
             content_hash,
             format,
-            schema_version,
             version,
             editor_user_id
         )
-        VALUES ($1, $2, $3, $4, 'abc123', 'yaml', 'v1', 1, $5)
+        VALUES ($1, $2, $3, $4, 'abc123', 'yaml', 1, $5)
         "#,
     )
     .bind(project_id)
     .bind(config_file_id)
     .bind(deployment_id)
-    .bind("poll_interval_ms: -1\n")
+    .bind("poll_interval_ms: [\n")
     .bind(admin_user_id)
     .execute(&pool)
     .await?;
@@ -1147,10 +1169,7 @@ async fn publish_release_rejects_invalid_schema_in_existing_draft() -> TestResul
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
     let payload: ErrorResponse = read_json(response).await?;
     assert_eq!(payload.code, "draft_validation_failed");
-    assert_eq!(
-        payload.message,
-        "poll_interval_ms must be greater than zero"
-    );
+    assert_eq!(payload.message, "draft content is not valid yaml");
 
     teardown(&database_url, &schema, pool).await
 }
@@ -1180,6 +1199,7 @@ async fn secret_release_detail_and_diff_are_redacted_for_management_reads() -> T
         deployment_id,
         config_file_id,
         "wifi:\n  password: secret-1\n",
+        "yaml",
         None,
     )
     .await?;
@@ -1198,6 +1218,186 @@ async fn secret_release_detail_and_diff_are_redacted_for_management_reads() -> T
         deployment_id,
         config_file_id,
         "wifi:\n  password: secret-2\n",
+        "yaml",
+        Some(1),
+    )
+    .await?;
+    let second = publish_release(
+        &app,
+        &cookie,
+        project_id,
+        deployment_id,
+        config_file_id,
+        Some("rotate"),
+    )
+    .await?;
+
+    let detail_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/releases/{}", second.id))
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(detail_response.status(), StatusCode::OK);
+    let detail: ReleaseDetailResponse = read_json(detail_response).await?;
+    assert!(detail.content_redacted);
+    assert!(detail.content.contains("***REDACTED***"));
+    assert!(!detail.content.contains("secret-2"));
+
+    let diff_response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/releases/{}/diff", second.id))
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(diff_response.status(), StatusCode::OK);
+    let diff: ReleaseDiffResponse = read_json(diff_response).await?;
+    assert_eq!(diff.base_release.map(|release| release.id), Some(first.id));
+    assert!(diff.before_redacted);
+    assert!(diff.after_redacted);
+    assert!(
+        diff.before_content
+            .as_deref()
+            .is_some_and(|content| content.contains("***REDACTED***"))
+    );
+    assert!(diff.after_content.contains("***REDACTED***"));
+    assert!(!diff.after_content.contains("secret-2"));
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn publish_release_accepts_valid_toml_draft() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+    let (project_id, config_file_id, deployment_id) =
+        seed_project_config_deployment_with_format(&pool, "toml", "normal", None).await?;
+    let cookie = login(&app).await?;
+    let _draft = save_draft(
+        &app,
+        &cookie,
+        deployment_id,
+        config_file_id,
+        "poll_interval_ms = 5000\n",
+        "toml",
+        None,
+    )
+    .await?;
+
+    let payload = publish_release(
+        &app,
+        &cookie,
+        project_id,
+        deployment_id,
+        config_file_id,
+        Some("publish toml"),
+    )
+    .await?;
+
+    assert_eq!(payload.format, "toml");
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn publish_release_rejects_invalid_toml_in_existing_draft() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+    let (project_id, config_file_id, deployment_id) =
+        seed_project_config_deployment_with_format(&pool, "toml", "normal", None).await?;
+    let admin_user_id: i64 =
+        sqlx::query_scalar("SELECT id FROM users WHERE username = 'admin' LIMIT 1")
+            .fetch_one(&pool)
+            .await?;
+    sqlx::query(
+        r#"
+        INSERT INTO drafts (
+            project_id,
+            config_file_id,
+            deployment_instance_id,
+            content,
+            content_hash,
+            format,
+            version,
+            editor_user_id
+        )
+        VALUES ($1, $2, $3, $4, 'abc123', 'toml', 1, $5)
+        "#,
+    )
+    .bind(project_id)
+    .bind(config_file_id)
+    .bind(deployment_id)
+    .bind("poll_interval_ms = ")
+    .bind(admin_user_id)
+    .execute(&pool)
+    .await?;
+
+    let cookie = login(&app).await?;
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/releases/publish")
+                .header(header::COOKIE, &cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(format!(
+                    r#"{{"project_id":{project_id},"deployment_instance_id":{deployment_id},"config_file_id":{config_file_id}}}"#
+                )))?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let payload: ErrorResponse = read_json(response).await?;
+    assert_eq!(payload.code, "draft_validation_failed");
+    assert_eq!(payload.message, "draft content is not valid toml");
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn secret_toml_release_detail_and_diff_are_redacted_for_management_reads() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+    let secret_paths = serde_json::json!(["$.wifi.password"]);
+    let (project_id, config_file_id, deployment_id) =
+        seed_project_config_deployment_with_format(&pool, "toml", "secret", Some(&secret_paths))
+            .await?;
+
+    let cookie = login(&app).await?;
+    let _ = save_draft(
+        &app,
+        &cookie,
+        deployment_id,
+        config_file_id,
+        "[wifi]\npassword = \"secret-1\"\n",
+        "toml",
+        None,
+    )
+    .await?;
+    let first = publish_release(
+        &app,
+        &cookie,
+        project_id,
+        deployment_id,
+        config_file_id,
+        Some("initial"),
+    )
+    .await?;
+    let _ = save_draft(
+        &app,
+        &cookie,
+        deployment_id,
+        config_file_id,
+        "[wifi]\npassword = \"secret-2\"\n",
+        "toml",
         Some(1),
     )
     .await?;

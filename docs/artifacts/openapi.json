@@ -3775,18 +3775,6 @@
             "type": "integer",
             "format": "int64"
           },
-          "schema_name": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "schema_version": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
           "secret_paths": {
             "type": [
               "array",
@@ -3823,7 +3811,8 @@
             ]
           },
           "format": {
-            "type": "string"
+            "type": "string",
+            "example": "toml"
           },
           "is_required": {
             "type": [
@@ -3837,18 +3826,6 @@
           "project_id": {
             "type": "integer",
             "format": "int64"
-          },
-          "schema_name": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "schema_version": {
-            "type": [
-              "string",
-              "null"
-            ]
           },
           "secret_paths": {
             "type": [
@@ -4408,12 +4385,6 @@
           "format": {
             "type": "string"
           },
-          "schema_version": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
           "updated_at": {
             "type": "string"
           },
@@ -4781,10 +4752,14 @@
           "id",
           "code",
           "name",
-          "status"
+          "status",
+          "current_user_role"
         ],
         "properties": {
           "code": {
+            "type": "string"
+          },
+          "current_user_role": {
             "type": "string"
           },
           "description": {
@@ -5011,12 +4986,6 @@
               "string",
               "null"
             ]
-          },
-          "schema_version": {
-            "type": [
-              "string",
-              "null"
-            ]
           }
         }
       },
@@ -5217,7 +5186,8 @@
             ]
           },
           "format": {
-            "type": "string"
+            "type": "string",
+            "example": "toml"
           },
           "is_required": {
             "type": [
@@ -5231,18 +5201,6 @@
           "project_id": {
             "type": "integer",
             "format": "int64"
-          },
-          "schema_name": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "schema_version": {
-            "type": [
-              "string",
-              "null"
-            ]
           },
           "secret_paths": {
             "type": [
@@ -5322,7 +5280,8 @@
             "type": "string"
           },
           "format": {
-            "type": "string"
+            "type": "string",
+            "example": "toml"
           }
         }
       },
