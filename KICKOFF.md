@@ -72,6 +72,7 @@
 - [0003-release-diff.md](./docs/constraints/product-qa/0003-release-diff.md)
 - [0004-token-reset.md](./docs/constraints/product-qa/0004-token-reset.md)
 - [0005-project-members-permissions-audit.md](./docs/constraints/product-qa/0005-project-members-permissions-audit.md)
+- [0006-config-file-format-and-ux-alignment.md](./docs/constraints/product-qa/0006-config-file-format-and-ux-alignment.md)
 
 ### 3.2 如果继续后端 / 接口 / 黑盒 / 质量工作
 
@@ -171,5 +172,6 @@ PLAYWRIGHT_BASE_URL=http://127.0.0.1:4173 pnpm --dir apps/web test:e2e
 
 - 如果要继续前端任务，默认先走任务规范，再生成给 Copilot 的 prompt，再回到 Codex 验收
 - 如果产品语义要改，先更新 `docs/constraints/product-qa/*` 或相关约束文档，再改代码
+- 如果继续收口配置文件页的格式、状态、schema 痕迹、中文字段命名或后续 i18n 入口，先看 `0006-config-file-format-and-ux-alignment.md`
 - 如果前端出现白屏或联调异常，不要只看 `/api/healthz`，至少同时验证 `/api/auth/me`、登录链路和浏览器 Console
 - 如果复现前端 smoke，本地和 CI 都要保证后端真正建立 `db_pool`

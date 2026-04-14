@@ -139,8 +139,6 @@
 - `code`
 - `name`
 - `format`
-- `schema_name`
-- `schema_version`
 - `sensitivity`
 - `secret_paths`
 - `description`
@@ -160,6 +158,8 @@
 与当前产品规则绑定的限制：
 
 - `is_required` 是项目级规则，不支持按环境或实例覆盖
+- `code` 在 UI 中统一按“配置标识”理解，不使用“编码”表述
+- 当前配置文件主路径支持 `yaml / json / toml`；`text` 不在当前范围内
 
 ## 7. 部署实例列表与详情页
 

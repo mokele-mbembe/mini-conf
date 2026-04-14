@@ -26,3 +26,4 @@
 - `0003-release-diff.md`
 - `0004-token-reset.md`
 - `0005-project-members-permissions-audit.md`
+- `0006-config-file-format-and-ux-alignment.md`

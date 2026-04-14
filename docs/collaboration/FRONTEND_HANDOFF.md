@@ -153,6 +153,9 @@
 - `is_required` 是项目级规则，不支持按实例覆盖
 - `sensitivity=secret` 时，管理端展示默认按脱敏语义理解
 - `secret_paths` 主要用于后端脱敏，不要求前端自己实现脱敏算法
+- `code` 在前端文案里统一显示为“配置标识”
+- `text` 不是当前 MVP 预期格式，不应再暴露
+- `toml` 已进入当前主路径支持范围，可与 `yaml / json` 一样用于配置文件创建、Draft 保存、发布和管理端脱敏展示
 
 ### 5.5 部署实例 / 模板
 
@@ -234,8 +237,8 @@
   当前后端已经按项目角色 `admin / editor / viewer` 收口。
 - `FRONTEND_MVP_BLUEPRINT` 里“diff 接口仍待实现”已经落后。
   当前 `GET /api/releases/:id/diff` 已实现。
-- 早期 product-qa 文档里提到的“schema 校验尚未落地”已经落后。
-  当前 Draft 保存、clone 与发布前都已接入格式解析和 schema validator。
+- 早期与中间阶段文档里提到的 `schema_name / schema_version / schema validator` 主路径语义已经过时。
+  当前 MVP 口径已收口为“基础格式合法性校验”，不再把 schema 视作当前对外能力。
 
 如果前端发现蓝图和 OpenAPI / 当前后端行为冲突，以当前实现和这份交接文档为准，再回头补文档统一。
 

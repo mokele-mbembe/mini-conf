@@ -9,3 +9,4 @@
 - [POST_MVP_PLAN.md](./POST_MVP_PLAN.md)
 - [SCOPE_RULES.md](./SCOPE_RULES.md)
 - [product-qa/README.md](./product-qa/README.md)
+- [product-qa/0006-config-file-format-and-ux-alignment.md](./product-qa/0006-config-file-format-and-ux-alignment.md)

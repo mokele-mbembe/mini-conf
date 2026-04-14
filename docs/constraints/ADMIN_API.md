@@ -192,8 +192,6 @@
   "code": "main",
   "name": "Main Config",
   "format": "yaml",
-  "schema_name": "coffee-main",
-  "schema_version": "v1",
   "sensitivity": "secret",
   "secret_paths": ["$.wifi.password", "$.third_party.api_key"],
   "is_required": true
@@ -206,6 +204,8 @@
 
 说明：
 
+- `code` 在中文语义上更接近“配置标识”，不是字符编码
+- 当前配置文件主路径支持 `yaml / json / toml`，`text` 不在当前范围内
 - `sensitivity` 首版可支持 `normal` 和 `secret`
 - `secret_paths` 用于前端脱敏展示和日志裁剪
 - `is_required` 是项目级规则，用于约束实例发布前是否必须已具备该配置
@@ -302,7 +302,7 @@
 
 - 如果 Draft 不存在，则创建
 - 如果 Draft 已存在，则按乐观锁更新
-- 保存时立即做格式和 schema 校验
+- 保存时立即做基础格式合法性校验
 - 校验失败返回 `422`
 - `base_version` 与服务端当前版本不一致时返回 `409`
 
