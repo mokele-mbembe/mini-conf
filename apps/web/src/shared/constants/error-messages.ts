@@ -9,6 +9,10 @@ export const ERROR_MESSAGES: Record<string, string> = {
   project_not_found: "error.project_not_found",
   config_file_code_conflict: "error.config_file_code_conflict",
   config_file_not_found: "error.config_file_not_found",
+  deployment_instance_conflict: "error.deployment_instance_conflict",
+  deployment_key_conflict: "error.deployment_key_conflict",
+  deployment_instance_not_found: "error.deployment_instance_not_found",
+  deployment_not_found: "error.deployment_instance_not_found",
   network_error: "error.network_error",
   unknown_error: "error.unknown_error",
 };
