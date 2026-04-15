@@ -251,14 +251,14 @@ async fn resolve_returns_config_file_not_found_when_config_is_missing() -> TestR
 }
 
 #[tokio::test]
-async fn resolve_returns_not_found_for_archived_deployment() -> TestResult {
+async fn resolve_returns_not_found_for_inactive_deployment() -> TestResult {
     let Some((app, pool, database_url, schema)) = setup_app().await? else {
         return Ok(());
     };
 
     seed_release(&pool, "main", "yaml", "log_level: info\n").await?;
     sqlx::query(
-        "UPDATE deployment_instances SET status = 'archived' WHERE deployment_key = 'store-001'",
+        "UPDATE deployment_instances SET status = 'inactive' WHERE deployment_key = 'store-001'",
     )
     .execute(&pool)
     .await?;

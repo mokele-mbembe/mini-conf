@@ -237,7 +237,6 @@ pub async fn seed_sync_record(
             deployment_instance_id,
             config_file_id,
             release_id,
-            process_key,
             revision,
             action,
             status,
@@ -245,7 +244,7 @@ pub async fn seed_sync_record(
             detail,
             reported_at
         )
-        VALUES ($1, $2, $3, $4, 'main', '20260410.0001', 'apply', 'success', 'config applied', '{"duration_ms":87}', '2026-04-10T12:00:00Z')
+        VALUES ($1, $2, $3, $4, '20260410.0001', 'apply', 'success', 'config applied', '{"duration_ms":87}', '2026-04-10T12:00:00Z')
         "#,
     )
     .bind(project_id)

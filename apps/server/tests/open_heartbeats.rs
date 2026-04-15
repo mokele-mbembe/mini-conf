@@ -56,6 +56,11 @@ async fn seed_deployment(pool: &PgPool) -> TestResult {
     .fetch_one(pool)
     .await?;
 
+    sqlx::query("INSERT INTO config_files (project_id, code, name, format) VALUES ($1, 'vision', 'Vision', 'yaml')")
+        .bind(project_id)
+        .execute(pool)
+        .await?;
+
     let deployment_id: i64 = sqlx::query_scalar(
         "INSERT INTO deployment_instances (project_id, environment, deployment_key, name) VALUES ($1, 'prod', 'store-001', 'Store 001') RETURNING id",
     )
@@ -108,7 +113,7 @@ async fn read_json<T: serde::de::DeserializeOwned>(
 }
 
 #[tokio::test]
-async fn heartbeat_upserts_latest_process_state() -> TestResult {
+async fn heartbeat_upserts_latest_config_state() -> TestResult {
     let Some((app, pool, database_url, schema)) = setup_app().await? else {
         return Ok(());
     };
@@ -120,7 +125,7 @@ async fn heartbeat_upserts_latest_process_state() -> TestResult {
             "project":"coffee-legacy",
             "environment":"prod",
             "deployment_key":"store-001",
-            "process_key":"vision",
+            "config":"vision",
             "metadata":{"ip":"10.0.0.8","version":"1.0.3"},
             "reported_at":"2026-04-05T12:05:00Z"
         }"#,
@@ -128,7 +133,7 @@ async fn heartbeat_upserts_latest_process_state() -> TestResult {
             "project":"coffee-legacy",
             "environment":"prod",
             "deployment_key":"store-001",
-            "process_key":"vision",
+            "config":"vision",
             "metadata":{"ip":"10.0.0.9","version":"1.0.4"},
             "reported_at":"2026-04-05T12:06:00Z"
         }"#,
@@ -154,6 +159,7 @@ async fn heartbeat_upserts_latest_process_state() -> TestResult {
         r#"
         SELECT
             COUNT(*) OVER() AS heartbeat_count,
+            config_file_id,
             metadata->>'ip' AS ip,
             metadata->>'version' AS version,
             to_char(reported_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS reported_at
@@ -165,6 +171,7 @@ async fn heartbeat_upserts_latest_process_state() -> TestResult {
     .await?;
 
     assert_eq!(row.get::<i64, _>("heartbeat_count"), 1);
+    assert!(row.get::<i64, _>("config_file_id") > 0);
     assert_eq!(row.get::<String, _>("ip"), "10.0.0.9");
     assert_eq!(row.get::<String, _>("version"), "1.0.4");
     assert_eq!(row.get::<String, _>("reported_at"), "2026-04-05T12:06:00Z");
@@ -193,7 +200,7 @@ async fn heartbeat_returns_not_found_for_unknown_deployment() -> TestResult {
                         "project":"coffee-legacy",
                         "environment":"prod",
                         "deployment_key":"store-missing",
-                        "process_key":"vision"
+                        "config":"vision"
                     }"#,
                 ))?,
         )
@@ -214,14 +221,14 @@ async fn heartbeat_returns_not_found_for_unknown_deployment() -> TestResult {
 }
 
 #[tokio::test]
-async fn heartbeat_returns_not_found_for_archived_deployment() -> TestResult {
+async fn heartbeat_returns_not_found_for_inactive_deployment() -> TestResult {
     let Some((app, pool, database_url, schema)) = setup_app().await? else {
         return Ok(());
     };
 
     seed_deployment(&pool).await?;
     sqlx::query(
-        "UPDATE deployment_instances SET status = 'archived' WHERE deployment_key = 'store-001'",
+        "UPDATE deployment_instances SET status = 'inactive' WHERE deployment_key = 'store-001'",
     )
     .execute(&pool)
     .await?;
@@ -238,7 +245,7 @@ async fn heartbeat_returns_not_found_for_archived_deployment() -> TestResult {
                         "project":"coffee-legacy",
                         "environment":"prod",
                         "deployment_key":"store-001",
-                        "process_key":"vision"
+                        "config":"vision"
                     }"#,
                 ))?,
         )

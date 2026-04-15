@@ -59,6 +59,8 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
         crate::http::api::deployment_instances::clone_deployment_instance,
         crate::http::api::deployment_instances::preview_deployment_bundle,
         crate::http::api::deployment_instances::reset_deployment_token,
+        crate::http::api::deployment_instances::activate_deployment_instance,
+        crate::http::api::deployment_instances::deactivate_deployment_instance,
         crate::http::api::deployment_heartbeats::list_deployment_heartbeats,
         crate::http::api::deployment_sync_records::list_deployment_sync_records,
         crate::http::api::drafts::get_draft,
@@ -213,13 +215,10 @@ pub struct CloneDeploymentInstanceRequestBody {
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
 pub struct UpdateDeploymentInstanceRequestBody {
-    pub project_id: i64,
     pub environment: String,
     pub deployment_key: String,
     pub name: String,
     pub description: Option<String>,
-    pub is_template: Option<bool>,
-    pub status: String,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
@@ -306,6 +305,8 @@ pub struct ListDeploymentInstancesParams {
     pub environment: Option<String>,
     pub keyword: Option<String>,
     pub status: Option<String>,
+    pub page: Option<i64>,
+    pub page_size: Option<i64>,
 }
 
 #[derive(Debug, IntoParams, ToSchema)]
@@ -313,7 +314,7 @@ pub struct ListDeploymentInstancesParams {
 pub struct ListDeploymentHeartbeatsParams {
     pub project_id: Option<i64>,
     pub deployment_instance_id: Option<i64>,
-    pub process_key: Option<String>,
+    pub config_file_id: Option<i64>,
 }
 
 #[derive(Debug, IntoParams, ToSchema)]
@@ -322,7 +323,6 @@ pub struct ListDeploymentSyncRecordsParams {
     pub project_id: Option<i64>,
     pub deployment_instance_id: Option<i64>,
     pub config_file_id: Option<i64>,
-    pub process_key: Option<String>,
     pub action: Option<String>,
     pub status: Option<String>,
 }
@@ -351,7 +351,6 @@ pub struct ResolveConfigParams {
     pub environment: String,
     pub deployment_key: String,
     pub config: String,
-    pub process_key: Option<String>,
     pub current_revision: Option<String>,
 }
 
@@ -368,7 +367,6 @@ pub struct DeploymentSyncRecordRequestBody {
     pub environment: String,
     pub deployment_key: String,
     pub config: String,
-    pub process_key: Option<String>,
     pub action: String,
     pub revision: Option<String>,
     pub status: String,
@@ -383,7 +381,7 @@ pub struct HeartbeatRequestBody {
     pub project: String,
     pub environment: String,
     pub deployment_key: String,
-    pub process_key: String,
+    pub config: String,
     #[schema(value_type = Object, nullable = true)]
     pub metadata: Option<serde_json::Value>,
     pub reported_at: Option<String>,
@@ -445,6 +443,8 @@ mod tests {
         assert!(paths.contains_key("/api/deployment-instances/{id}/clone"));
         assert!(paths.contains_key("/api/deployment-instances/{id}/preview-bundle"));
         assert!(paths.contains_key("/api/deployment-instances/{id}/token/reset"));
+        assert!(paths.contains_key("/api/deployment-instances/{id}/activate"));
+        assert!(paths.contains_key("/api/deployment-instances/{id}/deactivate"));
         assert!(paths.contains_key("/api/deployment-heartbeats"));
         assert!(paths.contains_key("/api/drafts/{deployment_id}/{config_file_id}"));
         assert!(paths.contains_key("/api/drafts/{target_deployment_id}/{config_file_id}/clone"));

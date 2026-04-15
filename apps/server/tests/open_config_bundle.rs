@@ -294,14 +294,14 @@ async fn config_bundle_returns_not_found_for_unknown_deployment() -> TestResult 
 }
 
 #[tokio::test]
-async fn config_bundle_returns_not_found_for_archived_deployment() -> TestResult {
+async fn config_bundle_returns_not_found_for_inactive_deployment() -> TestResult {
     let Some((app, pool, database_url, schema)) = setup_app().await? else {
         return Ok(());
     };
 
     seed_bundle(&pool).await?;
     sqlx::query(
-        "UPDATE deployment_instances SET status = 'archived' WHERE deployment_key = 'store-001'",
+        "UPDATE deployment_instances SET status = 'inactive' WHERE deployment_key = 'store-001'",
     )
     .execute(&pool)
     .await?;

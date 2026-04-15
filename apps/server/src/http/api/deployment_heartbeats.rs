@@ -17,7 +17,7 @@ use sqlx::{Row, types::Json as SqlxJson};
 pub(crate) struct ListDeploymentHeartbeatsQuery {
     project_id: Option<i64>,
     deployment_instance_id: Option<i64>,
-    process_key: Option<String>,
+    config_file_id: Option<i64>,
 }
 
 pub fn router() -> Router<AppState> {
@@ -81,23 +81,25 @@ pub(crate) async fn list_deployment_heartbeats(
             dh.id,
             dh.project_id,
             dh.deployment_instance_id,
-            dh.process_key,
+            dh.config_file_id,
+            cf.code AS config,
             dh.metadata,
             to_char(dh.reported_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS reported_at
         FROM deployment_heartbeats dh
+        JOIN config_files cf ON cf.id = dh.config_file_id
         JOIN project_members pm
           ON pm.project_id = dh.project_id
          AND pm.user_id = $1
         WHERE ($2::bigint IS NULL OR dh.project_id = $2)
           AND ($3::bigint IS NULL OR dh.deployment_instance_id = $3)
-          AND ($4::varchar IS NULL OR dh.process_key = $4)
-        ORDER BY dh.reported_at DESC, dh.process_key ASC, dh.id DESC
+          AND ($4::bigint IS NULL OR dh.config_file_id = $4)
+        ORDER BY dh.reported_at DESC, cf.code ASC, dh.id DESC
         "#,
     )
     .bind(auth.user_id)
     .bind(query.project_id)
     .bind(query.deployment_instance_id)
-    .bind(normalize_optional(query.process_key))
+    .bind(query.config_file_id)
     .fetch_all(pool)
     .await
     .map_err(|_| ApiError::internal())?;
@@ -112,23 +114,13 @@ fn map_heartbeat_row(row: &sqlx::postgres::PgRow) -> DeploymentHeartbeatSummary 
         id: row.get("id"),
         project_id: row.get("project_id"),
         deployment_instance_id: row.get("deployment_instance_id"),
-        process_key: row.get("process_key"),
+        config_file_id: row.get("config_file_id"),
+        config: row.get("config"),
         metadata: row
             .get::<Option<SqlxJson<serde_json::Value>>, _>("metadata")
             .map(|value| value.0),
         reported_at: row.get("reported_at"),
     }
-}
-
-fn normalize_optional(value: Option<String>) -> Option<String> {
-    value.and_then(|value| {
-        let trimmed = value.trim();
-        if trimmed.is_empty() {
-            None
-        } else {
-            Some(trimmed.to_owned())
-        }
-    })
 }
 
 async fn load_deployment_project_id(pool: &sqlx::PgPool, id: i64) -> Result<i64, ApiError> {

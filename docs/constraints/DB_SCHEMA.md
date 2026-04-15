@@ -23,6 +23,7 @@
 - `releases`
 - `deployment_credentials`
 - `deployment_sync_records`
+- `deployment_heartbeats`
 - `audit_logs`
 
 ## 3. 核心表说明
@@ -105,6 +106,9 @@
 - `DeploymentInstance` 是 MVP 主路径中的核心对象
 - 它代表项目在某个环境下的一整套独立部署实例
 - 可以从一个模板部署实例克隆，但克隆完成后保持独立
+- 部署实例业务状态只采用 `active`、`inactive`
+- 管理端创建实例时默认写入 `inactive`；激活后才允许 Open API 消费
+- `inactive` 同时表达“未启用”和“已停用”，历史由审计日志表达，不再引入 `archived`
 
 ### drafts
 
@@ -170,9 +174,8 @@
 - `id` bigserial pk
 - `project_id` bigint not null
 - `deployment_instance_id` bigint not null
-- `config_file_id` bigint null
+- `config_file_id` bigint not null
 - `release_id` bigint null
-- `process_key` varchar(64) null
 - `revision` varchar(64) null
 - `action` varchar(32) not null
 - `status` varchar(32) not null
@@ -184,8 +187,25 @@
 
 说明：
 
-- `process_key` 用于区分同一部署实例上的不同进程
-- 例如 `main`、`ad-screen`、`vision`
+- `config_file_id` 指向本次上报对应的配置文件
+- 客户端请求中的 `config` 字段解析为 `config_files.code`，再落到 `config_file_id`
+- MVP 不再保存独立 `process_key`
+
+### deployment_heartbeats
+
+- `id` bigserial pk
+- `project_id` bigint not null
+- `deployment_instance_id` bigint not null
+- `config_file_id` bigint not null
+- `metadata` jsonb null
+- `reported_at` timestamptz not null default now()
+- `updated_at` timestamptz not null default now()
+- unique (`deployment_instance_id`, `config_file_id`)
+
+说明：
+
+- 心跳同样使用客户端请求里的 `config` 解析 `config_file_id`
+- 同一个 `deployment_instance_id + config_file_id` 只保留最近一次心跳
 
 ### audit_logs
 
@@ -221,6 +241,9 @@
 - `releases.deployment_instance_id -> deployment_instances.id`
 - `deployment_credentials.deployment_instance_id -> deployment_instances.id`
 - `deployment_sync_records.deployment_instance_id -> deployment_instances.id`
+- `deployment_sync_records.config_file_id -> config_files.id`
+- `deployment_heartbeats.deployment_instance_id -> deployment_instances.id`
+- `deployment_heartbeats.config_file_id -> config_files.id`
 
 ## 5. 部署实例与模板规则
 

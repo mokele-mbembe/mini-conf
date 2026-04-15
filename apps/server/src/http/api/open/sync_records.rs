@@ -19,7 +19,6 @@ pub(crate) struct DeploymentSyncRecordRequest {
     environment: Option<String>,
     deployment_key: Option<String>,
     config: Option<String>,
-    process_key: Option<String>,
     action: Option<String>,
     revision: Option<String>,
     status: Option<String>,
@@ -34,7 +33,6 @@ struct ValidatedDeploymentSyncRecordRequest {
     environment: String,
     deployment_key: String,
     config: String,
-    process_key: Option<String>,
     action: String,
     revision: Option<String>,
     status: String,
@@ -143,7 +141,6 @@ impl DeploymentSyncRecordRequest {
             environment: required(self.environment, "environment")?,
             deployment_key: required(self.deployment_key, "deployment_key")?,
             config: required(self.config, "config")?,
-            process_key: self.process_key.filter(|value| !value.trim().is_empty()),
             action,
             revision: self.revision.filter(|value| !value.trim().is_empty()),
             status,
@@ -298,7 +295,6 @@ async fn insert_sync_record(
             deployment_instance_id,
             config_file_id,
             release_id,
-            process_key,
             revision,
             action,
             status,
@@ -315,8 +311,7 @@ async fn insert_sync_record(
             $7,
             $8,
             $9,
-            $10,
-            COALESCE($11::timestamptz, NOW())
+            COALESCE($10::timestamptz, NOW())
         )
         "#,
     )
@@ -324,7 +319,6 @@ async fn insert_sync_record(
     .bind(deployment_id)
     .bind(config_file_id)
     .bind(release_id)
-    .bind(payload.process_key)
     .bind(payload.revision)
     .bind(payload.action)
     .bind(payload.status)

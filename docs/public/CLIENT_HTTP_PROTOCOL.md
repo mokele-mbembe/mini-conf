@@ -130,7 +130,6 @@ Authorization: Bearer <token>
 
 可选查询参数：
 
-- `process_key`
 - `current_revision`
 
 请求头可选：
@@ -140,7 +139,7 @@ Authorization: Bearer <token>
 ### 请求示例
 
 ```http
-GET /api/open/configs/resolve?project=coffee-legacy&environment=prod&deployment_key=store-001&config=main&process_key=main HTTP/1.1
+GET /api/open/configs/resolve?project=coffee-legacy&environment=prod&deployment_key=store-001&config=main HTTP/1.1
 Host: conf.example.com
 Accept: application/json
 Authorization: Bearer <token>
@@ -315,7 +314,6 @@ Authorization: Bearer <token>
   "environment": "prod",
   "deployment_key": "store-001",
   "config": "main",
-  "process_key": "main",
   "action": "apply",
   "revision": "20260405.0001",
   "status": "success",
@@ -364,7 +362,7 @@ Authorization: Bearer <token>
   "project": "coffee-legacy",
   "environment": "prod",
   "deployment_key": "store-001",
-  "process_key": "vision",
+  "config": "vision",
   "metadata": {
     "ip": "10.0.0.8",
     "version": "1.0.3"
@@ -403,7 +401,7 @@ MINI_CONF_BASE_URL="${MINI_CONF_BASE_URL:-http://127.0.0.1:8080}"
 curl -sS \
   -H "Authorization: Bearer ${MINI_CONF_TOKEN}" \
   -H "Accept: application/json" \
-  "${MINI_CONF_BASE_URL}/api/open/configs/resolve?project=coffee-legacy&environment=prod&deployment_key=store-001&config=main&process_key=main"
+  "${MINI_CONF_BASE_URL}/api/open/configs/resolve?project=coffee-legacy&environment=prod&deployment_key=store-001&config=main"
 ```
 
 ### 2. 拉取单配置文件正文
@@ -436,7 +434,6 @@ curl -sS \
     "environment": "prod",
     "deployment_key": "store-001",
     "config": "main",
-    "process_key": "main",
     "action": "apply",
     "revision": "20260405.0001",
     "status": "success",

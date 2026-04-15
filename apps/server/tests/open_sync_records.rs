@@ -155,7 +155,6 @@ async fn sync_record_inserts_row_and_returns_ok() -> TestResult {
                         "environment":"prod",
                         "deployment_key":"store-001",
                         "config":"main",
-                        "process_key":"main",
                         "action":"apply",
                         "revision":"20260405.0001",
                         "status":"success",
@@ -175,8 +174,9 @@ async fn sync_record_inserts_row_and_returns_ok() -> TestResult {
 
     let row = sqlx::query(
         r#"
-        SELECT action, status, process_key, revision, message, detail->>'duration_ms' AS duration_ms
-        FROM deployment_sync_records
+        SELECT dsr.action, dsr.status, dsr.config_file_id, cf.code AS config, dsr.revision, dsr.message, dsr.detail->>'duration_ms' AS duration_ms
+        FROM deployment_sync_records dsr
+        JOIN config_files cf ON cf.id = dsr.config_file_id
         LIMIT 1
         "#,
     )
@@ -185,7 +185,7 @@ async fn sync_record_inserts_row_and_returns_ok() -> TestResult {
 
     assert_eq!(row.get::<String, _>("action"), "apply");
     assert_eq!(row.get::<String, _>("status"), "success");
-    assert_eq!(row.get::<String, _>("process_key"), "main");
+    assert_eq!(row.get::<String, _>("config"), "main");
     assert_eq!(row.get::<String, _>("revision"), "20260405.0001");
     assert_eq!(row.get::<String, _>("message"), "config applied");
     assert_eq!(row.get::<String, _>("duration_ms"), "87");

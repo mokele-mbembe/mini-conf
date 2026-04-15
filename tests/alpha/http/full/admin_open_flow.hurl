@@ -92,6 +92,7 @@ jsonpath "$.project_id" == {{project_id}}
 jsonpath "$.deployment_key" == "store-{{suite_id}}"
 jsonpath "$.template_source_id" == {{template_id}}
 jsonpath "$.is_template" == false
+jsonpath "$.status" == "inactive"
 
 GET {{base_url}}/api/drafts/{{deployment_id}}/{{config_file_id}}
 HTTP 200
@@ -169,7 +170,7 @@ jsonpath "$.diff_summary.is_initial" == true
 jsonpath "$.diff_summary.has_changes" == true
 jsonpath "$.after_redacted" == false
 
-POST {{base_url}}/api/deployment-instances/{{deployment_id}}/token/reset
+POST {{base_url}}/api/deployment-instances/{{deployment_id}}/activate
 HTTP 200
 [Captures]
 deployment_token_old: jsonpath "$.token"
@@ -217,7 +218,6 @@ Content-Type: application/json
   "environment": "prod",
   "deployment_key": "store-{{suite_id}}",
   "config": "main",
-  "process_key": "main",
   "action": "apply",
   "revision": "{{release_revision}}",
   "status": "success",
@@ -238,7 +238,7 @@ Content-Type: application/json
   "project": "alpha-full-{{suite_id}}",
   "environment": "prod",
   "deployment_key": "store-{{suite_id}}",
-  "process_key": "main",
+  "config": "main",
   "metadata": {
     "ip": "10.0.0.10",
     "version": "alpha"
@@ -265,19 +265,21 @@ HTTP 200
 jsonpath "$.id" == {{project_id}}
 jsonpath "$.code" == "alpha-full-{{suite_id}}"
 
-GET {{base_url}}/api/deployment-sync-records?project_id={{project_id}}&deployment_instance_id={{deployment_id}}&process_key=main
+GET {{base_url}}/api/deployment-sync-records?project_id={{project_id}}&deployment_instance_id={{deployment_id}}&config_file_id={{config_file_id}}
 HTTP 200
 [Asserts]
 jsonpath "$.items[0].deployment_instance_id" == {{deployment_id}}
-jsonpath "$.items[0].process_key" == "main"
+jsonpath "$.items[0].config_file_id" == {{config_file_id}}
+jsonpath "$.items[0].config" == "main"
 jsonpath "$.items[0].revision" == "{{release_revision}}"
 jsonpath "$.items[0].status" == "success"
 
-GET {{base_url}}/api/deployment-heartbeats?project_id={{project_id}}&deployment_instance_id={{deployment_id}}&process_key=main
+GET {{base_url}}/api/deployment-heartbeats?project_id={{project_id}}&deployment_instance_id={{deployment_id}}&config_file_id={{config_file_id}}
 HTTP 200
 [Asserts]
 jsonpath "$.items[0].deployment_instance_id" == {{deployment_id}}
-jsonpath "$.items[0].process_key" == "main"
+jsonpath "$.items[0].config_file_id" == {{config_file_id}}
+jsonpath "$.items[0].config" == "main"
 jsonpath "$.items[0].metadata.version" == "alpha"
 
 GET {{base_url}}/api/audit-logs?project_id={{project_id}}

@@ -178,7 +178,7 @@ async fn seed_demo_data(pool: &PgPool) -> SeedResult<SeedSummary> {
             description: Some("Template instance used for clone flows."),
             is_template: true,
             template_source_id: None,
-            status: "active",
+            status: "inactive",
         },
     )
     .await?;
@@ -226,17 +226,17 @@ async fn seed_demo_data(pool: &PgPool) -> SeedResult<SeedSummary> {
         },
     )
     .await?;
-    let archived_store_id = upsert_deployment_instance(
+    let inactive_store_id = upsert_deployment_instance(
         &mut tx,
         DeploymentSeed {
             project_id: coffee_project_id,
             environment: "prod",
-            deployment_key: "store-archived",
-            name: "Store Archived",
-            description: Some("Archived deployment for status filter checks."),
+            deployment_key: "store-inactive",
+            name: "Store Inactive",
+            description: Some("Inactive deployment for status filter checks."),
             is_template: false,
             template_source_id: Some(template_id),
-            status: "archived",
+            status: "inactive",
         },
     )
     .await?;
@@ -474,9 +474,9 @@ async fn seed_demo_data(pool: &PgPool) -> SeedResult<SeedSummary> {
     upsert_credential(&mut tx, staging_store_id, "default", STAGING_TOKEN).await?;
     upsert_credential(
         &mut tx,
-        archived_store_id,
+        inactive_store_id,
         "default",
-        "mc_live_demo_archived_store",
+        "mc_live_demo_inactive_store",
     )
     .await?;
 
@@ -486,9 +486,8 @@ async fn seed_demo_data(pool: &PgPool) -> SeedResult<SeedSummary> {
         SyncRecordSeed {
             project_id: coffee_project_id,
             deployment_instance_id: store_001_id,
-            config_file_id: Some(main_config_id),
+            config_file_id: main_config_id,
             release_id: Some(store_001_main_release_id),
-            process_key: Some("main"),
             revision: Some("20260412.0102"),
             action: "apply",
             status: "success",
@@ -503,9 +502,8 @@ async fn seed_demo_data(pool: &PgPool) -> SeedResult<SeedSummary> {
         SyncRecordSeed {
             project_id: coffee_project_id,
             deployment_instance_id: store_001_id,
-            config_file_id: Some(device_auth_config_id),
+            config_file_id: device_auth_config_id,
             release_id: Some(store_001_device_auth_release_id),
-            process_key: Some("main"),
             revision: Some("20260411.0103"),
             action: "apply",
             status: "success",
@@ -520,9 +518,8 @@ async fn seed_demo_data(pool: &PgPool) -> SeedResult<SeedSummary> {
         SyncRecordSeed {
             project_id: coffee_project_id,
             deployment_instance_id: store_002_id,
-            config_file_id: Some(main_config_id),
+            config_file_id: main_config_id,
             release_id: None,
-            process_key: Some("main"),
             revision: Some("20260408.0105"),
             action: "apply",
             status: "failed",
@@ -537,9 +534,8 @@ async fn seed_demo_data(pool: &PgPool) -> SeedResult<SeedSummary> {
         SyncRecordSeed {
             project_id: coffee_project_id,
             deployment_instance_id: store_001_id,
-            config_file_id: Some(vision_config_id),
+            config_file_id: vision_config_id,
             release_id: Some(store_001_vision_release_id),
-            process_key: Some("vision"),
             revision: Some("20260409.0104"),
             action: "apply",
             status: "success",
@@ -555,7 +551,7 @@ async fn seed_demo_data(pool: &PgPool) -> SeedResult<SeedSummary> {
         HeartbeatSeed {
             project_id: coffee_project_id,
             deployment_instance_id: store_001_id,
-            process_key: "main",
+            config_file_id: main_config_id,
             metadata: serde_json::json!({"status": "ready", "ip": "10.0.0.11", "version": "1.2.0", "seed_tag": SEED_TAG}),
             reported_at: "2026-04-12T09:10:00Z",
         },
@@ -566,7 +562,7 @@ async fn seed_demo_data(pool: &PgPool) -> SeedResult<SeedSummary> {
         HeartbeatSeed {
             project_id: coffee_project_id,
             deployment_instance_id: store_001_id,
-            process_key: "vision",
+            config_file_id: vision_config_id,
             metadata: serde_json::json!({"status": "ready", "ip": "10.0.0.12", "version": "1.0.3", "seed_tag": SEED_TAG}),
             reported_at: "2026-04-12T09:10:30Z",
         },
@@ -577,7 +573,7 @@ async fn seed_demo_data(pool: &PgPool) -> SeedResult<SeedSummary> {
         HeartbeatSeed {
             project_id: coffee_project_id,
             deployment_instance_id: store_002_id,
-            process_key: "main",
+            config_file_id: main_config_id,
             metadata: serde_json::json!({"status": "degraded", "ip": "10.0.0.21", "version": "1.1.0", "seed_tag": SEED_TAG}),
             reported_at: "2026-04-12T10:32:00Z",
         },
@@ -700,9 +696,8 @@ struct DraftSeed<'a> {
 struct SyncRecordSeed<'a> {
     project_id: i64,
     deployment_instance_id: i64,
-    config_file_id: Option<i64>,
+    config_file_id: i64,
     release_id: Option<i64>,
-    process_key: Option<&'a str>,
     revision: Option<&'a str>,
     action: &'a str,
     status: &'a str,
@@ -714,7 +709,7 @@ struct SyncRecordSeed<'a> {
 struct HeartbeatSeed<'a> {
     project_id: i64,
     deployment_instance_id: i64,
-    process_key: &'a str,
+    config_file_id: i64,
     metadata: serde_json::Value,
     reported_at: &'a str,
 }
@@ -1039,7 +1034,6 @@ async fn insert_sync_record(
             deployment_instance_id,
             config_file_id,
             release_id,
-            process_key,
             revision,
             action,
             status,
@@ -1047,14 +1041,13 @@ async fn insert_sync_record(
             detail,
             reported_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::timestamptz)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::timestamptz)
         "#,
     )
     .bind(seed.project_id)
     .bind(seed.deployment_instance_id)
     .bind(seed.config_file_id)
     .bind(seed.release_id)
-    .bind(seed.process_key)
     .bind(seed.revision)
     .bind(seed.action)
     .bind(seed.status)
@@ -1076,12 +1069,12 @@ async fn upsert_heartbeat(
         INSERT INTO deployment_heartbeats (
             project_id,
             deployment_instance_id,
-            process_key,
+            config_file_id,
             metadata,
             reported_at
         )
         VALUES ($1, $2, $3, $4, $5::timestamptz)
-        ON CONFLICT (deployment_instance_id, process_key)
+        ON CONFLICT (deployment_instance_id, config_file_id)
         DO UPDATE SET
             metadata = EXCLUDED.metadata,
             reported_at = EXCLUDED.reported_at,
@@ -1090,7 +1083,7 @@ async fn upsert_heartbeat(
     )
     .bind(seed.project_id)
     .bind(seed.deployment_instance_id)
-    .bind(seed.process_key)
+    .bind(seed.config_file_id)
     .bind(seed.metadata)
     .bind(seed.reported_at)
     .execute(tx.as_mut())

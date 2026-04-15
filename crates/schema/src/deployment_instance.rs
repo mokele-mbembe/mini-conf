@@ -18,6 +18,9 @@ pub struct DeploymentInstanceSummary {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct DeploymentInstanceListResponse {
     pub items: Vec<DeploymentInstanceSummary>,
+    pub total: i64,
+    pub page: i64,
+    pub page_size: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -70,6 +73,9 @@ mod tests {
                 template_source_id: None,
                 status: "active".to_owned(),
             }],
+            total: 1,
+            page: 1,
+            page_size: 20,
         })
         .expect("response should serialize");
 
@@ -88,7 +94,10 @@ mod tests {
                         "template_source_id": null,
                         "status": "active"
                     }
-                ]
+                ],
+                "total": 1,
+                "page": 1,
+                "page_size": 20
             })
         );
     }

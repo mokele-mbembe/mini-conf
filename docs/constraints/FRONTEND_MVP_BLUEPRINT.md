@@ -170,10 +170,12 @@
 
 依赖接口：
 
-- `GET /api/deployment-instances?project_id=:projectId`
+- `GET /api/deployment-instances?project_id=:projectId&page=1&page_size=20`
 - `POST /api/deployment-instances`
 - `GET /api/deployment-instances/:id`
 - `PUT /api/deployment-instances/:id`
+- `POST /api/deployment-instances/:id/activate`
+- `POST /api/deployment-instances/:id/deactivate`
 
 加载态 / 空状态 / 缺权限状态：
 
@@ -187,12 +189,15 @@
 - `name`
 - `description`
 - `is_template`
-- `status`
 
 关键交互：
 
 - 列表显式区分模板
 - 支持筛选 `environment` / `status`
+- 列表使用分页响应中的 `items / total / page / page_size`
+- 新建实例默认为 `inactive`
+- 激活实例时展示一次性 token；停用后旧 token 应立即失效
+- `PUT` 只允许修改 `environment / deployment_key / name / description`
 
 失败提示：
 
@@ -446,8 +451,9 @@
 
 关键交互：
 
-- 支持按实例、配置文件、进程、动作、状态筛选
-- 明确展示 `revision`、`action`、`status`、`reported_at`
+- 支持按实例、配置文件、动作、状态筛选
+- 筛选字段使用 `deployment_instance_id`、`config_file_id`、`action`、`status`
+- 明确展示 `config`、`revision`、`action`、`status`、`reported_at`
 
 与当前产品规则绑定的限制：
 
@@ -465,8 +471,8 @@
 
 关键交互：
 
-- 支持按实例和 `process_key` 筛选
-- 展示 `reported_at`、`process_key` 和最近状态
+- 支持按实例和 `config_file_id` 筛选
+- 展示 `reported_at`、`config` 和最近状态
 
 与当前产品规则绑定的限制：
 

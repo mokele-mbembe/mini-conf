@@ -225,6 +225,46 @@ async fn reset_token(
     read_json(response).await
 }
 
+async fn activate_deployment(
+    app: &axum::Router,
+    cookie: &str,
+    deployment_id: i64,
+) -> TestResult<axum::response::Response> {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/deployment-instances/{deployment_id}/activate"
+                ))
+                .header(header::COOKIE, cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+    Ok(response)
+}
+
+async fn deactivate_deployment(
+    app: &axum::Router,
+    cookie: &str,
+    deployment_id: i64,
+) -> TestResult<axum::response::Response> {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/deployment-instances/{deployment_id}/deactivate"
+                ))
+                .header(header::COOKIE, cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+    Ok(response)
+}
+
 #[tokio::test]
 async fn reset_token_requires_session_cookie() -> TestResult {
     let Some((app, pool, database_url, schema)) = setup_app().await? else {
@@ -284,12 +324,12 @@ async fn reset_token_returns_not_found_for_unknown_deployment() -> TestResult {
 }
 
 #[tokio::test]
-async fn reset_token_rejects_archived_deployment() -> TestResult {
+async fn reset_token_rejects_inactive_deployment() -> TestResult {
     let Some((app, pool, database_url, schema)) = setup_app().await? else {
         return Ok(());
     };
     let (_, _, deployment_id) = seed_open_access_fixture(&pool, Some(OLD_TOKEN)).await?;
-    sqlx::query("UPDATE deployment_instances SET status = 'archived' WHERE id = $1")
+    sqlx::query("UPDATE deployment_instances SET status = 'inactive' WHERE id = $1")
         .bind(deployment_id)
         .execute(&pool)
         .await?;
@@ -310,6 +350,94 @@ async fn reset_token_rejects_archived_deployment() -> TestResult {
     assert_eq!(response.status(), StatusCode::CONFLICT);
     let payload: ErrorResponse = read_json(response).await?;
     assert_eq!(payload.code, "deployment_instance_inactive");
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn activate_deployment_issues_token_and_enables_open_access() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+    let (_project_id, _config_file_id, deployment_id) =
+        seed_open_access_fixture(&pool, None).await?;
+    sqlx::query("UPDATE deployment_instances SET status = 'inactive' WHERE id = $1")
+        .bind(deployment_id)
+        .execute(&pool)
+        .await?;
+
+    let cookie = login(&app).await?;
+    let inactive_response = resolve_main_config(&app, OLD_TOKEN).await?;
+    assert_eq!(inactive_response.status(), StatusCode::UNAUTHORIZED);
+
+    let response = activate_deployment(&app, &cookie, deployment_id).await?;
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: DeploymentTokenResetResponse = read_json(response).await?;
+    assert_eq!(payload.deployment_instance_id, deployment_id);
+    assert!(payload.token.starts_with("mc_live_"));
+
+    let active_response = resolve_main_config(&app, &payload.token).await?;
+    assert_eq!(active_response.status(), StatusCode::OK);
+    let resolved: ResolveConfigResponse = read_json(active_response).await?;
+    assert_eq!(resolved.release.revision, "20260409.0001");
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn deactivate_deployment_invalidates_default_token() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+    let (_project_id, _config_file_id, deployment_id) =
+        seed_open_access_fixture(&pool, Some(OLD_TOKEN)).await?;
+    let cookie = login(&app).await?;
+
+    let active_response = resolve_main_config(&app, OLD_TOKEN).await?;
+    assert_eq!(active_response.status(), StatusCode::OK);
+
+    let response = deactivate_deployment(&app, &cookie, deployment_id).await?;
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+    let row = sqlx::query(
+        "SELECT d.status AS deployment_status, c.status AS credential_status FROM deployment_instances d JOIN deployment_credentials c ON c.deployment_instance_id = d.id WHERE d.id = $1 AND c.credential_name = 'default'",
+    )
+    .bind(deployment_id)
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(row.get::<String, _>("deployment_status"), "inactive");
+    assert_eq!(row.get::<String, _>("credential_status"), "inactive");
+
+    let inactive_response = resolve_main_config(&app, OLD_TOKEN).await?;
+    assert_eq!(inactive_response.status(), StatusCode::UNAUTHORIZED);
+    let error: ErrorResponse = read_json(inactive_response).await?;
+    assert_eq!(error.code, "invalid_token");
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn activate_deployment_rejects_template() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+    let (_project_id, _config_file_id, deployment_id) =
+        seed_open_access_fixture(&pool, None).await?;
+    sqlx::query(
+        "UPDATE deployment_instances SET is_template = TRUE, status = 'inactive' WHERE id = $1",
+    )
+    .bind(deployment_id)
+    .execute(&pool)
+    .await?;
+
+    let cookie = login(&app).await?;
+    let response = activate_deployment(&app, &cookie, deployment_id).await?;
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let payload: ErrorResponse = read_json(response).await?;
+    assert_eq!(
+        payload.code,
+        "deployment_instance_template_activate_forbidden"
+    );
 
     teardown(&database_url, &schema, pool).await
 }

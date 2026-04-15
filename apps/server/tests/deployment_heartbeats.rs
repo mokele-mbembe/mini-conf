@@ -8,8 +8,8 @@ use axum::{
 use schema::{audit::DeploymentHeartbeatListResponse, project::ProjectSummary};
 use server::error::ErrorResponse;
 use support::{
-    TestResult, grant_project_role, login_as, read_json, seed_deployment_instance, seed_user,
-    setup_app, teardown,
+    TestResult, grant_project_role, login_as, read_json, seed_config_file,
+    seed_deployment_instance, seed_user, setup_app, teardown,
 };
 use tower::util::ServiceExt;
 
@@ -37,6 +37,7 @@ async fn deployment_heartbeats_are_visible_to_project_members_only() -> TestResu
         .await?;
     let project: ProjectSummary = read_json(response).await?;
     grant_project_role(&pool, project.id, "viewer2", "viewer").await?;
+    let config_file_id = seed_config_file(&pool, project.id, "main").await?;
     let deployment_id = seed_deployment_instance(&pool, project.id, "store-001", false).await?;
 
     sqlx::query(
@@ -44,15 +45,16 @@ async fn deployment_heartbeats_are_visible_to_project_members_only() -> TestResu
         INSERT INTO deployment_heartbeats (
             project_id,
             deployment_instance_id,
-            process_key,
+            config_file_id,
             metadata,
             reported_at
         )
-        VALUES ($1, $2, 'main', '{"ip":"10.0.0.10","version":"alpha"}', '2026-04-10T12:01:00Z')
+        VALUES ($1, $2, $3, '{"ip":"10.0.0.10","version":"alpha"}', '2026-04-10T12:01:00Z')
         "#,
     )
     .bind(project.id)
     .bind(deployment_id)
+    .bind(config_file_id)
     .execute(&pool)
     .await?;
 
@@ -62,8 +64,8 @@ async fn deployment_heartbeats_are_visible_to_project_members_only() -> TestResu
         .oneshot(
             Request::builder()
                 .uri(format!(
-                    "/api/deployment-heartbeats?project_id={}&deployment_instance_id={}",
-                    project.id, deployment_id
+                    "/api/deployment-heartbeats?project_id={}&deployment_instance_id={}&config_file_id={}",
+                    project.id, deployment_id, config_file_id
                 ))
                 .header(header::COOKIE, &viewer_cookie)
                 .body(Body::empty())?,
@@ -72,7 +74,8 @@ async fn deployment_heartbeats_are_visible_to_project_members_only() -> TestResu
     assert_eq!(response.status(), StatusCode::OK);
     let payload: DeploymentHeartbeatListResponse = read_json(response).await?;
     assert_eq!(payload.items.len(), 1);
-    assert_eq!(payload.items[0].process_key, "main");
+    assert_eq!(payload.items[0].config_file_id, config_file_id);
+    assert_eq!(payload.items[0].config, "main");
 
     let outsider_cookie = login_as(&app, "outsider2", "outsider123").await?;
     let forbidden = app

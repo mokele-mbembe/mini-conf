@@ -14,7 +14,6 @@ pub(crate) struct ListDeploymentSyncRecordsQuery {
     project_id: Option<i64>,
     deployment_instance_id: Option<i64>,
     config_file_id: Option<i64>,
-    process_key: Option<String>,
     action: Option<String>,
     status: Option<String>,
 }
@@ -61,8 +60,8 @@ pub(crate) async fn list_deployment_sync_records(
             dsr.project_id,
             dsr.deployment_instance_id,
             dsr.config_file_id,
+            cf.code AS config,
             dsr.release_id,
-            dsr.process_key,
             dsr.revision,
             dsr.action,
             dsr.status,
@@ -70,15 +69,15 @@ pub(crate) async fn list_deployment_sync_records(
             dsr.detail,
             to_char(dsr.reported_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS reported_at
         FROM deployment_sync_records dsr
+        JOIN config_files cf ON cf.id = dsr.config_file_id
         JOIN project_members pm
           ON pm.project_id = dsr.project_id
          AND pm.user_id = $1
         WHERE ($2::bigint IS NULL OR dsr.project_id = $2)
           AND ($3::bigint IS NULL OR dsr.deployment_instance_id = $3)
           AND ($4::bigint IS NULL OR dsr.config_file_id = $4)
-          AND ($5::varchar IS NULL OR dsr.process_key = $5)
-          AND ($6::varchar IS NULL OR dsr.action = $6)
-          AND ($7::varchar IS NULL OR dsr.status = $7)
+          AND ($5::varchar IS NULL OR dsr.action = $5)
+          AND ($6::varchar IS NULL OR dsr.status = $6)
         ORDER BY dsr.reported_at DESC, dsr.id DESC
         "#,
     )
@@ -86,7 +85,6 @@ pub(crate) async fn list_deployment_sync_records(
     .bind(query.project_id)
     .bind(query.deployment_instance_id)
     .bind(query.config_file_id)
-    .bind(normalize_optional(query.process_key))
     .bind(normalize_optional(query.action))
     .bind(normalize_optional(query.status))
     .fetch_all(pool)
@@ -104,8 +102,8 @@ fn map_sync_record_row(row: &sqlx::postgres::PgRow) -> DeploymentSyncRecordSumma
         project_id: row.get("project_id"),
         deployment_instance_id: row.get("deployment_instance_id"),
         config_file_id: row.get("config_file_id"),
+        config: row.get("config"),
         release_id: row.get("release_id"),
-        process_key: row.get("process_key"),
         revision: row.get("revision"),
         action: row.get("action"),
         status: row.get("status"),

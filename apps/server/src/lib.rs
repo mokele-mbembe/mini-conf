@@ -526,7 +526,7 @@ mod tests {
                     .uri("/api/deployment-instances/1")
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(
-                        r#"{"project_id":1,"environment":"prod","deployment_key":"store-001","name":"Store 001"}"#,
+                        r#"{"environment":"prod","deployment_key":"store-001"}"#,
                     ))
                     .expect("request should build"),
             )
@@ -545,7 +545,7 @@ mod tests {
             payload,
             ErrorResponse {
                 code: "invalid_request".to_owned(),
-                message: "missing required body field: status".to_owned(),
+                message: "missing required body field: name".to_owned(),
             }
         );
     }
@@ -813,7 +813,7 @@ mod tests {
             payload,
             ErrorResponse {
                 code: "invalid_request".to_owned(),
-                message: "missing required body field: process_key".to_owned(),
+                message: "missing required body field: config".to_owned(),
             }
         );
     }
@@ -828,8 +828,8 @@ mod tests {
                     .method(Method::POST)
                     .uri("/api/open/heartbeats")
                     .header(header::CONTENT_TYPE, "application/json")
-                    .body(Body::from(
-                        r#"{"project":"coffee-legacy","environment":"prod","deployment_key":"store-001","process_key":"vision"}"#,
+                .body(Body::from(
+                        r#"{"project":"coffee-legacy","environment":"prod","deployment_key":"store-001","config":"vision"}"#,
                     ))
                     .expect("request should build"),
             )

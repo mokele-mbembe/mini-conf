@@ -675,11 +675,12 @@
             }
           },
           {
-            "name": "process_key",
+            "name": "config_file_id",
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string"
+              "type": "integer",
+              "format": "int64"
             }
           }
         ],
@@ -770,6 +771,24 @@
             "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
             }
           }
         ],
@@ -1097,6 +1116,93 @@
         ]
       }
     },
+    "/api/deployment-instances/{id}/activate": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "activate_deployment_instance",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Deployment instance ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deployment activated and token issued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentTokenResetResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or expired admin session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Deployment instance not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Deployment instance cannot be activated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database bootstrap disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_auth": []
+          }
+        ]
+      }
+    },
     "/api/deployment-instances/{id}/clone": {
       "post": {
         "tags": [
@@ -1168,6 +1274,86 @@
           },
           "409": {
             "description": "Template deployment is invalid or deployment key conflicts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database bootstrap disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_auth": []
+          }
+        ]
+      }
+    },
+    "/api/deployment-instances/{id}/deactivate": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "deactivate_deployment_instance",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Deployment instance ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deployment deactivated"
+          },
+          "401": {
+            "description": "Missing or expired admin session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Deployment instance not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Deployment instance cannot be deactivated",
             "content": {
               "application/json": {
                 "schema": {
@@ -1390,14 +1576,6 @@
             "schema": {
               "type": "integer",
               "format": "int64"
-            }
-          },
-          {
-            "name": "process_key",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
             }
           },
           {
@@ -1860,14 +2038,6 @@
             "name": "config",
             "in": "query",
             "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "process_key",
-            "in": "query",
-            "required": false,
             "schema": {
               "type": "string"
             }
@@ -3959,13 +4129,14 @@
         "example": {
           "items": [
             {
+              "config": "vision",
+              "config_file_id": 5,
               "deployment_instance_id": 3,
               "id": 21,
               "metadata": {
                 "ip": "10.0.0.8",
                 "version": "1.0.3"
               },
-              "process_key": "vision",
               "project_id": 7,
               "reported_at": "2026-04-10T12:05:00Z"
             }
@@ -3978,10 +4149,18 @@
           "id",
           "project_id",
           "deployment_instance_id",
-          "process_key",
+          "config_file_id",
+          "config",
           "reported_at"
         ],
         "properties": {
+          "config": {
+            "type": "string"
+          },
+          "config_file_id": {
+            "type": "integer",
+            "format": "int64"
+          },
           "deployment_instance_id": {
             "type": "integer",
             "format": "int64"
@@ -3991,9 +4170,6 @@
             "format": "int64"
           },
           "metadata": {},
-          "process_key": {
-            "type": "string"
-          },
           "project_id": {
             "type": "integer",
             "format": "int64"
@@ -4003,13 +4179,14 @@
           }
         },
         "example": {
+          "config": "vision",
+          "config_file_id": 5,
           "deployment_instance_id": 3,
           "id": 21,
           "metadata": {
             "ip": "10.0.0.8",
             "version": "1.0.3"
           },
-          "process_key": "vision",
           "project_id": 7,
           "reported_at": "2026-04-10T12:05:00Z"
         }
@@ -4017,7 +4194,10 @@
       "DeploymentInstanceListResponse": {
         "type": "object",
         "required": [
-          "items"
+          "items",
+          "total",
+          "page",
+          "page_size"
         ],
         "properties": {
           "items": {
@@ -4025,6 +4205,18 @@
             "items": {
               "$ref": "#/components/schemas/DeploymentInstanceSummary"
             }
+          },
+          "page": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "page_size": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -4143,6 +4335,7 @@
           "items": [
             {
               "action": "apply",
+              "config": "main",
               "config_file_id": 5,
               "deployment_instance_id": 3,
               "detail": {
@@ -4150,7 +4343,6 @@
               },
               "id": 88,
               "message": "config applied",
-              "process_key": "main",
               "project_id": 7,
               "release_id": 8,
               "reported_at": "2026-04-10T12:00:00Z",
@@ -4196,12 +4388,6 @@
               "null"
             ]
           },
-          "process_key": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
           "project": {
             "type": "string"
           },
@@ -4228,6 +4414,8 @@
           "id",
           "project_id",
           "deployment_instance_id",
+          "config_file_id",
+          "config",
           "action",
           "status",
           "reported_at"
@@ -4236,11 +4424,11 @@
           "action": {
             "type": "string"
           },
+          "config": {
+            "type": "string"
+          },
           "config_file_id": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": "integer",
             "format": "int64"
           },
           "deployment_instance_id": {
@@ -4253,12 +4441,6 @@
             "format": "int64"
           },
           "message": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "process_key": {
             "type": [
               "string",
               "null"
@@ -4290,6 +4472,7 @@
         },
         "example": {
           "action": "apply",
+          "config": "main",
           "config_file_id": 5,
           "deployment_instance_id": 3,
           "detail": {
@@ -4297,7 +4480,6 @@
           },
           "id": 88,
           "message": "config applied",
-          "process_key": "main",
           "project_id": 7,
           "release_id": 8,
           "reported_at": "2026-04-10T12:00:00Z",
@@ -4434,10 +4616,13 @@
           "project",
           "environment",
           "deployment_key",
-          "process_key",
+          "config",
           "metadata"
         ],
         "properties": {
+          "config": {
+            "type": "string"
+          },
           "deployment_key": {
             "type": "string"
           },
@@ -4449,9 +4634,6 @@
               "object",
               "null"
             ]
-          },
-          "process_key": {
-            "type": "string"
           },
           "project": {
             "type": "string"
@@ -4516,18 +4698,19 @@
       "ListDeploymentHeartbeatsParams": {
         "type": "object",
         "properties": {
-          "deployment_instance_id": {
+          "config_file_id": {
             "type": [
               "integer",
               "null"
             ],
             "format": "int64"
           },
-          "process_key": {
+          "deployment_instance_id": {
             "type": [
-              "string",
+              "integer",
               "null"
-            ]
+            ],
+            "format": "int64"
           },
           "project_id": {
             "type": [
@@ -4552,6 +4735,20 @@
               "string",
               "null"
             ]
+          },
+          "page": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "page_size": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
           },
           "project_id": {
             "type": [
@@ -4590,12 +4787,6 @@
               "null"
             ],
             "format": "int64"
-          },
-          "process_key": {
-            "type": [
-              "string",
-              "null"
-            ]
           },
           "project_id": {
             "type": [
@@ -5071,12 +5262,6 @@
           "environment": {
             "type": "string"
           },
-          "process_key": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
           "project": {
             "type": "string"
           }
@@ -5225,11 +5410,9 @@
       "UpdateDeploymentInstanceRequestBody": {
         "type": "object",
         "required": [
-          "project_id",
           "environment",
           "deployment_key",
-          "name",
-          "status"
+          "name"
         ],
         "properties": {
           "deployment_key": {
@@ -5244,20 +5427,7 @@
           "environment": {
             "type": "string"
           },
-          "is_template": {
-            "type": [
-              "boolean",
-              "null"
-            ]
-          },
           "name": {
-            "type": "string"
-          },
-          "project_id": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "status": {
             "type": "string"
           }
         }

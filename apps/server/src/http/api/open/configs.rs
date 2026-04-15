@@ -20,7 +20,6 @@ pub(crate) struct ResolveConfigQuery {
     environment: Option<String>,
     deployment_key: Option<String>,
     config: Option<String>,
-    process_key: Option<String>,
     current_revision: Option<String>,
 }
 
@@ -30,7 +29,6 @@ struct ValidatedResolveConfigQuery {
     environment: String,
     deployment_key: String,
     config: String,
-    process_key: Option<String>,
     current_revision: Option<String>,
 }
 
@@ -123,7 +121,6 @@ impl ResolveConfigQuery {
             environment: required(self.environment, "environment")?,
             deployment_key: required(self.deployment_key, "deployment_key")?,
             config: required(self.config, "config")?,
-            process_key: self.process_key,
             current_revision: self.current_revision,
         })
     }
@@ -285,8 +282,6 @@ fn resolve_response(
     deployment: DeploymentLookup,
     release: ReleaseLookup,
 ) -> Response {
-    let _ = &query.process_key;
-
     let body = ResolveConfigResponse {
         project: query.project,
         environment: query.environment,

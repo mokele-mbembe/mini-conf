@@ -18,7 +18,7 @@ pub(crate) struct HeartbeatRequest {
     project: Option<String>,
     environment: Option<String>,
     deployment_key: Option<String>,
-    process_key: Option<String>,
+    config: Option<String>,
     metadata: Option<serde_json::Value>,
     reported_at: Option<String>,
 }
@@ -28,7 +28,7 @@ struct ValidatedHeartbeatRequest {
     project: String,
     environment: String,
     deployment_key: String,
-    process_key: String,
+    config: String,
     metadata: Option<serde_json::Value>,
     reported_at: Option<String>,
 }
@@ -90,10 +90,17 @@ pub(crate) async fn report_heartbeat(
     })?;
     ensure_deployment_access(auth, deployment.deployment_id)?;
 
+    let config_file_id = find_config_file(pool, deployment.project_id, &payload.config)
+        .await?
+        .ok_or_else(|| {
+            ApiError::not_found_with("config_file_not_found", "config file not found")
+        })?;
+
     upsert_heartbeat(
         pool,
         deployment.project_id,
         deployment.deployment_id,
+        config_file_id,
         payload,
     )
     .await?;
@@ -107,7 +114,7 @@ impl HeartbeatRequest {
             project: required(self.project, "project")?,
             environment: required(self.environment, "environment")?,
             deployment_key: required(self.deployment_key, "deployment_key")?,
-            process_key: required(self.process_key, "process_key")?,
+            config: required(self.config, "config")?,
             metadata: self.metadata,
             reported_at: self.reported_at.filter(|value| !value.trim().is_empty()),
         })
@@ -137,7 +144,7 @@ fn invalid_body_message(field: &'static str) -> &'static str {
         "project" => "missing required body field: project",
         "environment" => "missing required body field: environment",
         "deployment_key" => "missing required body field: deployment_key",
-        "process_key" => "missing required body field: process_key",
+        "config" => "missing required body field: config",
         _ => "missing required body field",
     }
 }
@@ -173,10 +180,34 @@ async fn find_deployment(
     }))
 }
 
+async fn find_config_file(
+    pool: &sqlx::PgPool,
+    project_id: i64,
+    config: &str,
+) -> Result<Option<i64>, ApiError> {
+    let row = sqlx::query(
+        r#"
+        SELECT id
+        FROM config_files
+        WHERE project_id = $1
+          AND code = $2
+          AND status = 'active'
+        "#,
+    )
+    .bind(project_id)
+    .bind(config)
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| ApiError::internal())?;
+
+    Ok(row.map(|row| row.get("id")))
+}
+
 async fn upsert_heartbeat(
     pool: &sqlx::PgPool,
     project_id: i64,
     deployment_id: i64,
+    config_file_id: i64,
     payload: ValidatedHeartbeatRequest,
 ) -> Result<(), ApiError> {
     sqlx::query(
@@ -184,7 +215,7 @@ async fn upsert_heartbeat(
         INSERT INTO deployment_heartbeats (
             project_id,
             deployment_instance_id,
-            process_key,
+            config_file_id,
             metadata,
             reported_at
         ) VALUES (
@@ -194,7 +225,7 @@ async fn upsert_heartbeat(
             $4,
             COALESCE($5::timestamptz, NOW())
         )
-        ON CONFLICT (deployment_instance_id, process_key)
+        ON CONFLICT (deployment_instance_id, config_file_id)
         DO UPDATE SET
             metadata = EXCLUDED.metadata,
             reported_at = EXCLUDED.reported_at,
@@ -203,7 +234,7 @@ async fn upsert_heartbeat(
     )
     .bind(project_id)
     .bind(deployment_id)
-    .bind(payload.process_key)
+    .bind(config_file_id)
     .bind(payload.metadata.map(SqlxJson))
     .bind(payload.reported_at)
     .execute(pool)

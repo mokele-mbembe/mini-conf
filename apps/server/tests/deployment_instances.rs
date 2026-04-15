@@ -214,7 +214,7 @@ async fn list_deployment_instances_filters_by_project_and_environment() -> TestR
         VALUES
             ($1, 'prod', 'store-001', 'Store 001', false, 'active'),
             ($1, 'staging', 'store-stg', 'Store Staging', false, 'active'),
-            ($2, 'prod', 'store-ops', 'Store Ops', true, 'archived')
+            ($2, 'prod', 'store-ops', 'Store Ops', true, 'inactive')
         "#,
     )
     .bind(project_a)
@@ -238,6 +238,9 @@ async fn list_deployment_instances_filters_by_project_and_environment() -> TestR
     assert_eq!(response.status(), StatusCode::OK);
     let payload: DeploymentInstanceListResponse = read_json(response).await?;
     assert_eq!(payload.items.len(), 1);
+    assert_eq!(payload.total, 1);
+    assert_eq!(payload.page, 1);
+    assert_eq!(payload.page_size, 20);
     assert_eq!(payload.items[0].project_id, project_a);
     assert_eq!(payload.items[0].environment, "prod");
     assert_eq!(payload.items[0].deployment_key, "store-001");
@@ -256,7 +259,27 @@ async fn list_deployment_instances_filters_by_project_and_environment() -> TestR
     assert_eq!(keyword_response.status(), StatusCode::OK);
     let keyword_payload: DeploymentInstanceListResponse = read_json(keyword_response).await?;
     assert_eq!(keyword_payload.items.len(), 1);
+    assert_eq!(keyword_payload.total, 1);
     assert_eq!(keyword_payload.items[0].deployment_key, "store-001");
+
+    let paged_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/deployment-instances?project_id={project_a}&status=active&page=2&page_size=1"
+                ))
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(paged_response.status(), StatusCode::OK);
+    let paged_payload: DeploymentInstanceListResponse = read_json(paged_response).await?;
+    assert_eq!(paged_payload.total, 2);
+    assert_eq!(paged_payload.page, 2);
+    assert_eq!(paged_payload.page_size, 1);
+    assert_eq!(paged_payload.items.len(), 1);
+    assert_eq!(paged_payload.items[0].deployment_key, "store-stg");
 
     teardown(&database_url, &schema, pool).await
 }
@@ -294,6 +317,7 @@ async fn create_deployment_instance_creates_row() -> TestResult {
     assert_eq!(payload.environment, "prod");
     assert_eq!(payload.deployment_key, "store-001");
     assert!(!payload.is_template);
+    assert_eq!(payload.status, "inactive");
 
     let row = sqlx::query(
         "SELECT environment, deployment_key, name, is_template, status FROM deployment_instances WHERE id = $1",
@@ -305,7 +329,7 @@ async fn create_deployment_instance_creates_row() -> TestResult {
     assert_eq!(row.get::<String, _>("deployment_key"), "store-001");
     assert_eq!(row.get::<String, _>("name"), "Store 001");
     assert!(!row.get::<bool, _>("is_template"));
-    assert_eq!(row.get::<String, _>("status"), "active");
+    assert_eq!(row.get::<String, _>("status"), "inactive");
 
     teardown(&database_url, &schema, pool).await
 }
@@ -453,9 +477,9 @@ async fn update_deployment_instance_updates_existing_row() -> TestResult {
                 .uri(format!("/api/deployment-instances/{deployment_id}"))
                 .header(header::COOKIE, cookie)
                 .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(format!(
-                    r#"{{"project_id":{project_id},"environment":"staging","deployment_key":"store-stg","name":"Store Staging","description":"updated staging deployment","is_template":true,"status":"archived"}}"#
-                )))?,
+                .body(Body::from(
+                    r#"{"environment":"staging","deployment_key":"store-stg","name":"Store Staging","description":"updated staging deployment"}"#,
+                ))?,
         )
         .await?;
 
@@ -463,8 +487,8 @@ async fn update_deployment_instance_updates_existing_row() -> TestResult {
     let payload: DeploymentInstanceSummary = read_json(response).await?;
     assert_eq!(payload.environment, "staging");
     assert_eq!(payload.deployment_key, "store-stg");
-    assert!(payload.is_template);
-    assert_eq!(payload.status, "archived");
+    assert!(!payload.is_template);
+    assert_eq!(payload.status, "active");
 
     let row = sqlx::query(
         "SELECT environment, deployment_key, name, is_template, status FROM deployment_instances WHERE id = $1",
@@ -475,8 +499,51 @@ async fn update_deployment_instance_updates_existing_row() -> TestResult {
     assert_eq!(row.get::<String, _>("environment"), "staging");
     assert_eq!(row.get::<String, _>("deployment_key"), "store-stg");
     assert_eq!(row.get::<String, _>("name"), "Store Staging");
-    assert!(row.get::<bool, _>("is_template"));
-    assert_eq!(row.get::<String, _>("status"), "archived");
+    assert!(!row.get::<bool, _>("is_template"));
+    assert_eq!(row.get::<String, _>("status"), "active");
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn update_deployment_instance_rejects_immutable_fields() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    let project_id = seed_project(&pool, "coffee-legacy", "Coffee Legacy").await?;
+    let deployment_id: i64 = sqlx::query_scalar(
+        "INSERT INTO deployment_instances (project_id, environment, deployment_key, name, is_template, status) VALUES ($1, 'prod', 'store-001', 'Store 001', false, 'active') RETURNING id",
+    )
+    .bind(project_id)
+    .fetch_one(&pool)
+    .await?;
+
+    let cookie = login(&app).await?;
+    for body in [
+        format!(
+            r#"{{"project_id":{project_id},"environment":"prod","deployment_key":"store-001","name":"Store 001"}}"#
+        ),
+        r#"{"environment":"prod","deployment_key":"store-001","name":"Store 001","is_template":true}"#
+            .to_owned(),
+        r#"{"environment":"prod","deployment_key":"store-001","name":"Store 001","status":"inactive"}"#
+            .to_owned(),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri(format!("/api/deployment-instances/{deployment_id}"))
+                    .header(header::COOKIE, &cookie)
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(body))?,
+            )
+            .await?;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let payload: ErrorResponse = read_json(response).await?;
+        assert_eq!(payload.code, "invalid_request");
+    }
 
     teardown(&database_url, &schema, pool).await
 }
@@ -515,7 +582,7 @@ async fn deployment_instance_crud_flow_persists_changes_across_endpoints() -> Te
         .oneshot(
             Request::builder()
                 .uri(format!(
-                    "/api/deployment-instances?project_id={project_id}&environment=prod&status=active"
+                    "/api/deployment-instances?project_id={project_id}&environment=prod&status=inactive"
                 ))
                 .header(header::COOKIE, &cookie)
                 .body(Body::empty())?,
@@ -547,16 +614,16 @@ async fn deployment_instance_crud_flow_persists_changes_across_endpoints() -> Te
                 .uri(format!("/api/deployment-instances/{}", created.id))
                 .header(header::COOKIE, &cookie)
                 .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(format!(
-                    r#"{{"project_id":{project_id},"environment":"staging","deployment_key":"store-stg","name":"Store Staging","description":"updated staging deployment","is_template":true,"status":"archived"}}"#
-                )))?,
+                .body(Body::from(
+                    r#"{"environment":"staging","deployment_key":"store-stg","name":"Store Staging","description":"updated staging deployment"}"#,
+                ))?,
         )
         .await?;
     assert_eq!(update_response.status(), StatusCode::OK);
     let updated: DeploymentInstanceSummary = read_json(update_response).await?;
     assert_eq!(updated.environment, "staging");
     assert_eq!(updated.deployment_key, "store-stg");
-    assert_eq!(updated.status, "archived");
+    assert_eq!(updated.status, "inactive");
 
     let detail_after_update = app
         .oneshot(
@@ -570,7 +637,7 @@ async fn deployment_instance_crud_flow_persists_changes_across_endpoints() -> Te
     let detail_after_update: DeploymentInstanceSummary = read_json(detail_after_update).await?;
     assert_eq!(detail_after_update.environment, "staging");
     assert_eq!(detail_after_update.deployment_key, "store-stg");
-    assert_eq!(detail_after_update.status, "archived");
+    assert_eq!(detail_after_update.status, "inactive");
 
     let row = sqlx::query(
         "SELECT environment, deployment_key, status FROM deployment_instances WHERE id = $1",
@@ -580,7 +647,7 @@ async fn deployment_instance_crud_flow_persists_changes_across_endpoints() -> Te
     .await?;
     assert_eq!(row.get::<String, _>("environment"), "staging");
     assert_eq!(row.get::<String, _>("deployment_key"), "store-stg");
-    assert_eq!(row.get::<String, _>("status"), "archived");
+    assert_eq!(row.get::<String, _>("status"), "inactive");
 
     teardown(&database_url, &schema, pool).await
 }

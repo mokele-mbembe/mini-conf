@@ -57,8 +57,8 @@ async fn deployment_sync_records_list_is_scoped_to_visible_projects() -> TestRes
         .oneshot(
             Request::builder()
                 .uri(format!(
-                    "/api/deployment-sync-records?project_id={}&process_key=main",
-                    project.id
+                    "/api/deployment-sync-records?project_id={}&config_file_id={}",
+                    project.id, config_file_id
                 ))
                 .header(header::COOKIE, &viewer_cookie)
                 .body(Body::empty())?,
@@ -67,7 +67,8 @@ async fn deployment_sync_records_list_is_scoped_to_visible_projects() -> TestRes
     assert_eq!(response.status(), StatusCode::OK);
     let payload: DeploymentSyncRecordListResponse = read_json(response).await?;
     assert_eq!(payload.items.len(), 1);
-    assert_eq!(payload.items[0].process_key.as_deref(), Some("main"));
+    assert_eq!(payload.items[0].config_file_id, config_file_id);
+    assert_eq!(payload.items[0].config, "main");
 
     let outsider_cookie = login_as(&app, "outsider-sync", "outsider123").await?;
     let response = app

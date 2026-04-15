@@ -27,6 +27,8 @@ pub(crate) struct ListDeploymentInstancesQuery {
     environment: Option<String>,
     keyword: Option<String>,
     status: Option<String>,
+    page: Option<i64>,
+    page_size: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -50,25 +52,20 @@ struct ValidatedCreateDeploymentInstanceRequest {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct UpdateDeploymentInstanceRequest {
-    project_id: Option<i64>,
     environment: Option<String>,
     deployment_key: Option<String>,
     name: Option<String>,
     description: Option<String>,
-    is_template: Option<bool>,
-    status: Option<String>,
 }
 
 #[derive(Debug)]
 struct ValidatedUpdateDeploymentInstanceRequest {
-    project_id: i64,
     environment: String,
     deployment_key: String,
     name: String,
     description: Option<String>,
-    is_template: bool,
-    status: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -92,6 +89,13 @@ struct ValidatedCloneDeploymentInstanceRequest {
 struct TemplateDeploymentContext {
     project_id: i64,
     is_template: bool,
+}
+
+#[derive(Debug)]
+struct DeploymentLifecycleContext {
+    project_id: i64,
+    is_template: bool,
+    status: String,
 }
 
 #[derive(Debug)]
@@ -125,6 +129,14 @@ pub fn router() -> Router<AppState> {
             "/deployment-instances/{id}/token/reset",
             post(reset_deployment_token),
         )
+        .route(
+            "/deployment-instances/{id}/activate",
+            post(activate_deployment_instance),
+        )
+        .route(
+            "/deployment-instances/{id}/deactivate",
+            post(deactivate_deployment_instance),
+        )
 }
 
 #[utoipa::path(
@@ -155,6 +167,34 @@ pub(crate) async fn list_deployment_instances(
     };
 
     let auth = authenticate_user(pool, &headers).await?;
+    let (page, page_size) = validate_page(query.page, query.page_size)?;
+    let offset = (page - 1) * page_size;
+
+    let total = sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT COUNT(*)
+        FROM deployment_instances di
+        JOIN project_members pm
+          ON pm.project_id = di.project_id
+         AND pm.user_id = $1
+        WHERE ($2::bigint IS NULL OR di.project_id = $2)
+          AND ($3::varchar IS NULL OR di.environment = $3)
+          AND ($4::varchar IS NULL OR di.status = $4)
+          AND (
+                $5::varchar IS NULL
+                OR di.deployment_key ILIKE '%' || $5 || '%'
+                OR di.name ILIKE '%' || $5 || '%'
+          )
+        "#,
+    )
+    .bind(auth.user_id)
+    .bind(query.project_id)
+    .bind(normalize_optional(query.environment.clone()))
+    .bind(normalize_optional(query.status.clone()))
+    .bind(normalize_optional(query.keyword.clone()))
+    .fetch_one(pool)
+    .await
+    .map_err(|_| ApiError::internal())?;
 
     let rows = sqlx::query(
         r#"
@@ -182,8 +222,9 @@ pub(crate) async fn list_deployment_instances(
                 $5::varchar IS NULL
                 OR di.deployment_key ILIKE '%' || $5 || '%'
                 OR di.name ILIKE '%' || $5 || '%'
-          )
+        )
         ORDER BY di.project_id ASC, di.environment ASC, di.deployment_key ASC, di.id ASC
+        LIMIT $6 OFFSET $7
         "#,
     )
     .bind(auth.user_id)
@@ -191,12 +232,17 @@ pub(crate) async fn list_deployment_instances(
     .bind(normalize_optional(query.environment))
     .bind(normalize_optional(query.status))
     .bind(normalize_optional(query.keyword))
+    .bind(page_size)
+    .bind(offset)
     .fetch_all(pool)
     .await
     .map_err(|_| ApiError::internal())?;
 
     Ok(Json(DeploymentInstanceListResponse {
         items: rows.into_iter().map(map_deployment_row).collect(),
+        total,
+        page,
+        page_size,
     }))
 }
 
@@ -257,7 +303,7 @@ pub(crate) async fn create_deployment_instance(
             is_template,
             status
         )
-        VALUES ($1, $2, $3, $4, $5, $6, 'active')
+        VALUES ($1, $2, $3, $4, $5, $6, 'inactive')
         RETURNING
             id,
             project_id,
@@ -434,30 +480,16 @@ pub(crate) async fn update_deployment_instance(
         "deployment instance not found",
     )
     .await?;
-    if payload.project_id != existing_project_id {
-        require_project_role(
-            pool,
-            auth.user_id,
-            payload.project_id,
-            ProjectRole::Admin,
-            "project_not_found",
-            "project not found",
-        )
-        .await?;
-    }
 
     let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
     let row = sqlx::query(
         r#"
         UPDATE deployment_instances
         SET
-            project_id = $2,
-            environment = $3,
-            deployment_key = $4,
-            name = $5,
-            description = $6,
-            is_template = $7,
-            status = $8,
+            environment = $2,
+            deployment_key = $3,
+            name = $4,
+            description = $5,
             updated_at = NOW()
         WHERE id = $1
         RETURNING
@@ -473,13 +505,10 @@ pub(crate) async fn update_deployment_instance(
         "#,
     )
     .bind(id)
-    .bind(payload.project_id)
     .bind(payload.environment)
     .bind(payload.deployment_key)
     .bind(payload.name)
     .bind(payload.description)
-    .bind(payload.is_template)
-    .bind(payload.status)
     .fetch_optional(&mut *tx)
     .await
     .map_err(map_deployment_write_error)?
@@ -501,7 +530,7 @@ pub(crate) async fn update_deployment_instance(
             resource_id: summary.id.to_string(),
             detail: Some(serde_json::json!({
                 "deployment_instance_id": summary.id,
-                "changed_fields": ["environment", "deployment_key", "name", "description", "is_template", "status"]
+                "changed_fields": ["environment", "deployment_key", "name", "description"]
             })),
         },
     )
@@ -581,7 +610,7 @@ pub(crate) async fn clone_deployment_instance(
             template_source_id,
             status
         )
-        VALUES ($1, $2, $3, $4, $5, FALSE, $6, 'active')
+        VALUES ($1, $2, $3, $4, $5, FALSE, $6, 'inactive')
         RETURNING
             id,
             project_id,
@@ -833,17 +862,23 @@ pub(crate) async fn reset_deployment_token(
     };
 
     let auth = authenticate_user(pool, &headers).await?;
-    let (project_id, deployment_status) = load_deployment_project(pool, id).await?;
+    let context = load_deployment_context(pool, id).await?;
     require_project_role(
         pool,
         auth.user_id,
-        project_id,
+        context.project_id,
         ProjectRole::Admin,
         "deployment_instance_not_found",
         "deployment instance not found",
     )
     .await?;
-    if deployment_status != "active" {
+    if context.is_template {
+        return Err(ApiError::conflict(
+            "deployment_instance_template_token_forbidden",
+            "template deployment instances cannot reset tokens",
+        ));
+    }
+    if context.status != "active" {
         return Err(ApiError::conflict(
             "deployment_instance_inactive",
             "deployment instance is not active",
@@ -862,7 +897,7 @@ pub(crate) async fn reset_deployment_token(
     write_audit_log(
         pool,
         AuditLogEntry {
-            project_id: Some(project_id),
+            project_id: Some(context.project_id),
             user_id: Some(auth.user_id),
             action: "deployment_token.reset",
             resource_type: "deployment_instance",
@@ -876,6 +911,202 @@ pub(crate) async fn reset_deployment_token(
     .await?;
 
     Ok(Json(response))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/deployment-instances/{id}/activate",
+    tag = "admin",
+    params(
+        ("id" = i64, Path, description = "Deployment instance ID")
+    ),
+    security(
+        ("session_auth" = [])
+    ),
+    responses(
+        (status = 200, description = "Deployment activated and token issued", body = DeploymentTokenResetResponse),
+        (status = 401, description = "Missing or expired admin session", body = crate::error::ErrorResponse),
+        (status = 404, description = "Deployment instance not found", body = crate::error::ErrorResponse),
+        (status = 409, description = "Deployment instance cannot be activated", body = crate::error::ErrorResponse),
+        (status = 503, description = "Database bootstrap disabled", body = crate::error::ErrorResponse),
+        (status = 500, description = "Internal server error", body = crate::error::ErrorResponse),
+    )
+)]
+pub(crate) async fn activate_deployment_instance(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    headers: HeaderMap,
+) -> Result<Json<DeploymentTokenResetResponse>, ApiError> {
+    let Some(pool) = state.db_pool() else {
+        return Err(ApiError::service_unavailable(
+            "database_unavailable",
+            "Database bootstrap is disabled",
+        ));
+    };
+
+    let auth = authenticate_user(pool, &headers).await?;
+    let context = load_deployment_context(pool, id).await?;
+    require_project_role(
+        pool,
+        auth.user_id,
+        context.project_id,
+        ProjectRole::Admin,
+        "deployment_instance_not_found",
+        "deployment instance not found",
+    )
+    .await?;
+    if context.is_template {
+        return Err(ApiError::conflict(
+            "deployment_instance_template_activate_forbidden",
+            "template deployment instances cannot be activated",
+        ));
+    }
+    if context.status != "inactive" {
+        return Err(ApiError::conflict(
+            "deployment_instance_activate_conflict",
+            "deployment instance must be inactive before activation",
+        ));
+    }
+
+    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    sqlx::query(
+        r#"
+        UPDATE deployment_instances
+        SET status = 'active', updated_at = NOW()
+        WHERE id = $1
+        "#,
+    )
+    .bind(id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|_| ApiError::internal())?;
+
+    let token = generate_deployment_token();
+    let token_hash = hash_bearer_token(&token);
+    let credential_name =
+        upsert_default_deployment_credential_in_tx(&mut tx, id, &token_hash).await?;
+    let response = DeploymentTokenResetResponse {
+        deployment_instance_id: id,
+        credential_name,
+        token_preview: deployment_token_preview(&token),
+        token,
+    };
+    write_audit_log(
+        &mut *tx,
+        AuditLogEntry {
+            project_id: Some(context.project_id),
+            user_id: Some(auth.user_id),
+            action: "deployment_instance.activated",
+            resource_type: "deployment_instance",
+            resource_id: id.to_string(),
+            detail: Some(serde_json::json!({
+                "deployment_instance_id": id,
+                "token_preview": response.token_preview,
+            })),
+        },
+    )
+    .await?;
+    tx.commit().await.map_err(|_| ApiError::internal())?;
+
+    Ok(Json(response))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/deployment-instances/{id}/deactivate",
+    tag = "admin",
+    params(
+        ("id" = i64, Path, description = "Deployment instance ID")
+    ),
+    security(
+        ("session_auth" = [])
+    ),
+    responses(
+        (status = 204, description = "Deployment deactivated"),
+        (status = 401, description = "Missing or expired admin session", body = crate::error::ErrorResponse),
+        (status = 404, description = "Deployment instance not found", body = crate::error::ErrorResponse),
+        (status = 409, description = "Deployment instance cannot be deactivated", body = crate::error::ErrorResponse),
+        (status = 503, description = "Database bootstrap disabled", body = crate::error::ErrorResponse),
+        (status = 500, description = "Internal server error", body = crate::error::ErrorResponse),
+    )
+)]
+pub(crate) async fn deactivate_deployment_instance(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    headers: HeaderMap,
+) -> Result<StatusCode, ApiError> {
+    let Some(pool) = state.db_pool() else {
+        return Err(ApiError::service_unavailable(
+            "database_unavailable",
+            "Database bootstrap is disabled",
+        ));
+    };
+
+    let auth = authenticate_user(pool, &headers).await?;
+    let context = load_deployment_context(pool, id).await?;
+    require_project_role(
+        pool,
+        auth.user_id,
+        context.project_id,
+        ProjectRole::Admin,
+        "deployment_instance_not_found",
+        "deployment instance not found",
+    )
+    .await?;
+    if context.is_template {
+        return Err(ApiError::conflict(
+            "deployment_instance_template_deactivate_forbidden",
+            "template deployment instances cannot be deactivated",
+        ));
+    }
+    if context.status != "active" {
+        return Err(ApiError::conflict(
+            "deployment_instance_deactivate_conflict",
+            "deployment instance must be active before deactivation",
+        ));
+    }
+
+    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    sqlx::query(
+        r#"
+        UPDATE deployment_instances
+        SET status = 'inactive', updated_at = NOW()
+        WHERE id = $1
+        "#,
+    )
+    .bind(id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|_| ApiError::internal())?;
+    sqlx::query(
+        r#"
+        UPDATE deployment_credentials
+        SET status = 'inactive', updated_at = NOW()
+        WHERE deployment_instance_id = $1
+          AND credential_name = 'default'
+        "#,
+    )
+    .bind(id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|_| ApiError::internal())?;
+    write_audit_log(
+        &mut *tx,
+        AuditLogEntry {
+            project_id: Some(context.project_id),
+            user_id: Some(auth.user_id),
+            action: "deployment_instance.deactivated",
+            resource_type: "deployment_instance",
+            resource_id: id.to_string(),
+            detail: Some(serde_json::json!({
+                "deployment_instance_id": id,
+            })),
+        },
+    )
+    .await?;
+    tx.commit().await.map_err(|_| ApiError::internal())?;
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 impl CreateDeploymentInstanceRequest {
@@ -894,13 +1125,10 @@ impl CreateDeploymentInstanceRequest {
 impl UpdateDeploymentInstanceRequest {
     fn validate(self) -> Result<ValidatedUpdateDeploymentInstanceRequest, ApiError> {
         Ok(ValidatedUpdateDeploymentInstanceRequest {
-            project_id: required_i64(self.project_id, "project_id")?,
             environment: required(self.environment, "environment")?,
             deployment_key: required(self.deployment_key, "deployment_key")?,
             name: required(self.name, "name")?,
             description: normalize_optional(self.description),
-            is_template: self.is_template.unwrap_or(false),
-            status: validate_status(self.status)?,
         })
     }
 }
@@ -980,10 +1208,13 @@ async fn load_template_context(
     })
 }
 
-async fn load_deployment_project(pool: &sqlx::PgPool, id: i64) -> Result<(i64, String), ApiError> {
+async fn load_deployment_context(
+    pool: &sqlx::PgPool,
+    id: i64,
+) -> Result<DeploymentLifecycleContext, ApiError> {
     let row = sqlx::query(
         r#"
-        SELECT project_id, status
+        SELECT project_id, is_template, status
         FROM deployment_instances
         WHERE id = $1
         LIMIT 1
@@ -1000,7 +1231,11 @@ async fn load_deployment_project(pool: &sqlx::PgPool, id: i64) -> Result<(i64, S
         )
     })?;
 
-    Ok((row.get("project_id"), row.get("status")))
+    Ok(DeploymentLifecycleContext {
+        project_id: row.get("project_id"),
+        is_template: row.get("is_template"),
+        status: row.get("status"),
+    })
 }
 
 async fn upsert_default_deployment_credential(
@@ -1030,6 +1265,39 @@ async fn upsert_default_deployment_credential(
     .bind(deployment_id)
     .bind(token_hash)
     .fetch_one(pool)
+    .await
+    .map_err(|_| ApiError::internal())?;
+
+    Ok(row.get("credential_name"))
+}
+
+async fn upsert_default_deployment_credential_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    deployment_id: i64,
+    token_hash: &str,
+) -> Result<String, ApiError> {
+    let row = sqlx::query(
+        r#"
+        INSERT INTO deployment_credentials (
+            deployment_instance_id,
+            credential_name,
+            token_hash,
+            status,
+            last_used_at
+        )
+        VALUES ($1, 'default', $2, 'active', NULL)
+        ON CONFLICT (deployment_instance_id, credential_name)
+        DO UPDATE SET
+            token_hash = EXCLUDED.token_hash,
+            status = 'active',
+            last_used_at = NULL,
+            updated_at = NOW()
+        RETURNING credential_name
+        "#,
+    )
+    .bind(deployment_id)
+    .bind(token_hash)
+    .fetch_one(&mut **tx)
     .await
     .map_err(|_| ApiError::internal())?;
 
@@ -1130,6 +1398,25 @@ fn required_i64(value: Option<i64>, field: &'static str) -> Result<i64, ApiError
     value.ok_or_else(|| ApiError::bad_request("invalid_request", invalid_body_message(field)))
 }
 
+fn validate_page(page: Option<i64>, page_size: Option<i64>) -> Result<(i64, i64), ApiError> {
+    let page = page.unwrap_or(1);
+    let page_size = page_size.unwrap_or(20);
+    if page < 1 {
+        return Err(ApiError::bad_request(
+            "invalid_request",
+            "page must be greater than or equal to 1",
+        ));
+    }
+    if !(1..=100).contains(&page_size) {
+        return Err(ApiError::bad_request(
+            "invalid_request",
+            "page_size must be between 1 and 100",
+        ));
+    }
+
+    Ok((page, page_size))
+}
+
 fn normalize_optional(value: Option<String>) -> Option<String> {
     value.and_then(|value| {
         let trimmed = value.trim();
@@ -1148,25 +1435,7 @@ fn invalid_body_message(field: &'static str) -> &'static str {
         "deployment_key" => "missing required body field: deployment_key",
         "name" => "missing required body field: name",
         "clone_source" => "missing required body field: clone_source",
-        "status" => "missing required body field: status",
         _ => "missing required body field",
-    }
-}
-
-fn validate_status(value: Option<String>) -> Result<String, ApiError> {
-    let Some(value) = normalize_optional(value) else {
-        return Err(ApiError::bad_request(
-            "invalid_request",
-            invalid_body_message("status"),
-        ));
-    };
-
-    match value.as_str() {
-        "active" | "archived" => Ok(value),
-        _ => Err(ApiError::bad_request(
-            "invalid_request",
-            "invalid deployment instance status",
-        )),
     }
 }
 

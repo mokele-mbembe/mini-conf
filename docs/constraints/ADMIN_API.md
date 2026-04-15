@@ -225,6 +225,23 @@
 - `keyword`
 - `status`
 
+响应：
+
+```json
+{
+  "items": [],
+  "total": 0,
+  "page": 1,
+  "page_size": 20
+}
+```
+
+说明：
+
+- `page` 默认 `1`
+- `page_size` 默认 `20`，最大 `100`
+- `status` 仅支持 `active`、`inactive`
+
 ### `POST /api/deployment-instances`
 
 请求体：
@@ -243,6 +260,23 @@
 ### `GET /api/deployment-instances/:id`
 
 ### `PUT /api/deployment-instances/:id`
+
+请求体：
+
+```json
+{
+  "environment": "prod",
+  "deployment_key": "store-001",
+  "name": "Store 001",
+  "description": "hangzhou store 001"
+}
+```
+
+说明：
+
+- 只允许修改 `environment`、`deployment_key`、`name`、`description`
+- `project_id`、`is_template`、`status` 创建后不可通过 `PUT` 修改
+- 部署实例创建后默认 `inactive`
 
 ### `POST /api/deployment-instances/:id/clone`
 
@@ -266,6 +300,7 @@
 - `clone_source` 首版只支持 `draft`
 - 克隆完成后与模板不联动
 - Template 本身不可发布，只用于创建实例
+- 克隆出的普通实例默认 `inactive`
 - `GET` 需要项目成员身份
 - `POST / PUT / clone` 仅项目 `admin` 可调用
 
@@ -386,6 +421,33 @@
 
 ## 13. Deployment Credential API
 
+### `POST /api/deployment-instances/:id/activate`
+
+用途：
+
+- 激活普通部署实例，并生成或覆盖默认 token
+
+成功响应与 token reset 相同，`token` 明文只返回一次。
+
+行为约定：
+
+- 仅项目 `admin` 可调用
+- 仅普通实例可激活，模板返回 `409 deployment_instance_template_activate_forbidden`
+- 仅允许 `inactive -> active`
+- 激活时生成或覆盖默认凭证
+
+### `POST /api/deployment-instances/:id/deactivate`
+
+用途：
+
+- 停用普通部署实例，使 Open API 立即不可消费
+
+行为约定：
+
+- 仅项目 `admin` 可调用
+- 仅允许 `active -> inactive`
+- 同时将默认凭证置为非 active，使旧 token 立即失效
+
 ### `POST /api/deployment-instances/:id/token/reset`
 
 用途：
@@ -410,6 +472,7 @@
 - 如果实例已经有默认凭证，则原地覆盖 `token_hash`
 - reset 成功后旧 token 立即失效，新 token 立即生效
 - `token` 明文只在响应里返回一次
+- 仅允许 `active` 普通实例调用
 - 仅项目 `admin` 可调用
 
 ## 14. Deployment Sync Record API
@@ -421,7 +484,6 @@
 - `project_id`
 - `deployment_instance_id`
 - `config_file_id`
-- `process_key`
 - `action`
 - `status`
 
@@ -440,8 +502,8 @@
       "project_id": 7,
       "deployment_instance_id": 3,
       "config_file_id": 5,
+      "config": "main",
       "release_id": 8,
-      "process_key": "main",
       "revision": "20260410.0001",
       "action": "apply",
       "status": "success",
@@ -456,6 +518,43 @@
 ```
 
 ## 15. Audit Log API
+
+### `GET /api/deployment-heartbeats`
+
+查询参数：
+
+- `project_id`
+- `deployment_instance_id`
+- `config_file_id`
+
+说明：
+
+- 仅返回当前登录用户可见项目内的最近心跳
+- 同一个 `deployment_instance_id + config_file_id` 只保留最近一次
+- 项目 `admin / editor / viewer` 都可查看
+
+成功响应示例：
+
+```json
+{
+  "items": [
+    {
+      "id": 91,
+      "project_id": 7,
+      "deployment_instance_id": 3,
+      "config_file_id": 5,
+      "config": "main",
+      "metadata": {
+        "version": "1.0.3"
+      },
+      "reported_at": "2026-04-10T12:01:00Z",
+      "updated_at": "2026-04-10T12:01:00Z"
+    }
+  ]
+}
+```
+
+## 16. Audit Log API
 
 ### `GET /api/audit-logs`
 
@@ -494,7 +593,7 @@
 }
 ```
 
-## 16. 状态码建议
+## 17. 状态码建议
 
 - `200 OK`
 - `201 Created`
