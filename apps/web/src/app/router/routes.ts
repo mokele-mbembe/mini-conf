@@ -9,6 +9,7 @@ import ProjectListPage from "@/modules/projects/pages/ProjectListPage.vue";
 import ProjectOverviewPage from "@/modules/projects/pages/ProjectOverviewPage.vue";
 import ProjectSectionPlaceholderPage from "@/modules/projects/pages/ProjectSectionPlaceholderPage.vue";
 import ConfigFileListPage from "@/modules/config-files/pages/ConfigFileListPage.vue";
+import ProjectEnvironmentListPage from "@/modules/project-environments/pages/ProjectEnvironmentListPage.vue";
 import DeploymentInstanceListPage from "@/modules/deployments/pages/DeploymentInstanceListPage.vue";
 import DeploymentInstanceDetailPage from "@/modules/deployments/pages/DeploymentInstanceDetailPage.vue";
 
@@ -49,6 +50,11 @@ export const routes: RouteRecordRaw[] = [
         path: ROUTE_PATHS.CONFIG_FILE_LIST,
         name: ROUTE_NAMES.CONFIG_FILE_LIST,
         component: ConfigFileListPage,
+      },
+      {
+        path: ROUTE_PATHS.PROJECT_ENVIRONMENT_LIST,
+        name: ROUTE_NAMES.PROJECT_ENVIRONMENT_LIST,
+        component: ProjectEnvironmentListPage,
       },
       {
         path: ROUTE_PATHS.DEPLOYMENT_LIST,

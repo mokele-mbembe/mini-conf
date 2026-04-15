@@ -166,21 +166,38 @@ async fn seed_project_config_deployment_with_format(
     .bind(secret_paths)
     .fetch_one(pool)
     .await?;
+    let environment_id: i64 = sqlx::query_scalar(
+        r#"
+        INSERT INTO project_environments (
+            project_id,
+            code,
+            name,
+            status,
+            sort_order
+        )
+        VALUES ($1, 'prod', 'Production', 'active', 10)
+        RETURNING id
+        "#,
+    )
+    .bind(project_id)
+    .fetch_one(pool)
+    .await?;
     let deployment_id: i64 = sqlx::query_scalar(
         r#"
         INSERT INTO deployment_instances (
             project_id,
-            environment,
+            environment_id,
             deployment_key,
             name,
             is_template,
             status
         )
-        VALUES ($1, 'prod', 'store-001', 'Store 001', false, 'active')
+        VALUES ($1, $2, 'store-001', 'Store 001', false, 'active')
         RETURNING id
         "#,
     )
     .bind(project_id)
+    .bind(environment_id)
     .fetch_one(pool)
     .await?;
 
@@ -192,21 +209,43 @@ async fn seed_template_deployment(
     project_id: i64,
     deployment_key: &str,
 ) -> TestResult<i64> {
+    let environment_id: i64 = sqlx::query_scalar(
+        r#"
+        INSERT INTO project_environments (
+            project_id,
+            code,
+            name,
+            status,
+            sort_order
+        )
+        VALUES ($1, 'prod', 'Production', 'active', 10)
+        ON CONFLICT (project_id, code)
+        DO UPDATE SET
+            name = EXCLUDED.name,
+            status = EXCLUDED.status,
+            updated_at = NOW()
+        RETURNING id
+        "#,
+    )
+    .bind(project_id)
+    .fetch_one(pool)
+    .await?;
     let deployment_id: i64 = sqlx::query_scalar(
         r#"
         INSERT INTO deployment_instances (
             project_id,
-            environment,
+            environment_id,
             deployment_key,
             name,
             is_template,
             status
         )
-        VALUES ($1, 'prod', $2, $3, true, 'active')
+        VALUES ($1, $2, $3, $4, true, 'active')
         RETURNING id
         "#,
     )
     .bind(project_id)
+    .bind(environment_id)
     .bind(deployment_key)
     .bind(format!("{deployment_key} template"))
     .fetch_one(pool)
@@ -450,6 +489,12 @@ async fn publish_release_succeeds_for_template_clone_target() -> TestResult {
     .fetch_one(&pool)
     .await?;
     let template_id = seed_template_deployment(&pool, project_id, "alpha-template").await?;
+    let environment_id: i64 = sqlx::query_scalar(
+        "SELECT id FROM project_environments WHERE project_id = $1 AND code = 'prod' LIMIT 1",
+    )
+    .bind(project_id)
+    .fetch_one(&pool)
+    .await?;
 
     let cookie = login(&app).await?;
     let _ = save_draft(
@@ -471,9 +516,9 @@ async fn publish_release_succeeds_for_template_clone_target() -> TestResult {
                 .uri(format!("/api/deployment-instances/{template_id}/clone"))
                 .header(header::COOKIE, &cookie)
                 .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    r#"{"deployment_key":"alpha-store-001","name":"Alpha Store 001","environment":"prod","clone_source":"draft"}"#,
-                ))?,
+                .body(Body::from(format!(
+                    r#"{{"deployment_key":"alpha-store-001","name":"Alpha Store 001","environment_id":{environment_id},"clone_source":"draft"}}"#
+                )))?,
         )
         .await?;
     assert_eq!(clone_response.status(), StatusCode::CREATED);
@@ -545,21 +590,28 @@ async fn list_releases_filters_by_deployment_instance() -> TestResult {
         return Ok(());
     };
     let (project_id, config_file_id, deployment_id) = seed_project_config_deployment(&pool).await?;
+    let environment_id: i64 = sqlx::query_scalar(
+        "SELECT id FROM project_environments WHERE project_id = $1 AND code = 'prod' LIMIT 1",
+    )
+    .bind(project_id)
+    .fetch_one(&pool)
+    .await?;
     let second_deployment_id: i64 = sqlx::query_scalar(
         r#"
         INSERT INTO deployment_instances (
             project_id,
-            environment,
+            environment_id,
             deployment_key,
             name,
             is_template,
             status
         )
-        VALUES ($1, 'prod', 'store-002', 'Store 002', false, 'active')
+        VALUES ($1, $2, 'store-002', 'Store 002', false, 'active')
         RETURNING id
         "#,
     )
     .bind(project_id)
+    .bind(environment_id)
     .fetch_one(&pool)
     .await?;
     let cookie = login(&app).await?;

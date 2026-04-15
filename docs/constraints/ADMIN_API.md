@@ -212,14 +212,45 @@
 - `GET` 需要项目成员身份
 - `POST / PUT` 仅项目 `admin` 可调用
 
-## 10. Deployment Instance API
+## 10. Project Environment API
+
+### `GET /api/projects/:id/environments`
+
+### `POST /api/projects/:id/environments`
+
+请求体：
+
+```json
+{
+  "code": "prod",
+  "name": "Production",
+  "description": "primary environment",
+  "status": "active",
+  "sort_order": 10
+}
+```
+
+### `GET /api/projects/:id/environments/:environmentId`
+
+### `PUT /api/projects/:id/environments/:environmentId`
+
+### `DELETE /api/projects/:id/environments/:environmentId`
+
+说明：
+
+- 环境是项目级对象，不做跨项目共享
+- `code` 创建后不可修改
+- 被部署实例引用的环境删除时返回 `409 project_environment_in_use`
+- `POST / PUT / DELETE` 仅项目 `admin` 可调用
+
+## 11. Deployment Instance API
 
 ### `GET /api/deployment-instances`
 
 查询参数：
 
 - `project_id`
-- `environment`
+- `environment_id`
 - `page`
 - `page_size`
 - `keyword`
@@ -249,7 +280,7 @@
 ```json
 {
   "project_id": 1,
-  "environment": "prod",
+  "environment_id": 11,
   "deployment_key": "store-001",
   "name": "Store 001",
   "description": "hangzhou store 001",
@@ -265,7 +296,7 @@
 
 ```json
 {
-  "environment": "prod",
+  "environment_id": 11,
   "deployment_key": "store-001",
   "name": "Store 001",
   "description": "hangzhou store 001"
@@ -274,9 +305,10 @@
 
 说明：
 
-- 只允许修改 `environment`、`deployment_key`、`name`、`description`
+- 只允许修改 `environment_id`、`deployment_key`、`name`、`description`
 - `project_id`、`is_template`、`status` 创建后不可通过 `PUT` 修改
 - 部署实例创建后默认 `inactive`
+- 响应返回 `environment_id`、`environment_code`、`environment_name`
 
 ### `POST /api/deployment-instances/:id/clone`
 
@@ -290,7 +322,7 @@
 {
   "deployment_key": "store-002",
   "name": "Store 002",
-  "environment": "prod",
+  "environment_id": 11,
   "clone_source": "draft"
 }
 ```
@@ -304,7 +336,7 @@
 - `GET` 需要项目成员身份
 - `POST / PUT / clone` 仅项目 `admin` 可调用
 
-## 11. Draft API
+## 12. Draft API
 
 ### `GET /api/drafts/:deploymentId/:configFileId`
 

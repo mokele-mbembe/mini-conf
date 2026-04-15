@@ -24,7 +24,7 @@ use sqlx::{Error as SqlxError, Row};
 #[derive(Debug, Deserialize)]
 pub(crate) struct ListDeploymentInstancesQuery {
     project_id: Option<i64>,
-    environment: Option<String>,
+    environment_id: Option<i64>,
     keyword: Option<String>,
     status: Option<String>,
     page: Option<i64>,
@@ -34,7 +34,7 @@ pub(crate) struct ListDeploymentInstancesQuery {
 #[derive(Debug, Deserialize)]
 pub(crate) struct CreateDeploymentInstanceRequest {
     project_id: Option<i64>,
-    environment: Option<String>,
+    environment_id: Option<i64>,
     deployment_key: Option<String>,
     name: Option<String>,
     description: Option<String>,
@@ -44,7 +44,7 @@ pub(crate) struct CreateDeploymentInstanceRequest {
 #[derive(Debug)]
 struct ValidatedCreateDeploymentInstanceRequest {
     project_id: i64,
-    environment: String,
+    environment_id: i64,
     deployment_key: String,
     name: String,
     description: Option<String>,
@@ -54,7 +54,7 @@ struct ValidatedCreateDeploymentInstanceRequest {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct UpdateDeploymentInstanceRequest {
-    environment: Option<String>,
+    environment_id: Option<i64>,
     deployment_key: Option<String>,
     name: Option<String>,
     description: Option<String>,
@@ -62,7 +62,7 @@ pub(crate) struct UpdateDeploymentInstanceRequest {
 
 #[derive(Debug)]
 struct ValidatedUpdateDeploymentInstanceRequest {
-    environment: String,
+    environment_id: i64,
     deployment_key: String,
     name: String,
     description: Option<String>,
@@ -72,7 +72,7 @@ struct ValidatedUpdateDeploymentInstanceRequest {
 pub(crate) struct CloneDeploymentInstanceRequest {
     deployment_key: Option<String>,
     name: Option<String>,
-    environment: Option<String>,
+    environment_id: Option<i64>,
     description: Option<String>,
     clone_source: Option<String>,
 }
@@ -81,7 +81,7 @@ pub(crate) struct CloneDeploymentInstanceRequest {
 struct ValidatedCloneDeploymentInstanceRequest {
     deployment_key: String,
     name: String,
-    environment: String,
+    environment_id: i64,
     description: Option<String>,
 }
 
@@ -102,9 +102,16 @@ struct DeploymentLifecycleContext {
 struct PreviewDeploymentContext {
     project_id: i64,
     project_code: String,
-    environment: String,
+    environment_code: String,
     deployment_key: String,
     deployment_name: String,
+}
+
+#[derive(Debug)]
+struct ProjectEnvironmentAssignmentContext {
+    code: String,
+    name: String,
+    status: String,
 }
 
 pub fn router() -> Router<AppState> {
@@ -174,11 +181,14 @@ pub(crate) async fn list_deployment_instances(
         r#"
         SELECT COUNT(*)
         FROM deployment_instances di
+        JOIN project_environments pe
+          ON pe.project_id = di.project_id
+         AND pe.id = di.environment_id
         JOIN project_members pm
           ON pm.project_id = di.project_id
          AND pm.user_id = $1
         WHERE ($2::bigint IS NULL OR di.project_id = $2)
-          AND ($3::varchar IS NULL OR di.environment = $3)
+          AND ($3::bigint IS NULL OR di.environment_id = $3)
           AND ($4::varchar IS NULL OR di.status = $4)
           AND (
                 $5::varchar IS NULL
@@ -189,7 +199,7 @@ pub(crate) async fn list_deployment_instances(
     )
     .bind(auth.user_id)
     .bind(query.project_id)
-    .bind(normalize_optional(query.environment.clone()))
+    .bind(query.environment_id)
     .bind(normalize_optional(query.status.clone()))
     .bind(normalize_optional(query.keyword.clone()))
     .fetch_one(pool)
@@ -201,7 +211,9 @@ pub(crate) async fn list_deployment_instances(
         SELECT
             di.id,
             di.project_id,
-            di.environment,
+            di.environment_id,
+            pe.code AS environment_code,
+            pe.name AS environment_name,
             di.deployment_key,
             di.name,
             di.description,
@@ -209,11 +221,14 @@ pub(crate) async fn list_deployment_instances(
             di.template_source_id,
             di.status
         FROM deployment_instances di
+        JOIN project_environments pe
+          ON pe.project_id = di.project_id
+         AND pe.id = di.environment_id
         JOIN project_members pm
           ON pm.project_id = di.project_id
          AND pm.user_id = $1
         WHERE ($2::bigint IS NULL OR di.project_id = $2)
-          AND ($3::varchar IS NULL OR di.environment = $3)
+          AND ($3::bigint IS NULL OR di.environment_id = $3)
           AND (
                 $4::varchar IS NULL
                 OR di.status = $4
@@ -223,13 +238,13 @@ pub(crate) async fn list_deployment_instances(
                 OR di.deployment_key ILIKE '%' || $5 || '%'
                 OR di.name ILIKE '%' || $5 || '%'
         )
-        ORDER BY di.project_id ASC, di.environment ASC, di.deployment_key ASC, di.id ASC
+        ORDER BY di.project_id ASC, pe.code ASC, di.deployment_key ASC, di.id ASC
         LIMIT $6 OFFSET $7
         "#,
     )
     .bind(auth.user_id)
     .bind(query.project_id)
-    .bind(normalize_optional(query.environment))
+    .bind(query.environment_id)
     .bind(normalize_optional(query.status))
     .bind(normalize_optional(query.keyword))
     .bind(page_size)
@@ -259,7 +274,7 @@ pub(crate) async fn list_deployment_instances(
         (status = 400, description = "Invalid request body", body = crate::error::ErrorResponse),
         (status = 401, description = "Missing or expired admin session", body = crate::error::ErrorResponse),
         (status = 404, description = "Project not found", body = crate::error::ErrorResponse),
-        (status = 409, description = "Deployment key already exists within the project/environment", body = crate::error::ErrorResponse),
+        (status = 409, description = "Deployment key already exists within the project/environment or the environment is inactive", body = crate::error::ErrorResponse),
         (status = 503, description = "Database bootstrap disabled", body = crate::error::ErrorResponse),
         (status = 500, description = "Internal server error", body = crate::error::ErrorResponse),
     )
@@ -290,13 +305,22 @@ pub(crate) async fn create_deployment_instance(
         "project not found",
     )
     .await?;
+    let environment =
+        load_project_environment_for_assignment(pool, payload.project_id, payload.environment_id)
+            .await?;
+    if environment.status != "active" {
+        return Err(ApiError::conflict(
+            "project_environment_inactive",
+            "project environment is inactive",
+        ));
+    }
 
     let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
     let row = sqlx::query(
         r#"
         INSERT INTO deployment_instances (
             project_id,
-            environment,
+            environment_id,
             deployment_key,
             name,
             description,
@@ -307,7 +331,9 @@ pub(crate) async fn create_deployment_instance(
         RETURNING
             id,
             project_id,
-            environment,
+            environment_id,
+            $7::varchar AS environment_code,
+            $8::varchar AS environment_name,
             deployment_key,
             name,
             description,
@@ -317,11 +343,13 @@ pub(crate) async fn create_deployment_instance(
         "#,
     )
     .bind(payload.project_id)
-    .bind(payload.environment)
+    .bind(payload.environment_id)
     .bind(payload.deployment_key)
     .bind(payload.name)
     .bind(payload.description)
     .bind(payload.is_template)
+    .bind(environment.code)
+    .bind(environment.name)
     .fetch_one(&mut *tx)
     .await
     .map_err(map_deployment_write_error)?;
@@ -337,7 +365,7 @@ pub(crate) async fn create_deployment_instance(
             resource_id: summary.id.to_string(),
             detail: Some(serde_json::json!({
                 "deployment_instance_id": summary.id,
-                "changed_fields": ["environment", "deployment_key", "name", "description", "is_template"]
+                "changed_fields": ["environment_id", "deployment_key", "name", "description", "is_template"]
             })),
         },
     )
@@ -384,7 +412,9 @@ pub(crate) async fn get_deployment_instance(
         SELECT
             di.id,
             di.project_id,
-            di.environment,
+            di.environment_id,
+            pe.code AS environment_code,
+            pe.name AS environment_name,
             di.deployment_key,
             di.name,
             di.description,
@@ -392,6 +422,9 @@ pub(crate) async fn get_deployment_instance(
             di.template_source_id,
             di.status
         FROM deployment_instances di
+        JOIN project_environments pe
+          ON pe.project_id = di.project_id
+         AND pe.id = di.environment_id
         JOIN project_members pm
           ON pm.project_id = di.project_id
          AND pm.user_id = $2
@@ -430,7 +463,7 @@ pub(crate) async fn get_deployment_instance(
         (status = 400, description = "Invalid request body", body = crate::error::ErrorResponse),
         (status = 401, description = "Missing or expired admin session", body = crate::error::ErrorResponse),
         (status = 404, description = "Project or deployment instance not found", body = crate::error::ErrorResponse),
-        (status = 409, description = "Deployment key already exists within the project/environment", body = crate::error::ErrorResponse),
+        (status = 409, description = "Deployment key already exists within the project/environment or the environment is inactive", body = crate::error::ErrorResponse),
         (status = 503, description = "Database bootstrap disabled", body = crate::error::ErrorResponse),
         (status = 500, description = "Internal server error", body = crate::error::ErrorResponse),
     )
@@ -480,13 +513,22 @@ pub(crate) async fn update_deployment_instance(
         "deployment instance not found",
     )
     .await?;
+    let environment =
+        load_project_environment_for_assignment(pool, existing_project_id, payload.environment_id)
+            .await?;
+    if environment.status != "active" {
+        return Err(ApiError::conflict(
+            "project_environment_inactive",
+            "project environment is inactive",
+        ));
+    }
 
     let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
     let row = sqlx::query(
         r#"
         UPDATE deployment_instances
         SET
-            environment = $2,
+            environment_id = $2,
             deployment_key = $3,
             name = $4,
             description = $5,
@@ -495,7 +537,9 @@ pub(crate) async fn update_deployment_instance(
         RETURNING
             id,
             project_id,
-            environment,
+            environment_id,
+            $6::varchar AS environment_code,
+            $7::varchar AS environment_name,
             deployment_key,
             name,
             description,
@@ -505,10 +549,12 @@ pub(crate) async fn update_deployment_instance(
         "#,
     )
     .bind(id)
-    .bind(payload.environment)
+    .bind(payload.environment_id)
     .bind(payload.deployment_key)
     .bind(payload.name)
     .bind(payload.description)
+    .bind(environment.code)
+    .bind(environment.name)
     .fetch_optional(&mut *tx)
     .await
     .map_err(map_deployment_write_error)?
@@ -530,7 +576,7 @@ pub(crate) async fn update_deployment_instance(
             resource_id: summary.id.to_string(),
             detail: Some(serde_json::json!({
                 "deployment_instance_id": summary.id,
-                "changed_fields": ["environment", "deployment_key", "name", "description"]
+                "changed_fields": ["environment_id", "deployment_key", "name", "description"]
             })),
         },
     )
@@ -598,11 +644,20 @@ pub(crate) async fn clone_deployment_instance(
     }
 
     let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let environment =
+        load_project_environment_for_assignment(pool, template.project_id, payload.environment_id)
+            .await?;
+    if environment.status != "active" {
+        return Err(ApiError::conflict(
+            "project_environment_inactive",
+            "project environment is inactive",
+        ));
+    }
     let row = sqlx::query(
         r#"
         INSERT INTO deployment_instances (
             project_id,
-            environment,
+            environment_id,
             deployment_key,
             name,
             description,
@@ -614,7 +669,9 @@ pub(crate) async fn clone_deployment_instance(
         RETURNING
             id,
             project_id,
-            environment,
+            environment_id,
+            $7::varchar AS environment_code,
+            $8::varchar AS environment_name,
             deployment_key,
             name,
             description,
@@ -624,11 +681,13 @@ pub(crate) async fn clone_deployment_instance(
         "#,
     )
     .bind(template.project_id)
-    .bind(&payload.environment)
+    .bind(payload.environment_id)
     .bind(&payload.deployment_key)
     .bind(&payload.name)
     .bind(&payload.description)
     .bind(id)
+    .bind(environment.code)
+    .bind(environment.name)
     .fetch_one(&mut *tx)
     .await
     .map_err(map_deployment_write_error)?;
@@ -821,7 +880,7 @@ pub(crate) async fn preview_deployment_bundle(
         items,
         open_bundle_preview: ConfigBundleResponse {
             project: context.project_code,
-            environment: context.environment,
+            environment: context.environment_code,
             deployment: ResolveDeployment {
                 key: context.deployment_key,
                 name: context.deployment_name,
@@ -1113,7 +1172,7 @@ impl CreateDeploymentInstanceRequest {
     fn validate(self) -> Result<ValidatedCreateDeploymentInstanceRequest, ApiError> {
         Ok(ValidatedCreateDeploymentInstanceRequest {
             project_id: required_i64(self.project_id, "project_id")?,
-            environment: required(self.environment, "environment")?,
+            environment_id: required_i64(self.environment_id, "environment_id")?,
             deployment_key: required(self.deployment_key, "deployment_key")?,
             name: required(self.name, "name")?,
             description: normalize_optional(self.description),
@@ -1125,7 +1184,7 @@ impl CreateDeploymentInstanceRequest {
 impl UpdateDeploymentInstanceRequest {
     fn validate(self) -> Result<ValidatedUpdateDeploymentInstanceRequest, ApiError> {
         Ok(ValidatedUpdateDeploymentInstanceRequest {
-            environment: required(self.environment, "environment")?,
+            environment_id: required_i64(self.environment_id, "environment_id")?,
             deployment_key: required(self.deployment_key, "deployment_key")?,
             name: required(self.name, "name")?,
             description: normalize_optional(self.description),
@@ -1140,7 +1199,7 @@ impl CloneDeploymentInstanceRequest {
         Ok(ValidatedCloneDeploymentInstanceRequest {
             deployment_key: required(self.deployment_key, "deployment_key")?,
             name: required(self.name, "name")?,
-            environment: required(self.environment, "environment")?,
+            environment_id: required_i64(self.environment_id, "environment_id")?,
             description: normalize_optional(self.description),
         })
     }
@@ -1150,7 +1209,9 @@ fn map_deployment_row(row: sqlx::postgres::PgRow) -> DeploymentInstanceSummary {
     DeploymentInstanceSummary {
         id: row.get("id"),
         project_id: row.get("project_id"),
-        environment: row.get("environment"),
+        environment_id: row.get("environment_id"),
+        environment_code: row.get("environment_code"),
+        environment_name: row.get("environment_name"),
         deployment_key: row.get("deployment_key"),
         name: row.get("name"),
         description: row.get("description"),
@@ -1162,9 +1223,9 @@ fn map_deployment_row(row: sqlx::postgres::PgRow) -> DeploymentInstanceSummary {
 
 fn map_deployment_write_error(error: SqlxError) -> ApiError {
     if let SqlxError::Database(database_error) = &error {
-        if database_error.constraint()
-            == Some("deployment_instances_project_id_environment_deployment_key_key")
-        {
+        if database_error.constraint().is_some_and(|constraint| {
+            constraint.starts_with("deployment_instances_project_id_environment")
+        }) {
             return ApiError::conflict(
                 "deployment_key_conflict",
                 "deployment key already exists in project environment",
@@ -1174,9 +1235,51 @@ fn map_deployment_write_error(error: SqlxError) -> ApiError {
         if database_error.constraint() == Some("deployment_instances_project_id_fkey") {
             return ApiError::not_found_with("project_not_found", "project not found");
         }
+
+        if database_error.constraint()
+            == Some("deployment_instances_project_id_environment_id_fkey")
+        {
+            return ApiError::not_found_with(
+                "project_environment_not_found",
+                "project environment not found",
+            );
+        }
     }
 
     ApiError::internal()
+}
+
+async fn load_project_environment_for_assignment(
+    pool: &sqlx::PgPool,
+    project_id: i64,
+    environment_id: i64,
+) -> Result<ProjectEnvironmentAssignmentContext, ApiError> {
+    let row = sqlx::query(
+        r#"
+        SELECT code, name, status
+        FROM project_environments
+        WHERE project_id = $1
+          AND id = $2
+        LIMIT 1
+        "#,
+    )
+    .bind(project_id)
+    .bind(environment_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| ApiError::internal())?
+    .ok_or_else(|| {
+        ApiError::not_found_with(
+            "project_environment_not_found",
+            "project environment not found",
+        )
+    })?;
+
+    Ok(ProjectEnvironmentAssignmentContext {
+        code: row.get("code"),
+        name: row.get("name"),
+        status: row.get("status"),
+    })
 }
 
 async fn load_template_context(
@@ -1313,11 +1416,14 @@ async fn load_preview_context(
         SELECT
             di.project_id,
             p.code AS project_code,
-            di.environment,
+            pe.code AS environment_code,
             di.deployment_key,
             di.name AS deployment_name
         FROM deployment_instances di
         JOIN projects p ON p.id = di.project_id
+        JOIN project_environments pe
+          ON pe.project_id = di.project_id
+         AND pe.id = di.environment_id
         WHERE di.id = $1
         LIMIT 1
         "#,
@@ -1336,7 +1442,7 @@ async fn load_preview_context(
     Ok(PreviewDeploymentContext {
         project_id: row.get("project_id"),
         project_code: row.get("project_code"),
-        environment: row.get("environment"),
+        environment_code: row.get("environment_code"),
         deployment_key: row.get("deployment_key"),
         deployment_name: row.get("deployment_name"),
     })
@@ -1431,7 +1537,7 @@ fn normalize_optional(value: Option<String>) -> Option<String> {
 fn invalid_body_message(field: &'static str) -> &'static str {
     match field {
         "project_id" => "missing required body field: project_id",
-        "environment" => "missing required body field: environment",
+        "environment_id" => "missing required body field: environment_id",
         "deployment_key" => "missing required body field: deployment_key",
         "name" => "missing required body field: name",
         "clone_source" => "missing required body field: clone_source",

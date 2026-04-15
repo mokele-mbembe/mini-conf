@@ -3,7 +3,9 @@ export type DeploymentInstanceStatus = "active" | "inactive";
 export interface DeploymentInstanceSummary {
   id: number;
   project_id: number;
-  environment: string;
+  environment_id: number;
+  environment_code: string;
+  environment_name: string;
   deployment_key: string;
   name: string;
   description: string | null;
@@ -21,7 +23,7 @@ export interface DeploymentInstanceListResponse {
 
 export interface ListDeploymentInstancesParams {
   project_id?: number;
-  environment?: string;
+  environment_id?: number;
   status?: DeploymentInstanceStatus;
   keyword?: string;
   page?: number;
@@ -30,7 +32,7 @@ export interface ListDeploymentInstancesParams {
 
 export interface CreateDeploymentInstanceRequest {
   project_id: number;
-  environment: string;
+  environment_id: number;
   deployment_key: string;
   name: string;
   description?: string | null;
@@ -38,7 +40,7 @@ export interface CreateDeploymentInstanceRequest {
 }
 
 export interface UpdateDeploymentInstanceRequest {
-  environment: string;
+  environment_id: number;
   deployment_key: string;
   name: string;
   description?: string | null;
@@ -47,7 +49,7 @@ export interface UpdateDeploymentInstanceRequest {
 export interface CloneDeploymentInstanceRequest {
   deployment_key: string;
   name: string;
-  environment: string;
+  environment_id: number;
   description?: string | null;
   clone_source: "draft";
 }

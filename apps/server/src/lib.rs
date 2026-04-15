@@ -491,7 +491,7 @@ mod tests {
                     .uri("/api/deployment-instances")
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(
-                        r#"{"project_id":1,"environment":"prod","name":"Store 001"}"#,
+                        r#"{"project_id":1,"environment_id":1,"name":"Store 001"}"#,
                     ))
                     .expect("request should build"),
             )
@@ -526,7 +526,7 @@ mod tests {
                     .uri("/api/deployment-instances/1")
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(
-                        r#"{"environment":"prod","deployment_key":"store-001"}"#,
+                        r#"{"environment_id":1,"deployment_key":"store-001"}"#,
                     ))
                     .expect("request should build"),
             )
@@ -561,7 +561,7 @@ mod tests {
                     .uri("/api/deployment-instances/1/clone")
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(
-                        r#"{"deployment_key":"store-002","environment":"prod"}"#,
+                        r#"{"deployment_key":"store-002","environment_id":1}"#,
                     ))
                     .expect("request should build"),
             )

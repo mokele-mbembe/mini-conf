@@ -16,8 +16,8 @@ function buildDeploymentInstanceQuery(
   if (params?.project_id !== undefined) {
     query.set("project_id", String(params.project_id));
   }
-  if (params?.environment) {
-    query.set("environment", params.environment);
+  if (params?.environment_id !== undefined) {
+    query.set("environment_id", String(params.environment_id));
   }
   if (params?.status) {
     query.set("status", params.status);

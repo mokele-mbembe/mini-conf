@@ -43,14 +43,24 @@
               @clear="handleSearch"
             />
 
-            <el-input
+            <el-select
               v-model="environmentFilter"
               :placeholder="t('deployments.filter.environmentPlaceholder')"
               clearable
-              style="width: 180px"
-              @keyup.enter="handleSearch"
-              @clear="handleSearch"
-            />
+              style="width: 220px"
+              @change="handleFilterChange"
+            >
+              <el-option
+                :label="t('deployments.filter.allEnvironments')"
+                value=""
+              />
+              <el-option
+                v-for="item in environments"
+                :key="item.id"
+                :label="`${item.name} (${item.code})`"
+                :value="String(item.id)"
+              />
+            </el-select>
 
             <el-select
               v-model="statusFilter"
@@ -73,10 +83,35 @@
             </el-button>
           </div>
 
-          <el-button v-if="isAdmin" type="primary" @click="openCreateDialog">
+          <el-button
+            v-if="isAdmin"
+            type="primary"
+            :disabled="activeEnvironmentCount === 0"
+            @click="openCreateDialog"
+          >
             {{ t("deployments.create") }}
           </el-button>
         </div>
+
+        <el-alert
+          v-if="activeEnvironmentCount === 0"
+          :title="t('deployments.emptyEnvironmentNotice')"
+          type="warning"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 16px"
+        >
+          <template #default>
+            <el-button
+              v-if="isAdmin"
+              link
+              type="primary"
+              @click="goToEnvironmentPage"
+            >
+              {{ t("deployments.goToEnvironmentManagement") }}
+            </el-button>
+          </template>
+        </el-alert>
 
         <LoadingState v-if="listLoading" />
 
@@ -89,9 +124,25 @@
 
         <EmptyState
           v-else-if="deployments.length === 0"
-          :description="t('deployments.empty')"
+          :description="
+            environments.length === 0
+              ? t('deployments.emptyNeedEnvironment')
+              : t('deployments.empty')
+          "
         >
-          <el-button v-if="isAdmin" type="primary" @click="openCreateDialog">
+          <el-button
+            v-if="isAdmin && environments.length === 0"
+            type="primary"
+            @click="goToEnvironmentPage"
+          >
+            {{ t("deployments.goToEnvironmentManagement") }}
+          </el-button>
+          <el-button
+            v-else-if="isAdmin"
+            type="primary"
+            :disabled="activeEnvironmentCount === 0"
+            @click="openCreateDialog"
+          >
             {{ t("deployments.create") }}
           </el-button>
         </EmptyState>
@@ -99,12 +150,14 @@
         <template v-else>
           <el-table :data="deployments" stripe style="width: 100%">
             <el-table-column
-              prop="environment"
+              prop="environment_code"
               :label="t('deployments.column.environment')"
-              width="130"
+              min-width="180"
             >
               <template #default="{ row }">
-                <el-tag size="small" type="info">{{ row.environment }}</el-tag>
+                <el-tag size="small" type="info">
+                  {{ row.environment_name }} ({{ row.environment_code }})
+                </el-tag>
               </template>
             </el-table-column>
 
@@ -219,12 +272,14 @@ import ForbiddenState from "@/shared/states/ForbiddenState.vue";
 import NotFoundState from "@/shared/states/NotFoundState.vue";
 import { ROUTE_NAMES } from "@/shared/constants/routes";
 import * as deploymentInstancesApi from "@/api/deployment-instances";
+import * as projectEnvironmentsApi from "@/api/project-environments";
 import { ApiRequestError } from "@/api/error";
 import { getErrorMessage } from "@/shared/constants/error-messages";
 import type {
   DeploymentInstanceStatus,
   DeploymentInstanceSummary,
 } from "@/api/types/deployment-instance";
+import type { ProjectEnvironmentSummary } from "@/api/types/project-environment";
 import { useI18nText } from "@/shared/i18n";
 
 const route = useRoute();
@@ -242,6 +297,7 @@ const projectId = computed(() => Number(route.params.projectId));
 const isAdmin = computed(() => project.value?.current_user_role === "admin");
 
 const deployments = ref<DeploymentInstanceSummary[]>([]);
+const environments = ref<ProjectEnvironmentSummary[]>([]);
 const listLoading = ref(false);
 const listError = ref<ApiRequestError | null>(null);
 const keywordFilter = ref("");
@@ -250,6 +306,9 @@ const statusFilter = ref<DeploymentInstanceStatus | "">("");
 const page = ref(1);
 const pageSize = ref(20);
 const total = ref(0);
+const activeEnvironmentCount = computed(
+  () => environments.value.filter((item) => item.status === "active").length,
+);
 
 const dialogVisible = ref(false);
 
@@ -260,7 +319,9 @@ async function loadDeploymentInstances() {
     const res = await deploymentInstancesApi.listDeploymentInstances({
       project_id: projectId.value,
       keyword: keywordFilter.value.trim() || undefined,
-      environment: environmentFilter.value.trim() || undefined,
+      environment_id: environmentFilter.value
+        ? Number(environmentFilter.value)
+        : undefined,
       status: statusFilter.value || undefined,
       page: page.value,
       page_size: pageSize.value,
@@ -283,10 +344,25 @@ async function loadDeploymentInstances() {
   }
 }
 
+async function loadEnvironments() {
+  try {
+    const res = await projectEnvironmentsApi.listProjectEnvironments(
+      projectId.value,
+    );
+    environments.value = [...res.items].sort((a, b) => {
+      if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
+      return a.code.localeCompare(b.code);
+    });
+  } catch {
+    environments.value = [];
+  }
+}
+
 async function loadAll() {
   const id = projectId.value;
   if (Number.isNaN(id)) return;
   await fetchProject(id);
+  await loadEnvironments();
   await loadDeploymentInstances();
 }
 
@@ -314,6 +390,9 @@ function handlePageSizeChange() {
 }
 
 function openCreateDialog() {
+  if (activeEnvironmentCount.value === 0) {
+    return;
+  }
   dialogVisible.value = true;
 }
 
@@ -321,6 +400,13 @@ function handleCreateSuccess() {
   statusFilter.value = "";
   page.value = 1;
   loadDeploymentInstances();
+}
+
+function goToEnvironmentPage() {
+  router.push({
+    name: ROUTE_NAMES.PROJECT_ENVIRONMENT_LIST,
+    params: { projectId: route.params.projectId },
+  });
 }
 
 function openDetail(row: DeploymentInstanceSummary) {

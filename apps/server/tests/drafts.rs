@@ -160,21 +160,38 @@ async fn seed_project_config_deployment_with_format(
     .bind(format)
     .fetch_one(pool)
     .await?;
+    let environment_id: i64 = sqlx::query_scalar(
+        r#"
+        INSERT INTO project_environments (
+            project_id,
+            code,
+            name,
+            status,
+            sort_order
+        )
+        VALUES ($1, 'prod', 'Production', 'active', 10)
+        RETURNING id
+        "#,
+    )
+    .bind(project_id)
+    .fetch_one(pool)
+    .await?;
     let deployment_id: i64 = sqlx::query_scalar(
         r#"
         INSERT INTO deployment_instances (
             project_id,
-            environment,
+            environment_id,
             deployment_key,
             name,
             is_template,
             status
         )
-        VALUES ($1, 'prod', 'store-001', 'Store 001', false, 'active')
+        VALUES ($1, $2, 'store-001', 'Store 001', false, 'active')
         RETURNING id
         "#,
     )
     .bind(project_id)
+    .bind(environment_id)
     .fetch_one(pool)
     .await?;
 
@@ -186,21 +203,43 @@ async fn seed_second_deployment(
     project_id: i64,
     deployment_key: &str,
 ) -> TestResult<i64> {
+    let environment_id: i64 = sqlx::query_scalar(
+        r#"
+        INSERT INTO project_environments (
+            project_id,
+            code,
+            name,
+            status,
+            sort_order
+        )
+        VALUES ($1, 'prod', 'Production', 'active', 10)
+        ON CONFLICT (project_id, code)
+        DO UPDATE SET
+            name = EXCLUDED.name,
+            status = EXCLUDED.status,
+            updated_at = NOW()
+        RETURNING id
+        "#,
+    )
+    .bind(project_id)
+    .fetch_one(pool)
+    .await?;
     let deployment_id: i64 = sqlx::query_scalar(
         r#"
         INSERT INTO deployment_instances (
             project_id,
-            environment,
+            environment_id,
             deployment_key,
             name,
             is_template,
             status
         )
-        VALUES ($1, 'prod', $2, $3, false, 'active')
+        VALUES ($1, $2, $3, $4, false, 'active')
         RETURNING id
         "#,
     )
     .bind(project_id)
+    .bind(environment_id)
     .bind(deployment_key)
     .bind(format!("{deployment_key} deployment"))
     .fetch_one(pool)

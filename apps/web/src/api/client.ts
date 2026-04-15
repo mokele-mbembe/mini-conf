@@ -70,4 +70,8 @@ export const client = {
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
   },
+
+  delete<T>(path: string): Promise<T> {
+    return request<T>(path, { method: "DELETE" });
+  },
 };

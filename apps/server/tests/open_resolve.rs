@@ -64,10 +64,18 @@ async fn seed_release(pool: &PgPool, config_code: &str, format: &str, content: &
     .fetch_one(pool)
     .await?;
 
-    let deployment_id: i64 = sqlx::query_scalar(
-        "INSERT INTO deployment_instances (project_id, environment, deployment_key, name) VALUES ($1, 'prod', 'store-001', 'Store 001') RETURNING id",
+    let environment_id: i64 = sqlx::query_scalar(
+        "INSERT INTO project_environments (project_id, code, name, status, sort_order) VALUES ($1, 'prod', 'Production', 'active', 10) RETURNING id",
     )
     .bind(project_id)
+    .fetch_one(pool)
+    .await?;
+
+    let deployment_id: i64 = sqlx::query_scalar(
+        "INSERT INTO deployment_instances (project_id, environment_id, deployment_key, name) VALUES ($1, $2, 'store-001', 'Store 001') RETURNING id",
+    )
+    .bind(project_id)
+    .bind(environment_id)
     .fetch_one(pool)
     .await?;
 

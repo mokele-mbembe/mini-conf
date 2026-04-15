@@ -62,6 +62,12 @@ db-list-test-schemas-local:
 db-clean-test-schemas-local:
   @if [ -f scripts/db-clean-test-schemas.sh ]; then source scripts/local-db-env.sh && bash scripts/db-clean-test-schemas.sh --apply; else echo "Skipping test schema cleanup: scripts/db-clean-test-schemas.sh not found"; fi
 
+db-list-alpha-projects-local:
+  @if [ -f scripts/db-clean-alpha-projects.sh ]; then source scripts/local-db-env.sh && bash scripts/db-clean-alpha-projects.sh --dry-run; else echo "Skipping alpha project listing: scripts/db-clean-alpha-projects.sh not found"; fi
+
+db-clean-alpha-projects-local:
+  @if [ -f scripts/db-clean-alpha-projects.sh ]; then source scripts/local-db-env.sh && bash scripts/db-clean-alpha-projects.sh --apply; else echo "Skipping alpha project cleanup: scripts/db-clean-alpha-projects.sh not found"; fi
+
 test-frontend:
   @if [ -f apps/web/package.json ]; then pnpm --dir apps/web test; \
   elif [ -f package.json ] || [ -f pnpm-workspace.yaml ]; then pnpm test; \
@@ -95,9 +101,9 @@ alpha-full:
 alpha-smoke-local:
   @if [ -f Cargo.toml ]; then \
     source scripts/local-db-env.sh; \
-    export DATABASE_URL="${DATABASE_URL:-${TEST_DATABASE_URL:-}}"; \
+    export DATABASE_URL="${TEST_DATABASE_URL:-}"; \
     if [ -z "${DATABASE_URL:-}" ]; then \
-      echo "DATABASE_URL is required; local test DB resolution did not produce a usable DSN" >&2; \
+      echo "TEST_DATABASE_URL is required; local alpha smoke runs only against isolated test schemas" >&2; \
       exit 1; \
     fi; \
     bash scripts/alpha-http.sh smoke; \
@@ -106,9 +112,9 @@ alpha-smoke-local:
 alpha-full-local:
   @if [ -f Cargo.toml ]; then \
     source scripts/local-db-env.sh; \
-    export DATABASE_URL="${DATABASE_URL:-${TEST_DATABASE_URL:-}}"; \
+    export DATABASE_URL="${TEST_DATABASE_URL:-}"; \
     if [ -z "${DATABASE_URL:-}" ]; then \
-      echo "DATABASE_URL is required; local test DB resolution did not produce a usable DSN" >&2; \
+      echo "TEST_DATABASE_URL is required; local alpha full runs only against isolated test schemas" >&2; \
       exit 1; \
     fi; \
     bash scripts/alpha-http.sh full; \

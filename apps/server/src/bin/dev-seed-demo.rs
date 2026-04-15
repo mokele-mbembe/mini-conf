@@ -92,6 +92,43 @@ async fn seed_demo_data(pool: &PgPool) -> SeedResult<SeedSummary> {
     upsert_project_member(&mut tx, billing_project_id, alice_user_id, "viewer").await?;
     upsert_project_member(&mut tx, billing_project_id, carol_user_id, "admin").await?;
 
+    let coffee_prod_environment_id = upsert_project_environment(
+        &mut tx,
+        ProjectEnvironmentSeed {
+            project_id: coffee_project_id,
+            code: "prod",
+            name: "Production",
+            description: Some("Primary production environment."),
+            status: "active",
+            sort_order: 10,
+        },
+    )
+    .await?;
+    let coffee_staging_environment_id = upsert_project_environment(
+        &mut tx,
+        ProjectEnvironmentSeed {
+            project_id: coffee_project_id,
+            code: "staging",
+            name: "Staging",
+            description: Some("Pre-release validation environment."),
+            status: "active",
+            sort_order: 20,
+        },
+    )
+    .await?;
+    let billing_prod_environment_id = upsert_project_environment(
+        &mut tx,
+        ProjectEnvironmentSeed {
+            project_id: billing_project_id,
+            code: "prod",
+            name: "Production",
+            description: Some("Primary production environment."),
+            status: "active",
+            sort_order: 10,
+        },
+    )
+    .await?;
+
     let main_config_id = upsert_config_file(
         &mut tx,
         ConfigSeed {
@@ -172,7 +209,7 @@ async fn seed_demo_data(pool: &PgPool) -> SeedResult<SeedSummary> {
         &mut tx,
         DeploymentSeed {
             project_id: coffee_project_id,
-            environment: "prod",
+            environment_id: coffee_prod_environment_id,
             deployment_key: "template-default-store",
             name: "Template Default Store",
             description: Some("Template instance used for clone flows."),
@@ -186,7 +223,7 @@ async fn seed_demo_data(pool: &PgPool) -> SeedResult<SeedSummary> {
         &mut tx,
         DeploymentSeed {
             project_id: coffee_project_id,
-            environment: "prod",
+            environment_id: coffee_prod_environment_id,
             deployment_key: "store-001",
             name: "Store 001",
             description: Some(
@@ -202,7 +239,7 @@ async fn seed_demo_data(pool: &PgPool) -> SeedResult<SeedSummary> {
         &mut tx,
         DeploymentSeed {
             project_id: coffee_project_id,
-            environment: "prod",
+            environment_id: coffee_prod_environment_id,
             deployment_key: "store-002",
             name: "Store 002",
             description: Some("Deployment intentionally missing one required config to exercise preview and publish blocking."),
@@ -216,7 +253,7 @@ async fn seed_demo_data(pool: &PgPool) -> SeedResult<SeedSummary> {
         &mut tx,
         DeploymentSeed {
             project_id: coffee_project_id,
-            environment: "staging",
+            environment_id: coffee_staging_environment_id,
             deployment_key: "stage-001",
             name: "Stage 001",
             description: Some("Secondary environment for list filter checks."),
@@ -230,7 +267,7 @@ async fn seed_demo_data(pool: &PgPool) -> SeedResult<SeedSummary> {
         &mut tx,
         DeploymentSeed {
             project_id: coffee_project_id,
-            environment: "prod",
+            environment_id: coffee_prod_environment_id,
             deployment_key: "store-inactive",
             name: "Store Inactive",
             description: Some("Inactive deployment for status filter checks."),
@@ -244,7 +281,7 @@ async fn seed_demo_data(pool: &PgPool) -> SeedResult<SeedSummary> {
         &mut tx,
         DeploymentSeed {
             project_id: billing_project_id,
-            environment: "prod",
+            environment_id: billing_prod_environment_id,
             deployment_key: "billing-001",
             name: "Billing 001",
             description: Some("Secondary project deployment."),
@@ -659,9 +696,18 @@ struct ConfigSeed<'a> {
     status: &'a str,
 }
 
+struct ProjectEnvironmentSeed<'a> {
+    project_id: i64,
+    code: &'a str,
+    name: &'a str,
+    description: Option<&'a str>,
+    status: &'a str,
+    sort_order: i32,
+}
+
 struct DeploymentSeed<'a> {
     project_id: i64,
-    environment: &'a str,
+    environment_id: i64,
     deployment_key: &'a str,
     name: &'a str,
     description: Option<&'a str>,
@@ -853,6 +899,43 @@ async fn upsert_config_file(
     Ok(config_file_id)
 }
 
+async fn upsert_project_environment(
+    tx: &mut Transaction<'_, Postgres>,
+    seed: ProjectEnvironmentSeed<'_>,
+) -> SeedResult<i64> {
+    let environment_id = sqlx::query_scalar(
+        r#"
+        INSERT INTO project_environments (
+            project_id,
+            code,
+            name,
+            description,
+            status,
+            sort_order
+        )
+        VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (project_id, code)
+        DO UPDATE SET
+            name = EXCLUDED.name,
+            description = EXCLUDED.description,
+            status = EXCLUDED.status,
+            sort_order = EXCLUDED.sort_order,
+            updated_at = NOW()
+        RETURNING id
+        "#,
+    )
+    .bind(seed.project_id)
+    .bind(seed.code)
+    .bind(seed.name)
+    .bind(seed.description)
+    .bind(seed.status)
+    .bind(seed.sort_order)
+    .fetch_one(tx.as_mut())
+    .await?;
+
+    Ok(environment_id)
+}
+
 async fn upsert_deployment_instance(
     tx: &mut Transaction<'_, Postgres>,
     seed: DeploymentSeed<'_>,
@@ -861,7 +944,7 @@ async fn upsert_deployment_instance(
         r#"
         INSERT INTO deployment_instances (
             project_id,
-            environment,
+            environment_id,
             deployment_key,
             name,
             description,
@@ -870,7 +953,7 @@ async fn upsert_deployment_instance(
             status
         )
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        ON CONFLICT (project_id, environment, deployment_key)
+        ON CONFLICT (project_id, environment_id, deployment_key)
         DO UPDATE SET
             name = EXCLUDED.name,
             description = EXCLUDED.description,
@@ -882,7 +965,7 @@ async fn upsert_deployment_instance(
         "#,
     )
     .bind(seed.project_id)
-    .bind(seed.environment)
+    .bind(seed.environment_id)
     .bind(seed.deployment_key)
     .bind(seed.name)
     .bind(seed.description)

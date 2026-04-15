@@ -6,7 +6,9 @@ use utoipa::ToSchema;
 pub struct DeploymentInstanceSummary {
     pub id: i64,
     pub project_id: i64,
-    pub environment: String,
+    pub environment_id: i64,
+    pub environment_code: String,
+    pub environment_name: String,
     pub deployment_key: String,
     pub name: String,
     pub description: Option<String>,
@@ -65,7 +67,9 @@ mod tests {
             items: vec![DeploymentInstanceSummary {
                 id: 1,
                 project_id: 7,
-                environment: "prod".to_owned(),
+                environment_id: 3,
+                environment_code: "prod".to_owned(),
+                environment_name: "Production".to_owned(),
                 deployment_key: "store-001".to_owned(),
                 name: "Store 001".to_owned(),
                 description: Some("Hangzhou store 001".to_owned()),
@@ -86,7 +90,9 @@ mod tests {
                     {
                         "id": 1,
                         "project_id": 7,
-                        "environment": "prod",
+                        "environment_id": 3,
+                        "environment_code": "prod",
+                        "environment_name": "Production",
                         "deployment_key": "store-001",
                         "name": "Store 001",
                         "description": "Hangzhou store 001",

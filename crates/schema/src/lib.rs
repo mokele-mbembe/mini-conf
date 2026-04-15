@@ -6,5 +6,6 @@ pub mod draft;
 pub mod health;
 pub mod open;
 pub mod project;
+pub mod project_environment;
 pub mod project_member;
 pub mod release;

@@ -36,6 +36,11 @@ if ! command -v hurl >/dev/null 2>&1; then
   exit 1
 fi
 
+if ! command -v psql >/dev/null 2>&1; then
+  echo "psql is required for alpha HTTP tests" >&2
+  exit 1
+fi
+
 if [[ -z "${DATABASE_URL:-}" ]]; then
   echo "DATABASE_URL is required for alpha HTTP tests" >&2
   exit 1
@@ -62,6 +67,8 @@ else
 fi
 suite_id="${ALPHA_SUITE_ID:-$(date +%s%N)}"
 ready_timeout_sec="${ALPHA_HTTP_READY_TIMEOUT_SEC:-180}"
+alpha_schema="${ALPHA_SCHEMA:-mini_conf_alpha_${suite}_$(date +%s%N)}"
+scoped_database_url=""
 
 work_dir="$(mktemp -d)"
 server_log="${work_dir}/server.log"
@@ -81,6 +88,12 @@ cleanup() {
     cat "${server_log}" >&2
   fi
 
+  if [[ -n "${alpha_schema}" ]]; then
+    psql "${DATABASE_URL}" \
+      -v ON_ERROR_STOP=1 \
+      -c "DROP SCHEMA IF EXISTS ${alpha_schema} CASCADE" >/dev/null 2>&1 || true
+  fi
+
   rm -rf "${work_dir}"
   exit "${status}"
 }
@@ -89,10 +102,20 @@ trap cleanup EXIT
 
 cd "${repo_root}"
 
+if [[ "${DATABASE_URL}" == *"?"* ]]; then
+  scoped_database_url="${DATABASE_URL}&options=-csearch_path%3D${alpha_schema}"
+else
+  scoped_database_url="${DATABASE_URL}?options=-csearch_path%3D${alpha_schema}"
+fi
+
+psql "${DATABASE_URL}" \
+  -v ON_ERROR_STOP=1 \
+  -c "CREATE SCHEMA ${alpha_schema}" >/dev/null
+
 env \
   APP_ENV="${app_env}" \
   HTTP_ADDR="${http_addr}" \
-  DATABASE_URL="${DATABASE_URL}" \
+  DATABASE_URL="${scoped_database_url}" \
   INIT_DB_ON_BOOT="${init_db_on_boot}" \
   INIT_ADMIN_USERNAME="${admin_username}" \
   INIT_ADMIN_PASSWORD="${admin_password}" \

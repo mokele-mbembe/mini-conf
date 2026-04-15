@@ -43,12 +43,20 @@
 
       <el-form-item
         :label="t('deployments.form.environment')"
-        prop="environment"
+        prop="environment_id"
       >
-        <el-input
-          v-model="form.environment"
+        <el-select
+          v-model="form.environment_id"
           :placeholder="t('deployments.form.environmentPlaceholder')"
-        />
+          style="width: 100%"
+        >
+          <el-option
+            v-for="item in activeEnvironments"
+            :key="item.id"
+            :label="`${item.name} (${item.code})`"
+            :value="item.id"
+          />
+        </el-select>
       </el-form-item>
 
       <el-form-item :label="t('deployments.form.template')" prop="is_template">
@@ -81,13 +89,15 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import type { FormInstance, FormRules } from "element-plus";
 import { ElMessage } from "element-plus";
 import * as deploymentInstancesApi from "@/api/deployment-instances";
+import * as projectEnvironmentsApi from "@/api/project-environments";
 import { ApiRequestError } from "@/api/error";
 import { getErrorMessage } from "@/shared/constants/error-messages";
 import type { DeploymentInstanceSummary } from "@/api/types/deployment-instance";
+import type { ProjectEnvironmentSummary } from "@/api/types/project-environment";
 import { useI18nText } from "@/shared/i18n";
 
 const props = defineProps<{
@@ -107,7 +117,7 @@ const submitting = ref(false);
 interface FormState {
   name: string;
   deployment_key: string;
-  environment: string;
+  environment_id: number | undefined;
   is_template: boolean;
   description: string;
 }
@@ -116,13 +126,17 @@ function makeEmptyForm(): FormState {
   return {
     name: "",
     deployment_key: "",
-    environment: "",
+    environment_id: undefined,
     is_template: false,
     description: "",
   };
 }
 
 const form = reactive<FormState>(makeEmptyForm());
+const environments = ref<ProjectEnvironmentSummary[]>([]);
+const activeEnvironments = computed(() =>
+  environments.value.filter((item) => item.status === "active"),
+);
 
 const rules: FormRules = {
   name: [
@@ -139,14 +153,36 @@ const rules: FormRules = {
       trigger: "blur",
     },
   ],
-  environment: [
+  environment_id: [
     {
       required: true,
       message: t("validation.deployments.environmentRequired"),
-      trigger: "blur",
+      trigger: "change",
     },
   ],
 };
+
+watch(
+  visible,
+  async (value) => {
+    if (!value) return;
+    try {
+      const res = await projectEnvironmentsApi.listProjectEnvironments(
+        props.projectId,
+      );
+      environments.value = [...res.items].sort((a, b) => {
+        if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
+        return a.code.localeCompare(b.code);
+      });
+      if (!form.environment_id) {
+        form.environment_id = activeEnvironments.value[0]?.id;
+      }
+    } catch {
+      environments.value = [];
+    }
+  },
+  { immediate: true },
+);
 
 function resetFormState() {
   Object.assign(form, makeEmptyForm());
@@ -162,7 +198,7 @@ async function handleSubmit() {
       project_id: props.projectId,
       name: form.name,
       deployment_key: form.deployment_key,
-      environment: form.environment,
+      environment_id: form.environment_id as number,
       description: form.description || null,
       is_template: form.is_template,
     });
@@ -184,6 +220,7 @@ async function handleSubmit() {
 function handleClosed() {
   formRef.value?.resetFields();
   resetFormState();
+  environments.value = [];
 }
 </script>
 

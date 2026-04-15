@@ -159,27 +159,64 @@ pub async fn seed_config_file(pool: &PgPool, project_id: i64, code: &str) -> Tes
     Ok(config_file_id)
 }
 
+pub async fn seed_project_environment(
+    pool: &PgPool,
+    project_id: i64,
+    code: &str,
+    name: &str,
+    status: &str,
+) -> TestResult<i64> {
+    let environment_id: i64 = sqlx::query_scalar(
+        r#"
+        INSERT INTO project_environments (
+            project_id,
+            code,
+            name,
+            status,
+            sort_order
+        )
+        VALUES ($1, $2, $3, $4, 10)
+        ON CONFLICT (project_id, code)
+        DO UPDATE SET
+            name = EXCLUDED.name,
+            status = EXCLUDED.status,
+            updated_at = NOW()
+        RETURNING id
+        "#,
+    )
+    .bind(project_id)
+    .bind(code)
+    .bind(name)
+    .bind(status)
+    .fetch_one(pool)
+    .await?;
+    Ok(environment_id)
+}
+
 pub async fn seed_deployment_instance(
     pool: &PgPool,
     project_id: i64,
     deployment_key: &str,
     is_template: bool,
 ) -> TestResult<i64> {
+    let environment_id =
+        seed_project_environment(pool, project_id, "prod", "Production", "active").await?;
     let deployment_id: i64 = sqlx::query_scalar(
         r#"
         INSERT INTO deployment_instances (
             project_id,
-            environment,
+            environment_id,
             deployment_key,
             name,
             is_template,
             status
         )
-        VALUES ($1, 'prod', $2, $3, $4, 'active')
+        VALUES ($1, $2, $3, $4, $5, 'active')
         RETURNING id
         "#,
     )
     .bind(project_id)
+    .bind(environment_id)
     .bind(deployment_key)
     .bind(format!("{deployment_key} deployment"))
     .bind(is_template)

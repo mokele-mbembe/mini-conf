@@ -161,7 +161,33 @@
 - `code` 在 UI 中统一按“配置标识”理解，不使用“编码”表述
 - 当前配置文件主路径支持 `yaml / json / toml`；`text` 不在当前范围内
 
-## 7. 部署实例列表与详情页
+## 7. 项目环境页
+
+页面目标：
+
+- 管理项目下的环境对象
+- 为部署实例创建提供受控环境集合
+
+依赖接口：
+
+- `GET /api/projects/:id/environments`
+- `POST /api/projects/:id/environments`
+- `GET /api/projects/:id/environments/:environmentId`
+- `PUT /api/projects/:id/environments/:environmentId`
+- `DELETE /api/projects/:id/environments/:environmentId`
+
+关键交互：
+
+- 列表按 `sort_order + code` 排序
+- 支持创建、编辑、停用、删除未引用环境
+- 空项目先提示“先创建环境，再创建部署实例”
+
+失败提示：
+
+- `project_environment_code_conflict`
+- `project_environment_in_use`
+
+## 8. 部署实例列表与详情页
 
 页面目标：
 
@@ -171,6 +197,7 @@
 依赖接口：
 
 - `GET /api/deployment-instances?project_id=:projectId&page=1&page_size=20`
+- `GET /api/projects/:projectId/environments`
 - `POST /api/deployment-instances`
 - `GET /api/deployment-instances/:id`
 - `PUT /api/deployment-instances/:id`
@@ -184,7 +211,7 @@
 表单字段与校验：
 
 - `project_id`
-- `environment`
+- `environment_id`
 - `deployment_key`
 - `name`
 - `description`
@@ -193,11 +220,13 @@
 关键交互：
 
 - 列表显式区分模板
-- 支持筛选 `environment` / `status`
+- 支持筛选 `environment_id` / `status`
 - 列表使用分页响应中的 `items / total / page / page_size`
+- 环境通过受控下拉选择，不再允许自由文本输入
+- 无 active 环境时，创建入口置灰并提示先去环境管理
 - 新建实例默认为 `inactive`
 - 激活实例时展示一次性 token；停用后旧 token 应立即失效
-- `PUT` 只允许修改 `environment / deployment_key / name / description`
+- `PUT` 只允许修改 `environment_id / deployment_key / name / description`
 
 失败提示：
 
@@ -208,7 +237,7 @@
 
 - Template 不能直接发布
 
-## 8. 模板创建实例流程
+## 9. 模板创建实例流程
 
 页面目标：
 
@@ -226,7 +255,7 @@
 
 - `deployment_key`
 - `name`
-- `environment`
+- `environment_id`
 - `description`
 - `clone_source`
 
@@ -244,7 +273,7 @@
 
 - 模板 clone 不允许 `latest_release`
 
-## 9. Draft 编辑页
+## 10. Draft 编辑页
 
 页面目标：
 
@@ -276,7 +305,7 @@
 - `draft_version_conflict`
 - `draft_validation_failed`
 
-## 10. 单配置 Clone 弹窗 / 流程
+## 11. 单配置 Clone 弹窗 / 流程
 
 页面目标：
 
@@ -310,7 +339,7 @@
 - 不提供后端批量 clone 接口
 - 单配置 clone 默认覆盖目标 Draft，并递增版本
 
-## 11. 整实例预览页
+## 12. 整实例预览页
 
 页面目标：
 
@@ -342,7 +371,7 @@
 - Draft 优先于 Release
 - 必选配置缺失必须显式展示，不允许静默忽略
 
-## 12. Release 历史页
+## 13. Release 历史页
 
 页面目标：
 
@@ -363,7 +392,7 @@
 - 进入详情后查看返回的 `content`、`revision`、`change_summary`
 - secret 配置按后端脱敏后的内容展示
 
-## 13. Diff 对比页
+## 14. Diff 对比页
 
 页面目标：
 
@@ -379,7 +408,7 @@
 - 固定展示“当前 release 与上一版 release”的对比
 - secret 配置按后端脱敏后的内容展示
 
-## 14. 发布确认流程
+## 15. 发布确认流程
 
 页面目标：
 
@@ -405,7 +434,7 @@
 - Template 不允许发布
 - 任一必选配置缺失都会阻塞当前这次单配置发布
 
-## 15. 项目成员页
+## 16. 项目成员页
 
 页面目标：
 

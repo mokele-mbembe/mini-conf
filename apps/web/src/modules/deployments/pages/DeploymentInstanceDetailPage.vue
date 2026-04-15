@@ -82,7 +82,9 @@
 
             <el-descriptions-item :label="t('deployments.field.environment')">
               <el-tag size="small" type="info">
-                {{ deployment.environment }}
+                {{ deployment.environment_name }} ({{
+                  deployment.environment_code
+                }})
               </el-tag>
             </el-descriptions-item>
 

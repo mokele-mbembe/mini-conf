@@ -165,26 +165,66 @@ async fn seed_config_file(pool: &PgPool, project_id: i64, code: &str) -> TestRes
     Ok(config_file_id)
 }
 
+async fn seed_project_environment(
+    pool: &PgPool,
+    project_id: i64,
+    code: &str,
+    name: &str,
+    status: &str,
+    sort_order: i32,
+) -> TestResult<i64> {
+    let environment_id: i64 = sqlx::query_scalar(
+        r#"
+        INSERT INTO project_environments (
+            project_id,
+            code,
+            name,
+            status,
+            sort_order
+        )
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (project_id, code)
+        DO UPDATE SET
+            name = EXCLUDED.name,
+            status = EXCLUDED.status,
+            sort_order = EXCLUDED.sort_order,
+            updated_at = NOW()
+        RETURNING id
+        "#,
+    )
+    .bind(project_id)
+    .bind(code)
+    .bind(name)
+    .bind(status)
+    .bind(sort_order)
+    .fetch_one(pool)
+    .await?;
+    Ok(environment_id)
+}
+
 async fn seed_template_deployment(
     pool: &PgPool,
     project_id: i64,
     deployment_key: &str,
 ) -> TestResult<i64> {
+    let environment_id =
+        seed_project_environment(pool, project_id, "prod", "Production", "active", 10).await?;
     let deployment_id: i64 = sqlx::query_scalar(
         r#"
         INSERT INTO deployment_instances (
             project_id,
-            environment,
+            environment_id,
             deployment_key,
             name,
             is_template,
             status
         )
-        VALUES ($1, 'prod', $2, 'Template Store', true, 'active')
+        VALUES ($1, $2, $3, 'Template Store', true, 'active')
         RETURNING id
         "#,
     )
     .bind(project_id)
+    .bind(environment_id)
     .bind(deployment_key)
     .fetch_one(pool)
     .await?;
@@ -207,18 +247,27 @@ async fn list_deployment_instances_filters_by_project_and_environment() -> TestR
     )
     .fetch_one(&pool)
     .await?;
+    let project_a_prod_env =
+        seed_project_environment(&pool, project_a, "prod", "Production", "active", 10).await?;
+    let project_a_staging_env =
+        seed_project_environment(&pool, project_a, "staging", "Staging", "active", 20).await?;
+    let project_b_prod_env =
+        seed_project_environment(&pool, project_b, "prod", "Production", "active", 10).await?;
 
     sqlx::query(
         r#"
-        INSERT INTO deployment_instances (project_id, environment, deployment_key, name, is_template, status)
+        INSERT INTO deployment_instances (project_id, environment_id, deployment_key, name, is_template, status)
         VALUES
-            ($1, 'prod', 'store-001', 'Store 001', false, 'active'),
-            ($1, 'staging', 'store-stg', 'Store Staging', false, 'active'),
-            ($2, 'prod', 'store-ops', 'Store Ops', true, 'inactive')
+            ($1, $2, 'store-001', 'Store 001', false, 'active'),
+            ($1, $3, 'store-stg', 'Store Staging', false, 'active'),
+            ($4, $5, 'store-ops', 'Store Ops', true, 'inactive')
         "#,
     )
     .bind(project_a)
+    .bind(project_a_prod_env)
+    .bind(project_a_staging_env)
     .bind(project_b)
+    .bind(project_b_prod_env)
     .execute(&pool)
     .await?;
 
@@ -228,7 +277,7 @@ async fn list_deployment_instances_filters_by_project_and_environment() -> TestR
         .oneshot(
             Request::builder()
                 .uri(format!(
-                    "/api/deployment-instances?project_id={project_a}&environment=prod&status=active"
+                    "/api/deployment-instances?project_id={project_a}&environment_id={project_a_prod_env}&status=active"
                 ))
                 .header(header::COOKIE, &cookie)
                 .body(Body::empty())?,
@@ -242,7 +291,9 @@ async fn list_deployment_instances_filters_by_project_and_environment() -> TestR
     assert_eq!(payload.page, 1);
     assert_eq!(payload.page_size, 20);
     assert_eq!(payload.items[0].project_id, project_a);
-    assert_eq!(payload.items[0].environment, "prod");
+    assert_eq!(payload.items[0].environment_id, project_a_prod_env);
+    assert_eq!(payload.items[0].environment_code, "prod");
+    assert_eq!(payload.items[0].environment_name, "Production");
     assert_eq!(payload.items[0].deployment_key, "store-001");
 
     let keyword_response = app
@@ -295,6 +346,8 @@ async fn create_deployment_instance_creates_row() -> TestResult {
     )
     .fetch_one(&pool)
     .await?;
+    let environment_id =
+        seed_project_environment(&pool, project_id, "prod", "Production", "active", 10).await?;
 
     let cookie = login(&app).await?;
     let response = app
@@ -306,7 +359,7 @@ async fn create_deployment_instance_creates_row() -> TestResult {
                 .header(header::COOKIE, cookie)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(format!(
-                    r#"{{"project_id":{project_id},"environment":"prod","deployment_key":"store-001","name":"Store 001","description":"hangzhou store 001","is_template":false}}"#
+                    r#"{{"project_id":{project_id},"environment_id":{environment_id},"deployment_key":"store-001","name":"Store 001","description":"hangzhou store 001","is_template":false}}"#
                 )))?,
         )
         .await?;
@@ -314,18 +367,20 @@ async fn create_deployment_instance_creates_row() -> TestResult {
     assert_eq!(response.status(), StatusCode::CREATED);
     let payload: DeploymentInstanceSummary = read_json(response).await?;
     assert_eq!(payload.project_id, project_id);
-    assert_eq!(payload.environment, "prod");
+    assert_eq!(payload.environment_id, environment_id);
+    assert_eq!(payload.environment_code, "prod");
+    assert_eq!(payload.environment_name, "Production");
     assert_eq!(payload.deployment_key, "store-001");
     assert!(!payload.is_template);
     assert_eq!(payload.status, "inactive");
 
     let row = sqlx::query(
-        "SELECT environment, deployment_key, name, is_template, status FROM deployment_instances WHERE id = $1",
+        "SELECT environment_id, deployment_key, name, is_template, status FROM deployment_instances WHERE id = $1",
     )
     .bind(payload.id)
     .fetch_one(&pool)
     .await?;
-    assert_eq!(row.get::<String, _>("environment"), "prod");
+    assert_eq!(row.get::<i64, _>("environment_id"), environment_id);
     assert_eq!(row.get::<String, _>("deployment_key"), "store-001");
     assert_eq!(row.get::<String, _>("name"), "Store 001");
     assert!(!row.get::<bool, _>("is_template"));
@@ -346,10 +401,13 @@ async fn create_deployment_instance_rejects_duplicate_key_in_same_project_enviro
     )
     .fetch_one(&pool)
     .await?;
+    let environment_id =
+        seed_project_environment(&pool, project_id, "prod", "Production", "active", 10).await?;
     sqlx::query(
-        "INSERT INTO deployment_instances (project_id, environment, deployment_key, name, is_template, status) VALUES ($1, 'prod', 'store-001', 'Store 001', false, 'active')",
+        "INSERT INTO deployment_instances (project_id, environment_id, deployment_key, name, is_template, status) VALUES ($1, $2, 'store-001', 'Store 001', false, 'active')",
     )
     .bind(project_id)
+    .bind(environment_id)
     .execute(&pool)
     .await?;
 
@@ -362,7 +420,7 @@ async fn create_deployment_instance_rejects_duplicate_key_in_same_project_enviro
                 .header(header::COOKIE, cookie)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(format!(
-                    r#"{{"project_id":{project_id},"environment":"prod","deployment_key":"store-001","name":"Duplicate Store","is_template":false}}"#
+                    r#"{{"project_id":{project_id},"environment_id":{environment_id},"deployment_key":"store-001","name":"Duplicate Store","is_template":false}}"#
                 )))?,
         )
         .await?;
@@ -395,7 +453,7 @@ async fn create_deployment_instance_returns_project_not_found_for_unknown_projec
                 .header(header::COOKIE, cookie)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
-                    r#"{"project_id":999999,"environment":"prod","deployment_key":"store-001","name":"Store 001","is_template":false}"#,
+                    r#"{"project_id":999999,"environment_id":999999,"deployment_key":"store-001","name":"Store 001","is_template":false}"#,
                 ))?,
         )
         .await?;
@@ -424,10 +482,13 @@ async fn get_deployment_instance_returns_detail_for_authenticated_session() -> T
     )
     .fetch_one(&pool)
     .await?;
+    let environment_id =
+        seed_project_environment(&pool, project_id, "prod", "Production", "active", 10).await?;
     let deployment_id: i64 = sqlx::query_scalar(
-        "INSERT INTO deployment_instances (project_id, environment, deployment_key, name, is_template, status) VALUES ($1, 'prod', 'store-001', 'Store 001', false, 'active') RETURNING id",
+        "INSERT INTO deployment_instances (project_id, environment_id, deployment_key, name, is_template, status) VALUES ($1, $2, 'store-001', 'Store 001', false, 'active') RETURNING id",
     )
     .bind(project_id)
+    .bind(environment_id)
     .fetch_one(&pool)
     .await?;
 
@@ -445,6 +506,8 @@ async fn get_deployment_instance_returns_detail_for_authenticated_session() -> T
     let payload: DeploymentInstanceSummary = read_json(response).await?;
     assert_eq!(payload.id, deployment_id);
     assert_eq!(payload.project_id, project_id);
+    assert_eq!(payload.environment_id, environment_id);
+    assert_eq!(payload.environment_code, "prod");
     assert_eq!(payload.deployment_key, "store-001");
 
     teardown(&database_url, &schema, pool).await
@@ -461,10 +524,15 @@ async fn update_deployment_instance_updates_existing_row() -> TestResult {
     )
     .fetch_one(&pool)
     .await?;
+    let prod_environment_id =
+        seed_project_environment(&pool, project_id, "prod", "Production", "active", 10).await?;
+    let staging_environment_id =
+        seed_project_environment(&pool, project_id, "staging", "Staging", "active", 20).await?;
     let deployment_id: i64 = sqlx::query_scalar(
-        "INSERT INTO deployment_instances (project_id, environment, deployment_key, name, is_template, status) VALUES ($1, 'prod', 'store-001', 'Store 001', false, 'active') RETURNING id",
+        "INSERT INTO deployment_instances (project_id, environment_id, deployment_key, name, is_template, status) VALUES ($1, $2, 'store-001', 'Store 001', false, 'active') RETURNING id",
     )
     .bind(project_id)
+    .bind(prod_environment_id)
     .fetch_one(&pool)
     .await?;
 
@@ -478,25 +546,29 @@ async fn update_deployment_instance_updates_existing_row() -> TestResult {
                 .header(header::COOKIE, cookie)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
-                    r#"{"environment":"staging","deployment_key":"store-stg","name":"Store Staging","description":"updated staging deployment"}"#,
+                    format!(
+                        r#"{{"environment_id":{staging_environment_id},"deployment_key":"store-stg","name":"Store Staging","description":"updated staging deployment"}}"#
+                    ),
                 ))?,
         )
         .await?;
 
     assert_eq!(response.status(), StatusCode::OK);
     let payload: DeploymentInstanceSummary = read_json(response).await?;
-    assert_eq!(payload.environment, "staging");
+    assert_eq!(payload.environment_id, staging_environment_id);
+    assert_eq!(payload.environment_code, "staging");
+    assert_eq!(payload.environment_name, "Staging");
     assert_eq!(payload.deployment_key, "store-stg");
     assert!(!payload.is_template);
     assert_eq!(payload.status, "active");
 
     let row = sqlx::query(
-        "SELECT environment, deployment_key, name, is_template, status FROM deployment_instances WHERE id = $1",
+        "SELECT environment_id, deployment_key, name, is_template, status FROM deployment_instances WHERE id = $1",
     )
     .bind(deployment_id)
     .fetch_one(&pool)
     .await?;
-    assert_eq!(row.get::<String, _>("environment"), "staging");
+    assert_eq!(row.get::<i64, _>("environment_id"), staging_environment_id);
     assert_eq!(row.get::<String, _>("deployment_key"), "store-stg");
     assert_eq!(row.get::<String, _>("name"), "Store Staging");
     assert!(!row.get::<bool, _>("is_template"));
@@ -512,22 +584,27 @@ async fn update_deployment_instance_rejects_immutable_fields() -> TestResult {
     };
 
     let project_id = seed_project(&pool, "coffee-legacy", "Coffee Legacy").await?;
+    let environment_id =
+        seed_project_environment(&pool, project_id, "prod", "Production", "active", 10).await?;
     let deployment_id: i64 = sqlx::query_scalar(
-        "INSERT INTO deployment_instances (project_id, environment, deployment_key, name, is_template, status) VALUES ($1, 'prod', 'store-001', 'Store 001', false, 'active') RETURNING id",
+        "INSERT INTO deployment_instances (project_id, environment_id, deployment_key, name, is_template, status) VALUES ($1, $2, 'store-001', 'Store 001', false, 'active') RETURNING id",
     )
     .bind(project_id)
+    .bind(environment_id)
     .fetch_one(&pool)
     .await?;
 
     let cookie = login(&app).await?;
     for body in [
         format!(
-            r#"{{"project_id":{project_id},"environment":"prod","deployment_key":"store-001","name":"Store 001"}}"#
+            r#"{{"project_id":{project_id},"environment_id":{environment_id},"deployment_key":"store-001","name":"Store 001"}}"#
         ),
-        r#"{"environment":"prod","deployment_key":"store-001","name":"Store 001","is_template":true}"#
-            .to_owned(),
-        r#"{"environment":"prod","deployment_key":"store-001","name":"Store 001","status":"inactive"}"#
-            .to_owned(),
+        format!(
+            r#"{{"environment_id":{environment_id},"deployment_key":"store-001","name":"Store 001","is_template":true}}"#
+        ),
+        format!(
+            r#"{{"environment_id":{environment_id},"deployment_key":"store-001","name":"Store 001","status":"inactive"}}"#
+        ),
     ] {
         let response = app
             .clone()
@@ -559,6 +636,10 @@ async fn deployment_instance_crud_flow_persists_changes_across_endpoints() -> Te
     )
     .fetch_one(&pool)
     .await?;
+    let prod_environment_id =
+        seed_project_environment(&pool, project_id, "prod", "Production", "active", 10).await?;
+    let staging_environment_id =
+        seed_project_environment(&pool, project_id, "staging", "Staging", "active", 20).await?;
     let cookie = login(&app).await?;
 
     let create_response = app
@@ -570,7 +651,7 @@ async fn deployment_instance_crud_flow_persists_changes_across_endpoints() -> Te
                 .header(header::COOKIE, &cookie)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(format!(
-                    r#"{{"project_id":{project_id},"environment":"prod","deployment_key":"store-001","name":"Store 001","description":"hangzhou store 001","is_template":false}}"#
+                    r#"{{"project_id":{project_id},"environment_id":{prod_environment_id},"deployment_key":"store-001","name":"Store 001","description":"hangzhou store 001","is_template":false}}"#
                 )))?,
         )
         .await?;
@@ -582,7 +663,7 @@ async fn deployment_instance_crud_flow_persists_changes_across_endpoints() -> Te
         .oneshot(
             Request::builder()
                 .uri(format!(
-                    "/api/deployment-instances?project_id={project_id}&environment=prod&status=inactive"
+                    "/api/deployment-instances?project_id={project_id}&environment_id={prod_environment_id}&status=inactive"
                 ))
                 .header(header::COOKIE, &cookie)
                 .body(Body::empty())?,
@@ -614,14 +695,15 @@ async fn deployment_instance_crud_flow_persists_changes_across_endpoints() -> Te
                 .uri(format!("/api/deployment-instances/{}", created.id))
                 .header(header::COOKIE, &cookie)
                 .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    r#"{"environment":"staging","deployment_key":"store-stg","name":"Store Staging","description":"updated staging deployment"}"#,
-                ))?,
+                .body(Body::from(format!(
+                    r#"{{"environment_id":{staging_environment_id},"deployment_key":"store-stg","name":"Store Staging","description":"updated staging deployment"}}"#
+                )))?,
         )
         .await?;
     assert_eq!(update_response.status(), StatusCode::OK);
     let updated: DeploymentInstanceSummary = read_json(update_response).await?;
-    assert_eq!(updated.environment, "staging");
+    assert_eq!(updated.environment_id, staging_environment_id);
+    assert_eq!(updated.environment_code, "staging");
     assert_eq!(updated.deployment_key, "store-stg");
     assert_eq!(updated.status, "inactive");
 
@@ -635,17 +717,18 @@ async fn deployment_instance_crud_flow_persists_changes_across_endpoints() -> Te
         .await?;
     assert_eq!(detail_after_update.status(), StatusCode::OK);
     let detail_after_update: DeploymentInstanceSummary = read_json(detail_after_update).await?;
-    assert_eq!(detail_after_update.environment, "staging");
+    assert_eq!(detail_after_update.environment_id, staging_environment_id);
+    assert_eq!(detail_after_update.environment_code, "staging");
     assert_eq!(detail_after_update.deployment_key, "store-stg");
     assert_eq!(detail_after_update.status, "inactive");
 
     let row = sqlx::query(
-        "SELECT environment, deployment_key, status FROM deployment_instances WHERE id = $1",
+        "SELECT environment_id, deployment_key, status FROM deployment_instances WHERE id = $1",
     )
     .bind(created.id)
     .fetch_one(&pool)
     .await?;
-    assert_eq!(row.get::<String, _>("environment"), "staging");
+    assert_eq!(row.get::<i64, _>("environment_id"), staging_environment_id);
     assert_eq!(row.get::<String, _>("deployment_key"), "store-stg");
     assert_eq!(row.get::<String, _>("status"), "inactive");
 
@@ -661,6 +744,8 @@ async fn clone_deployment_instance_copies_template_drafts() -> TestResult {
     let project_id = seed_project(&pool, "coffee-legacy", "Coffee Legacy").await?;
     let config_file_id = seed_config_file(&pool, project_id, "main").await?;
     let template_id = seed_template_deployment(&pool, project_id, "store-template").await?;
+    let environment_id =
+        seed_project_environment(&pool, project_id, "prod", "Production", "active", 10).await?;
     let editor_user_id: i64 =
         sqlx::query_scalar("SELECT id FROM users WHERE username = 'admin' LIMIT 1")
             .fetch_one(&pool)
@@ -697,9 +782,9 @@ async fn clone_deployment_instance_copies_template_drafts() -> TestResult {
                 .uri(format!("/api/deployment-instances/{template_id}/clone"))
                 .header(header::COOKIE, &cookie)
                 .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    r#"{"deployment_key":"store-002","name":"Store 002","environment":"prod","description":"cloned from template","clone_source":"draft"}"#,
-                ))?,
+                .body(Body::from(format!(
+                    r#"{{"deployment_key":"store-002","name":"Store 002","environment_id":{environment_id},"description":"cloned from template","clone_source":"draft"}}"#
+                )))?,
         )
         .await?;
 
@@ -731,6 +816,8 @@ async fn clone_deployment_instance_rejects_latest_release_source() -> TestResult
     let project_id = seed_project(&pool, "coffee-legacy", "Coffee Legacy").await?;
     let _config_file_id = seed_config_file(&pool, project_id, "main").await?;
     let template_id = seed_template_deployment(&pool, project_id, "store-template").await?;
+    let staging_environment_id =
+        seed_project_environment(&pool, project_id, "staging", "Staging", "active", 20).await?;
 
     let cookie = login(&app).await?;
     let response = app
@@ -741,9 +828,9 @@ async fn clone_deployment_instance_rejects_latest_release_source() -> TestResult
                 .uri(format!("/api/deployment-instances/{template_id}/clone"))
                 .header(header::COOKIE, &cookie)
                 .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    r#"{"deployment_key":"store-003","name":"Store 003","environment":"staging","clone_source":"latest_release"}"#,
-                ))?,
+                .body(Body::from(format!(
+                    r#"{{"deployment_key":"store-003","name":"Store 003","environment_id":{staging_environment_id},"clone_source":"latest_release"}}"#
+                )))?,
         )
         .await?;
 
@@ -769,6 +856,8 @@ async fn preview_bundle_prefers_draft_and_marks_missing_required() -> TestResult
     let project_id = seed_project(&pool, "coffee-legacy", "Coffee Legacy").await?;
     let main_config_id = seed_config_file(&pool, project_id, "main").await?;
     let vision_config_id = seed_config_file(&pool, project_id, "vision").await?;
+    let environment_id =
+        seed_project_environment(&pool, project_id, "prod", "Production", "active", 10).await?;
     sqlx::query("UPDATE config_files SET is_required = TRUE WHERE id = $1")
         .bind(vision_config_id)
         .execute(&pool)
@@ -777,17 +866,18 @@ async fn preview_bundle_prefers_draft_and_marks_missing_required() -> TestResult
         r#"
         INSERT INTO deployment_instances (
             project_id,
-            environment,
+            environment_id,
             deployment_key,
             name,
             is_template,
             status
         )
-        VALUES ($1, 'prod', 'store-001', 'Store 001', false, 'active')
+        VALUES ($1, $2, 'store-001', 'Store 001', false, 'active')
         RETURNING id
         "#,
     )
     .bind(project_id)
+    .bind(environment_id)
     .fetch_one(&pool)
     .await?;
     let editor_user_id: i64 =

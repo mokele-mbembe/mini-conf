@@ -212,9 +212,12 @@ async fn find_deployment(
         SELECT p.id AS project_id, d.id AS deployment_id
         FROM projects p
         JOIN deployment_instances d ON d.project_id = p.id
+        JOIN project_environments pe
+          ON pe.project_id = d.project_id
+         AND pe.id = d.environment_id
         WHERE p.code = $1
           AND p.status = 'active'
-          AND d.environment = $2
+          AND pe.code = $2
           AND d.deployment_key = $3
           AND d.status = 'active'
         "#,

@@ -18,6 +18,7 @@
 - `projects`
 - `project_members`
 - `config_files`
+- `project_environments`
 - `deployment_instances`
 - `drafts`
 - `releases`
@@ -86,11 +87,31 @@
 - MVP 只做基础格式合法性校验，不保留 `schema_name / schema_version` 字段
 - MVP 先做脱敏展示和日志裁剪，不强制要求字段级加密存储
 
+### project_environments
+
+- `id` bigserial pk
+- `project_id` bigint not null
+- `code` varchar(32) not null
+- `name` varchar(128) not null
+- `description` text null
+- `status` varchar(32) not null default 'active'
+- `sort_order` integer not null default 0
+- `created_at` timestamptz not null default now()
+- `updated_at` timestamptz not null default now()
+- unique (`project_id`, `code`)
+
+说明：
+
+- 环境是项目内独立对象，不做跨项目共享
+- `code` 是 Open API 使用的稳定环境标识，创建后不允许修改
+- `status` 只保留 `active`、`inactive`
+- `inactive` 仅阻止后续分配给新实例，不直接让既有实例失效
+
 ### deployment_instances
 
 - `id` bigserial pk
 - `project_id` bigint not null
-- `environment` varchar(32) not null
+- `environment_id` bigint not null
 - `deployment_key` varchar(64) not null
 - `name` varchar(128) not null
 - `description` text null
@@ -99,12 +120,12 @@
 - `status` varchar(32) not null default 'active'
 - `created_at` timestamptz not null default now()
 - `updated_at` timestamptz not null default now()
-- unique (`project_id`, `environment`, `deployment_key`)
+- unique (`project_id`, `environment_id`, `deployment_key`)
 
 说明：
 
 - `DeploymentInstance` 是 MVP 主路径中的核心对象
-- 它代表项目在某个环境下的一整套独立部署实例
+- 它代表项目在某个项目环境下的一整套独立部署实例
 - 可以从一个模板部署实例克隆，但克隆完成后保持独立
 - 部署实例业务状态只采用 `active`、`inactive`
 - 管理端创建实例时默认写入 `inactive`；激活后才允许 Open API 消费
@@ -233,7 +254,9 @@
 - `project_members.project_id -> projects.id`
 - `project_members.user_id -> users.id`
 - `config_files.project_id -> projects.id`
+- `project_environments.project_id -> projects.id`
 - `deployment_instances.project_id -> projects.id`
+- `deployment_instances.(project_id, environment_id) -> project_environments.(project_id, id)`
 - `deployment_instances.template_source_id -> deployment_instances.id`
 - `drafts.config_file_id -> config_files.id`
 - `drafts.deployment_instance_id -> deployment_instances.id`
@@ -292,7 +315,8 @@
 - `project_members(project_id, role)`
 - `project_members(user_id, project_id)`
 - `config_files(project_id, code)`
-- `deployment_instances(project_id, environment, deployment_key)`
+- `project_environments(project_id, code)`
+- `deployment_instances(project_id, environment_id, deployment_key)`
 - `releases(deployment_instance_id, config_file_id, published_at desc)`
 - `deployment_credentials(deployment_instance_id, status)`
 - `deployment_sync_records(deployment_instance_id, reported_at desc)`
@@ -329,9 +353,10 @@ MVP 先采用轻量方案：
 2. `projects`
 3. `project_members`
 4. `config_files`
-5. `deployment_instances`
-6. `drafts`
-7. `releases`
-8. `deployment_credentials`
-9. `deployment_sync_records`
-10. `audit_logs`
+5. `project_environments`
+6. `deployment_instances`
+7. `drafts`
+8. `releases`
+9. `deployment_credentials`
+10. `deployment_sync_records`
+11. `audit_logs`

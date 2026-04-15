@@ -40,6 +40,11 @@ const tabs = computed<Tab[]>(() => [
     routeName: ROUTE_NAMES.CONFIG_FILE_LIST,
   },
   {
+    name: "environments",
+    label: t("tabs.environments"),
+    routeName: ROUTE_NAMES.PROJECT_ENVIRONMENT_LIST,
+  },
+  {
     name: "deployments",
     label: t("tabs.deployments"),
     routeName: ROUTE_NAMES.DEPLOYMENT_LIST,

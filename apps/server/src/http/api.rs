@@ -7,6 +7,7 @@ pub(crate) mod deployment_sync_records;
 pub(crate) mod drafts;
 pub(crate) mod health;
 pub(crate) mod open;
+pub(crate) mod project_environments;
 pub(crate) mod project_members;
 pub(crate) mod projects;
 pub(crate) mod releases;
@@ -25,6 +26,7 @@ pub fn router() -> Router<crate::state::AppState> {
         .merge(health::router())
         .merge(open::router())
         .merge(project_members::router())
+        .merge(project_environments::router())
         .merge(projects::router())
         .merge(releases::router())
 }

@@ -17,6 +17,7 @@ use schema::{
         ConfigBundleResponse, DeploymentSyncResponse, ReleaseContentResponse, ResolveConfigResponse,
     },
     project::{ProjectListResponse, ProjectSummary},
+    project_environment::{ProjectEnvironmentListResponse, ProjectEnvironmentSummary},
     project_member::{ProjectMemberListResponse, ProjectMemberSummary},
     release::{
         ReleaseDetailResponse, ReleaseDiffResponse, ReleaseDiffSummary, ReleaseListResponse,
@@ -70,6 +71,11 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
         crate::http::api::project_members::create_project_member,
         crate::http::api::project_members::update_project_member,
         crate::http::api::project_members::delete_project_member,
+        crate::http::api::project_environments::list_project_environments,
+        crate::http::api::project_environments::create_project_environment,
+        crate::http::api::project_environments::get_project_environment,
+        crate::http::api::project_environments::update_project_environment,
+        crate::http::api::project_environments::delete_project_environment,
         crate::http::api::projects::list_projects,
         crate::http::api::projects::create_project,
         crate::http::api::projects::get_project,
@@ -106,6 +112,8 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
             HealthzResponse,
             ProjectMemberSummary,
             ProjectMemberListResponse,
+            ProjectEnvironmentSummary,
+            ProjectEnvironmentListResponse,
             ResolveConfigResponse,
             ReleaseContentResponse,
             ReleaseSummary,
@@ -126,7 +134,9 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
             UpdateDeploymentInstanceRequestBody,
             UpdateConfigFileRequestBody,
             CreateProjectMemberRequestBody,
+            CreateProjectEnvironmentRequestBody,
             CreateProjectRequestBody,
+            UpdateProjectEnvironmentRequestBody,
             UpdateProjectRequestBody,
             UpdateProjectMemberRequestBody,
             PublishReleaseRequestBody,
@@ -197,7 +207,7 @@ pub struct CreateConfigFileRequestBody {
 #[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
 pub struct CreateDeploymentInstanceRequestBody {
     pub project_id: i64,
-    pub environment: String,
+    pub environment_id: i64,
     pub deployment_key: String,
     pub name: String,
     pub description: Option<String>,
@@ -208,17 +218,34 @@ pub struct CreateDeploymentInstanceRequestBody {
 pub struct CloneDeploymentInstanceRequestBody {
     pub deployment_key: String,
     pub name: String,
-    pub environment: String,
+    pub environment_id: i64,
     pub description: Option<String>,
     pub clone_source: String,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
 pub struct UpdateDeploymentInstanceRequestBody {
-    pub environment: String,
+    pub environment_id: i64,
     pub deployment_key: String,
     pub name: String,
     pub description: Option<String>,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
+pub struct CreateProjectEnvironmentRequestBody {
+    pub code: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub status: Option<String>,
+    pub sort_order: Option<i32>,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
+pub struct UpdateProjectEnvironmentRequestBody {
+    pub name: String,
+    pub description: Option<String>,
+    pub status: Option<String>,
+    pub sort_order: Option<i32>,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
@@ -302,7 +329,7 @@ pub struct ListConfigFilesParams {
 #[into_params(parameter_in = Query)]
 pub struct ListDeploymentInstancesParams {
     pub project_id: Option<i64>,
-    pub environment: Option<String>,
+    pub environment_id: Option<i64>,
     pub keyword: Option<String>,
     pub status: Option<String>,
     pub page: Option<i64>,

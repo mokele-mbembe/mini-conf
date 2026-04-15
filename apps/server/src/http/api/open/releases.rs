@@ -96,7 +96,7 @@ async fn find_release(
         r#"
         SELECT
             p.code AS project,
-            d.environment,
+            pe.code AS environment,
             d.deployment_key,
             cf.code AS config_name,
             r.revision,
@@ -110,6 +110,9 @@ async fn find_release(
         JOIN projects p ON p.id = r.project_id
         JOIN config_files cf ON cf.id = r.config_file_id
         JOIN deployment_instances d ON d.id = r.deployment_instance_id
+        JOIN project_environments pe
+          ON pe.project_id = d.project_id
+         AND pe.id = d.environment_id
         WHERE r.revision = $1
           AND r.deployment_instance_id = $2
           AND p.status = 'active'
