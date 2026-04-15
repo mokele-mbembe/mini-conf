@@ -60,6 +60,34 @@
 - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:4173 pnpm --dir apps/web test:e2e` 通过
 - 浏览器手工联调已确认 `/login -> /projects -> /projects/:id` 主路径可访问，Console 无新错误
 
+2026-04-15 本轮已完成配置标识收口与部署实例生命周期调整，并提交 `8e28eae Align config identity and deployment lifecycle`：
+
+- MVP 后端主路径不再引入独立 `process_key`
+- open API、sync records、heartbeats 统一使用请求字段 `config`，服务端按 `ConfigFile.code` 解析并落库为 `config_file_id`
+- `deployment_sync_records` 删除 `process_key`，管理端列表返回 `config_file_id` 和 `config`
+- `deployment_heartbeats` 改为 `config_file_id`，唯一约束为 `deployment_instance_id + config_file_id`
+- 新增迁移 `0012_config_identity_and_deployment_lifecycle`
+- 部署实例状态收口为 `active | inactive`，不再为 deployment 引入 `archived`
+- 创建和模板 clone 默认生成 `inactive` 普通实例，不生成 token
+- 新增 `POST /api/deployment-instances/:id/activate`，激活普通实例并一次性返回默认 token
+- 新增 `POST /api/deployment-instances/:id/deactivate`，停用实例并让默认 token 立即失效
+- `POST /api/deployment-instances/:id/token/reset` 仅允许 active 普通实例
+- `PUT /api/deployment-instances/:id` 只允许修改 `environment / deployment_key / name / description`
+- `GET /api/deployment-instances` 已改为分页响应 `items / total / page / page_size`
+- OpenAPI、alpha full Hurl、demo seed、DB/API/前端蓝图/客户端协议文档已同步
+- 新增咖啡中间件 demo 规格文档 `docs/constraints/DEMO_SCENARIO_COFFEE_MIDDLEWARE.md`
+- 新增产品澄清 `docs/constraints/product-qa/0007-config-identity-and-heartbeats.md`
+
+本轮本地验证结果：
+
+- `cargo test --workspace` 通过
+- `just lint-backend` 通过
+- `just test-backend-db-local` 通过，197 passed
+- `cargo check --workspace` 通过
+- `cargo test -p server --test deployment_tokens` 通过
+- `bash scripts/export-openapi.sh` 已重新导出 `docs/artifacts/openapi.json`
+- 提交时 pre-commit hook 已通过 `fmt-backend / lint-backend / fmt-frontend / lint-frontend`
+
 ## 2. 当前进度 Checklist
 
 ### 2.1 基础设施与工程基线
@@ -83,6 +111,7 @@
 - [x] `POST /api/open/deployment-sync-records`
 - [x] `POST /api/open/heartbeats`
 - [x] deployment credential / Bearer 鉴权
+- [x] open API 客户端配置标识统一为 `config`
 
 ### 2.3 管理端认证
 
@@ -108,7 +137,10 @@
 - [x] `GET /api/releases/:id`
 - [x] `GET /api/releases/:id/diff`
 - [x] `POST /api/deployment-instances/:id/token/reset`
+- [x] `POST /api/deployment-instances/:id/activate`
+- [x] `POST /api/deployment-instances/:id/deactivate`
 - [x] `GET /api/deployment-sync-records`
+- [x] `GET /api/deployment-heartbeats`
 - [x] `GET /api/audit-logs`
 
 ### 2.5 产品规则收口
@@ -122,6 +154,10 @@
 - [x] preview-bundle 返回业务预览明细和 consumer 侧整包预览
 - [x] `release diff` 固定比较上一版并返回文本级摘要
 - [x] token reset 原地轮换默认凭证并立即切换 open API 鉴权
+- [x] 部署实例创建和 clone 默认 `inactive`
+- [x] 部署实例只采用 `active | inactive`
+- [x] active 实例才允许 open API 消费
+- [x] `ConfigFile.code` 是 MVP 唯一客户端配置标识
 - [x] 项目仅对成员可见
 - [x] 项目创建者自动成为项目 `admin`
 - [x] 写操作和关键认证事件写入 `audit_logs`
@@ -151,6 +187,8 @@
 ### 3.2 后端补强项
 
 - [x] 管理端查看 deployment sync records
+- [x] 管理端查看 deployment heartbeats
+- [x] 管理端 deployment instances 分页、搜索和生命周期接口
 - [x] 更完整的 OpenAPI 文档说明与示例
 - [x] `alpha-full` 补 `project_members / audit_logs / deployment-sync-records` 的黑盒闭环
 - [x] `alpha-full` 补模板 clone、二次发布 diff、旧 token 失效回归
@@ -173,25 +211,30 @@
 
 推荐顺序：
 
-1. 前端管理台下一批页面
-2. `sqlx-check` 恢复为强制检查的时机评估
-3. 黑盒与覆盖率基线的持续补量
+1. 前端 API 类型与 client 收口
+2. 部署实例列表 / 详情 / 生命周期操作
+3. Draft / preview / publish 主路径
+4. 咖啡中间件 demo 程序
+5. `sqlx-check` 恢复为强制检查的时机评估
+6. 黑盒与覆盖率基线的持续补量
 
 理由：
 
-- 后端主路径、项目级权限、审计日志、管理端同步/心跳查询和开放接口活跃态约束已经完成
-- 当前更大的风险已从“后端功能缺失”转向“前端主路径继续铺开、覆盖率持续抬升和 compile-time SQLx metadata 时机”
+- 后端主路径、项目级权限、审计日志、配置标识收口、部署实例生命周期和开放接口活跃态约束已经完成
+- 当前更大的风险已从“后端功能缺失”转向“前端按新 API 语义接入、demo 真实链路跑通、覆盖率持续抬升和 compile-time SQLx metadata 时机”
 - alpha 黑盒已覆盖成员权限、审计查询、模板 clone、二次发布 diff 和 token 失效回归
-- 前端首版 scaffold、build 和最小 smoke 已就位，下一步应继续按文档切片推进配置文件、部署实例和 Draft / Release 主路径
+- 前端首版 scaffold、build、配置文件页和最小 smoke 已就位，下一步应继续按文档切片推进部署实例和 Draft / Release 主路径
 
 前端下一批推荐顺序：
 
-1. 部署实例列表 / 详情页
-2. 模板创建实例流程
-3. Draft 编辑页
-4. preview-bundle 预览页
-5. release history / diff 页
-6. 项目成员页与审计 / 同步 / 心跳页面
+1. API 类型与 client：deployment list 分页、activate、deactivate、sync/heartbeat `config_file_id`
+2. 部署实例列表 / 详情页
+3. 部署实例激活 / 停用 / token reset
+4. 模板创建实例流程
+5. Draft 编辑页
+6. preview-bundle 预览页
+7. release history / diff 页
+8. 项目成员页与审计 / 同步 / 心跳页面
 
 ## 5. 下一个会话建议先跑的命令
 
@@ -248,6 +291,8 @@ just ci-local-db
 - [必选配置与预览澄清](./docs/constraints/product-qa/0002-required-configs-and-preview.md)
 - [部署实例 Token 重置澄清](./docs/constraints/product-qa/0004-token-reset.md)
 - [项目成员、项目级权限与审计日志澄清](./docs/constraints/product-qa/0005-project-members-permissions-audit.md)
+- [配置标识与心跳澄清](./docs/constraints/product-qa/0007-config-identity-and-heartbeats.md)
+- [咖啡中间件演示案例规格](./docs/constraints/DEMO_SCENARIO_COFFEE_MIDDLEWARE.md)
 - [前端 MVP 蓝图](./docs/constraints/FRONTEND_MVP_BLUEPRINT.md)
 
 ### 与环境相关

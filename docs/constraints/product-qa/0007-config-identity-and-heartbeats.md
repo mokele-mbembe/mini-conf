@@ -142,4 +142,5 @@ ClientComponent
 - MVP 不再引入独立 `process_key`
 - `ConfigFile.code` 是唯一的客户端配置标识
 - open API、sync records、heartbeats 都应围绕 `config` 统一表达
-- 后续后端和前端调整时，应移除或废弃 `process_key` 字段
+- 后端已于提交 `8e28eae Align config identity and deployment lifecycle` 落地该规则
+- 后续前端和 demo 程序不应再新增 `process_key` 字段

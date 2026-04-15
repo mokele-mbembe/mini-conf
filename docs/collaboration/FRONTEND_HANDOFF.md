@@ -26,6 +26,8 @@
 9. [`docs/artifacts/openapi.json`](../artifacts/openapi.json)
 10. [`docs/constraints/AUTH_AND_SECURITY.md`](../constraints/AUTH_AND_SECURITY.md)
 11. [`docs/public/CLIENT_HTTP_PROTOCOL.md`](../public/CLIENT_HTTP_PROTOCOL.md)
+12. [`docs/constraints/product-qa/0007-config-identity-and-heartbeats.md`](../constraints/product-qa/0007-config-identity-and-heartbeats.md)
+13. [`docs/constraints/DEMO_SCENARIO_COFFEE_MIDDLEWARE.md`](../constraints/DEMO_SCENARIO_COFFEE_MIDDLEWARE.md)
 
 推荐真值优先级：
 
@@ -68,6 +70,7 @@
 - preview-bundle
 - Release 发布、列表、详情、diff
 - deployment token reset
+- deployment activate / deactivate
 - deployment sync records 查询
 - deployment heartbeats 查询
 - audit logs 查询
@@ -100,6 +103,8 @@
 - `publish` 不是整实例发布，而是“某实例下某配置文件发布”。
 - 同一个 `deployment_instance + config_file` 只有一份当前 Draft。
 - 消费端 token 是部署实例级共享凭证，不是进程级凭证。
+- 部署实例只使用 `active / inactive`。创建和 clone 默认 `inactive`，激活后才允许 Open API 消费。
+- 客户端配置标识统一为 `ConfigFile.code`。前端不要再引入 `process_key`，同步记录和心跳筛选使用 `config_file_id`。
 
 ## 5. 页面与接口映射
 
@@ -159,11 +164,13 @@
 
 ### 5.5 部署实例 / 模板
 
-- `GET /api/deployment-instances?project_id=:projectId&environment=&status=&keyword=`
+- `GET /api/deployment-instances?project_id=:projectId&environment=&status=&keyword=&page=&page_size=`
 - `POST /api/deployment-instances`
 - `GET /api/deployment-instances/:id`
 - `PUT /api/deployment-instances/:id`
 - `POST /api/deployment-instances/:id/clone`
+- `POST /api/deployment-instances/:id/activate`
+- `POST /api/deployment-instances/:id/deactivate`
 - `POST /api/deployment-instances/:id/token/reset`
 - `GET /api/deployment-instances/:id/preview-bundle`
 
@@ -172,7 +179,12 @@
 - `Template` 通过 `is_template` 区分
 - 模板只能作为 clone 来源，不能发布
 - 模板 clone 第一版只允许 `clone_source = draft`
-- token reset 后旧 token 立即失效
+- 创建实例和模板 clone 结果默认是 `inactive`
+- `PUT` 只允许修改 `environment / deployment_key / name / description`
+- `activate` 仅普通实例可用，成功后返回一次性明文 token
+- `deactivate` 仅 active 普通实例可用，成功后旧 token 立即失效
+- token reset 仅 active 普通实例可用，成功后旧 token 立即失效
+- 列表响应是分页形状：`items / total / page / page_size`
 
 ### 5.6 Draft 编辑
 
@@ -211,6 +223,7 @@
 
 - 审计详情只应按安全元数据展示
 - 心跳接口当前只返回最近一次状态，不做前端“在线/离线”推断真值
+- sync records 和 heartbeats 都按 `config_file_id` 过滤，并展示返回的 `config`
 
 ## 6. 不能只靠接口猜的业务规则
 
@@ -227,6 +240,9 @@
 - 成员但权限不足才返回 `403 project_permission_denied`。
 - 管理端 release detail/diff 默认脱敏；开放消费端读取仍是明文。
 - token reset 没有灰度切换窗口，旧 token 立即失效。
+- activate 也会生成或覆盖默认 token，并且明文 token 只在响应里返回一次。
+- deployment 没有 `archived` 状态；未启用和已停用统一显示为 `inactive`。
+- `process_key` 已退出 MVP 后端主路径；前端只使用 `config` / `config_file_id`。
 - `config-bundle` 只返回已有发布的配置，不会给未发布配置补空对象。
 
 ## 7. 当前已知的文档过时点
@@ -239,6 +255,9 @@
   当前 `GET /api/releases/:id/diff` 已实现。
 - 早期与中间阶段文档里提到的 `schema_name / schema_version / schema validator` 主路径语义已经过时。
   当前 MVP 口径已收口为“基础格式合法性校验”，不再把 schema 视作当前对外能力。
+- 早期文档里把部署实例状态写成 `active / inactive / archived` 的说法已经过时。
+  当前 deployment 只采用 `active / inactive`；项目和配置文件的 `archived` 语义暂时保留。
+- 早期文档和讨论中的 `process_key` 只作为历史澄清背景保留，不应出现在前端新代码或新请求中。
 
 如果前端发现蓝图和 OpenAPI / 当前后端行为冲突，以当前实现和这份交接文档为准，再回头补文档统一。
 
@@ -283,7 +302,7 @@
 这些问题不会影响后端接口使用，但会影响页面体验，需要产品或你来定：
 
 1. 首版是否就按角色隐藏按钮，还是先全部展示后依赖后端拦截。
-2. archived 资源在列表里默认是否展示。
+2. 项目 / 配置文件的 archived 资源在列表里默认是否展示；deployment 不再有 archived。
 3. 项目详情是页内 tabs、左侧导航，还是独立路由拆页。
 4. 发布确认是抽屉、弹窗，还是独立页面。
 5. preview-bundle 更偏“工程工具页”还是“业务可读页”。
@@ -295,10 +314,10 @@
 
 建议这样排：
 
-1. 登录态与路由守卫
-2. 项目列表 / 项目详情骨架
-3. 配置文件列表 / 编辑
-4. 部署实例列表 / 详情 / 模板 clone
+1. API 类型与 client：deployment list 分页、activate、deactivate、sync/heartbeat `config_file_id`
+2. 部署实例列表 / 详情
+3. 部署实例激活 / 停用 / token reset
+4. 模板 clone 创建实例
 5. Draft 编辑
 6. 发布确认 + Release 历史 + Diff
 7. preview-bundle

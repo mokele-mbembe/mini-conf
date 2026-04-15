@@ -277,13 +277,14 @@ demo 应提供页面操作的等价命令或 HTTP 流程。
 
 建议按以下顺序推进：
 
-1. 固化本文档
-2. 调整部署实例生命周期与接口约束
-3. 更新 DB_SCHEMA / ADMIN_API / FRONTEND_MVP_BLUEPRINT
-4. 实现部署实例 `inactive / activate / pagination`
-5. 补最小部署实例前端
-6. 实现模拟业务后台
-7. 实现模拟客户端
-8. 补 Draft / Publish / Diff 最小前端
-9. 补 Sync records / Heartbeats 最小前端
-10. 用 demo 反向修正配置中心模型和接入规范
+1. 已完成：固化本文档
+2. 已完成：调整部署实例生命周期与接口约束
+3. 已完成：更新 DB_SCHEMA / ADMIN_API / FRONTEND_MVP_BLUEPRINT
+4. 已完成：实现部署实例 `inactive / activate / pagination`
+5. 下一步：补前端 API 类型与 client
+6. 下一步：补最小部署实例前端
+7. 后续：补 Draft / Publish / Diff 最小前端
+8. 后续：补 Sync records / Heartbeats 最小前端
+9. 后续：实现模拟业务后台
+10. 后续：实现模拟客户端
+11. 最后：用 demo 反向修正配置中心模型和接入规范

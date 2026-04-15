@@ -39,6 +39,8 @@
 - [0003-release-diff.md](../constraints/product-qa/0003-release-diff.md)
 - [0004-token-reset.md](../constraints/product-qa/0004-token-reset.md)
 - [0005-project-members-permissions-audit.md](../constraints/product-qa/0005-project-members-permissions-audit.md)
+- [0007-config-identity-and-heartbeats.md](../constraints/product-qa/0007-config-identity-and-heartbeats.md)
+- [DEMO_SCENARIO_COFFEE_MIDDLEWARE.md](../constraints/DEMO_SCENARIO_COFFEE_MIDDLEWARE.md)
 - [ADMIN_API.md](../constraints/ADMIN_API.md)
 
 一句话定位：
@@ -170,11 +172,12 @@ Codex 负责：
 
 基于当前 scaffold 和页面现状，后续继续推进时，建议优先顺序是：
 
-1. 部署实例列表页
-2. 项目成员页
+1. API 类型与 client：deployment list 分页、activate、deactivate、sync/heartbeat `config_file_id`
+2. 部署实例列表 / 详情 / 生命周期操作
 3. Draft 编辑页
 4. Preview / Publish / Release 历史 / Diff
-5. sync records / heartbeats / audit logs 页面
+5. 项目成员页
+6. sync records / heartbeats / audit logs 页面
 
 继续推进时仍然要遵守：
 
@@ -214,6 +217,8 @@ Codex 负责：
 - docs/constraints/product-qa/0003-release-diff.md
 - docs/constraints/product-qa/0004-token-reset.md
 - docs/constraints/product-qa/0005-project-members-permissions-audit.md
+- docs/constraints/product-qa/0007-config-identity-and-heartbeats.md
+- docs/constraints/DEMO_SCENARIO_COFFEE_MIDDLEWARE.md
 - docs/constraints/ADMIN_API.md
 
 你先不要直接写前端代码。

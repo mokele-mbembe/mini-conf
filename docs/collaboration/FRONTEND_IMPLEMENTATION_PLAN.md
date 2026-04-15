@@ -87,7 +87,10 @@
 - 列表展示 `environment / deployment_key / name / is_template / status`
 - 支持 `environment / status / keyword` 过滤
 - 明确区分模板和普通实例
-- admin 可创建、编辑、clone、reset token
+- 使用分页响应 `items / total / page / page_size`
+- admin 可创建、编辑、clone、activate、deactivate、reset token
+- 创建和 clone 后默认 `inactive`
+- `active` 普通实例才显示 reset token
 
 ### 3.6 Draft 编辑页
 
@@ -131,8 +134,9 @@
 
 完成标准：
 
-- sync records 能按实例、配置、进程、状态过滤
-- heartbeats 能按实例、进程查看最近状态
+- sync records 能按实例、配置、状态过滤
+- heartbeats 能按实例、配置文件查看最近状态
+- 配置筛选使用 `config_file_id`，展示后端返回的 `config`
 - audit logs 能按 action / resource_type / user 过滤
 
 ## 4. 页面级权限矩阵
@@ -170,7 +174,7 @@
 ### 4.3 高风险操作
 
 - `admin`
-  - 可 reset token
+  - 可 activate / deactivate / reset token
   - 可查看 audit logs
   - 可模板 clone
 - `editor`
@@ -287,7 +291,7 @@
 - 配置文件页（首轮已完成，后续只按验收反馈补强）
 - 部署实例页
 - 模板 clone
-- token reset
+- activate / deactivate / token reset
 
 完成标志：
 
@@ -348,10 +352,12 @@
 - 不要自己实现 secret 字段脱敏算法；直接显示后端返回内容。
 - 不要假设 reset token 后旧 token 还能用一段时间。
 - 不要假设心跳页天然有在线/离线结论；当前接口只给最近状态。
+- 不要为 deployment 实现 archived 状态；未启用和已停用都显示为 inactive。
+- 不要再新增 `process_key`；客户端配置标识统一使用 `config`，管理端筛选使用 `config_file_id`。
 
 ## 9. 建议的首版验收清单
 
-- admin 能完整走通：登录、建项目、建配置、建实例、编辑 Draft、发布、看历史、管理成员、重置 token
+- admin 能完整走通：登录、建项目、建配置、建实例、激活实例、编辑 Draft、发布、看历史、管理成员、停用和重置 token
 - editor 能完整走通：查看项目、编辑 Draft、预览、发布、看 sync records / heartbeats
 - viewer 能完整走通：查看项目、看 release、看 sync records / heartbeats，但不能做写操作
 - secret 配置在 release 详情和 diff 页不会显示明文

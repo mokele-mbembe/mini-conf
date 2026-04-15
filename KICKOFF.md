@@ -18,6 +18,8 @@
 
 - 后端 MVP 主链路已基本完成
 - 项目级权限、审计日志、开放接口主路径已落地
+- 配置标识已收口为 `ConfigFile.code / open config / config_file_id`，后端主路径不再使用 `process_key`
+- 部署实例生命周期已收口为 `active / inactive`，并已落地 activate / deactivate / token reset 规则
 - `apps/web` 已初始化，已有登录页、项目列表页、项目详情骨架页和配置文件列表 / 编辑页
 - 前端已接入 `lint / format:check / typecheck / build`
 - GitHub Actions 已接入前端 build 和最小 Playwright smoke E2E
@@ -31,7 +33,9 @@
 优先级最高，建议继续按模块切片推进：
 
 - [x] 配置文件列表 / 编辑页
+- [ ] 前端 API 类型与 client 跟随后端生命周期接口收口
 - [ ] 部署实例列表 / 详情页
+- [ ] 部署实例激活 / 停用 / token reset 操作
 - [ ] 模板创建实例流程
 - [ ] Draft 编辑页
 - [ ] preview-bundle 预览页
@@ -50,6 +54,7 @@
 ### 2.3 后续后端 / 工程收口
 
 - [ ] 持续补 alpha 黑盒回归
+- [ ] 咖啡中间件演示案例程序
 - [ ] 部署与运行文档继续收口
 - [ ] OpenAPI / 文档 / 前端语义持续对齐
 
@@ -73,6 +78,8 @@
 - [0004-token-reset.md](./docs/constraints/product-qa/0004-token-reset.md)
 - [0005-project-members-permissions-audit.md](./docs/constraints/product-qa/0005-project-members-permissions-audit.md)
 - [0006-config-file-format-and-ux-alignment.md](./docs/constraints/product-qa/0006-config-file-format-and-ux-alignment.md)
+- [0007-config-identity-and-heartbeats.md](./docs/constraints/product-qa/0007-config-identity-and-heartbeats.md)
+- [DEMO_SCENARIO_COFFEE_MIDDLEWARE.md](./docs/constraints/DEMO_SCENARIO_COFFEE_MIDDLEWARE.md)
 
 ### 3.2 如果继续后端 / 接口 / 黑盒 / 质量工作
 
@@ -84,6 +91,7 @@
 - [CLIENT_HTTP_PROTOCOL.md](./docs/public/CLIENT_HTTP_PROTOCOL.md)
 - [DB_SCHEMA.md](./docs/constraints/DB_SCHEMA.md)
 - [AUTH_AND_SECURITY.md](./docs/constraints/AUTH_AND_SECURITY.md)
+- [DEMO_SCENARIO_COFFEE_MIDDLEWARE.md](./docs/constraints/DEMO_SCENARIO_COFFEE_MIDDLEWARE.md)
 - [product-qa/README.md](./docs/constraints/product-qa/README.md)
 
 ### 3.3 如果要恢复本地环境或换机器续工
@@ -134,7 +142,7 @@ PLAYWRIGHT_BASE_URL=http://127.0.0.1:4173 pnpm --dir apps/web test:e2e
 请先阅读 DEVELOPMENT_LOG.md，然后按 docs/collaboration/FRONTEND_TASK_WORKFLOW.md 第 10 节的统一 kickoff prompt 继续。
 
 本轮任务是：
-[把这里替换成具体页面或模块]
+[把这里替换成具体页面或模块；当前推荐从“前端 API 类型与 client 收口”或“部署实例列表 / 详情 / 生命周期操作”开始]
 ```
 
 ### 5.2 通用续工入口
@@ -172,6 +180,7 @@ PLAYWRIGHT_BASE_URL=http://127.0.0.1:4173 pnpm --dir apps/web test:e2e
 
 - 如果要继续前端任务，默认先走任务规范和执行计划，再由 Codex 本地实现并自验
 - 如果产品语义要改，先更新 `docs/constraints/product-qa/*` 或相关约束文档，再改代码
+- 如果涉及部署实例或客户端上报，必须先确认 `0007-config-identity-and-heartbeats.md` 与 `DEMO_SCENARIO_COFFEE_MIDDLEWARE.md`
 - 如果继续收口配置文件页的格式、状态、schema 痕迹、中文字段命名或后续 i18n 入口，先看 `0006-config-file-format-and-ux-alignment.md`
 - 如果前端出现白屏或联调异常，不要只看 `/api/healthz`，至少同时验证 `/api/auth/me`、登录链路和浏览器 Console
 - 如果复现前端 smoke，本地和 CI 都要保证后端真正建立 `db_pool`

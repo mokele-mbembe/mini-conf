@@ -68,13 +68,15 @@
 - `store-002`
 - `template-default-store`
 
-### Process
+### Config / Client Component
 
-部署实例上的某个具体进程，可选上报字段，例如：
+客户端消费和上报时使用的配置标识。MVP 中它等同于配置中心的 `ConfigFile.code`，例如：
 
 - `main`
 - `ad-screen`
 - `vision`
+
+Open API 请求字段名统一使用 `config`。管理端查询 sync records / heartbeats 时使用服务端解析后的 `config_file_id`，响应里同时返回可读的 `config`。
 
 ## 3. 鉴权方式
 
@@ -89,7 +91,7 @@ Authorization: Bearer <token>
 - token 归属于部署实例，而不是单个进程
 - 同一部署实例上的多个进程可以共享同一份 token
 - token 默认长期有效
-- 可通过管理端手动重置和吊销
+- 可通过管理端激活、停用和手动重置
 
 ## 4. 请求约定
 

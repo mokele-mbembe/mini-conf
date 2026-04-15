@@ -96,21 +96,35 @@ OPENAPI_EXPORT_PATH=docs/artifacts/openapi.json
 - `GET /api/auth/me`
 - `GET /api/projects`
 - `POST /api/projects`
+- `GET /api/projects/:id`
+- `PUT /api/projects/:id`
 - `GET /api/projects/:id/members`
 - `POST /api/projects/:id/members`
+- `PUT /api/projects/:id/members/:memberId`
+- `DELETE /api/projects/:id/members/:memberId`
 - `GET /api/config-files`
 - `POST /api/config-files`
+- `GET /api/config-files/:id`
+- `PUT /api/config-files/:id`
 - `GET /api/deployment-instances`
 - `POST /api/deployment-instances`
+- `GET /api/deployment-instances/:id`
+- `PUT /api/deployment-instances/:id`
 - `POST /api/deployment-instances/:id/clone`
+- `POST /api/deployment-instances/:id/activate`
+- `POST /api/deployment-instances/:id/deactivate`
+- `POST /api/deployment-instances/:id/token/reset`
+- `GET /api/deployment-instances/:id/preview-bundle`
+- `GET /api/deployment-sync-records`
 - `GET /api/deployment-heartbeats`
 - `GET /api/drafts/:deploymentId/:configFileId`
 - `PUT /api/drafts/:deploymentId/:configFileId`
+- `POST /api/drafts/:targetDeploymentId/:configFileId/clone`
 - `POST /api/releases/publish`
 - `GET /api/releases`
 - `GET /api/releases/:id`
 - `GET /api/releases/:id/diff`
-- `POST /api/deployment-instances/:id/token/reset`
+- `GET /api/audit-logs`
 
 开放消费端：
 
@@ -126,13 +140,17 @@ OPENAPI_EXPORT_PATH=docs/artifacts/openapi.json
 
 1. 登录页
 2. 项目列表页
-3. 项目成员页
-4. 配置文件列表页
-5. 部署实例列表页
-6. Draft 编辑页
-7. Release 历史页
-8. Diff 对比页
-9. 部署实例同步记录页
+3. 配置文件列表页
+4. 前端 API 类型与 client 收口
+5. 部署实例列表 / 详情页
+6. 部署实例激活 / 停用 / token reset
+7. 模板创建实例流程
+8. Draft 编辑页
+9. Preview bundle 预览页
+10. Release 历史页
+11. Diff 对比页
+12. 项目成员页
+13. 部署实例同步记录 / 心跳 / 审计页
 
 在继续推进前端页面前，建议先补一套本机长期保留的 runtime DB，用于观察真实页面状态，而不是一直复用测试库。
 
