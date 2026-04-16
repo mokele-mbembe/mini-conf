@@ -515,7 +515,7 @@ pub(crate) async fn delete_project_environment(
 
     if deployment_count > 0 {
         return Err(ApiError::conflict(
-            "environment_in_use",
+            "project_environment_in_use",
             "project environment is in use by deployment instances",
         ));
     }

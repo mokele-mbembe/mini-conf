@@ -292,7 +292,7 @@ async fn project_environment_delete_rejects_environment_in_use() -> TestResult {
 
     assert_eq!(response.status(), StatusCode::CONFLICT);
     let payload: ErrorResponse = read_json(response).await?;
-    assert_eq!(payload.code, "environment_in_use");
+    assert_eq!(payload.code, "project_environment_in_use");
 
     teardown(&database_url, &schema, pool).await
 }
