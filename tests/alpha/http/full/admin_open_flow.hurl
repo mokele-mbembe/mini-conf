@@ -46,11 +46,27 @@ jsonpath "$.project_id" == {{project_id}}
 jsonpath "$.code" == "main"
 jsonpath "$.is_required" == true
 
+POST {{base_url}}/api/projects/{{project_id}}/environments
+Content-Type: application/json
+{
+  "code": "prod",
+  "name": "Production",
+  "status": "active",
+  "sort_order": 10
+}
+HTTP 201
+[Captures]
+environment_id: jsonpath "$.id"
+[Asserts]
+jsonpath "$.project_id" == {{project_id}}
+jsonpath "$.code" == "prod"
+jsonpath "$.status" == "active"
+
 POST {{base_url}}/api/deployment-instances
 Content-Type: application/json
 {
   "project_id": {{project_id}},
-  "environment": "prod",
+  "environment_id": {{environment_id}},
   "deployment_key": "template-{{suite_id}}",
   "name": "Template {{suite_id}}",
   "description": "alpha template deployment",
@@ -80,7 +96,7 @@ Content-Type: application/json
 {
   "deployment_key": "store-{{suite_id}}",
   "name": "Store {{suite_id}}",
-  "environment": "prod",
+  "environment_id": {{environment_id}},
   "description": "cloned from template",
   "clone_source": "draft"
 }

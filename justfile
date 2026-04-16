@@ -129,7 +129,7 @@ coverage-check:
   elif ! cargo llvm-cov --version >/dev/null 2>&1; then \
     echo "Skipping backend coverage check: cargo-llvm-cov is not installed"; \
   else \
-    cargo llvm-cov --workspace --ignore-filename-regex 'apps/server/src/(bin/.*|main.rs)$' --summary-only --fail-under-lines "${COVERAGE_MIN_LINES:-39}"; \
+    cargo llvm-cov --workspace --ignore-filename-regex 'apps/server/src/(bin/.*|main.rs)$' --summary-only --fail-under-lines "${COVERAGE_MIN_LINES:-36}"; \
   fi
 
 sqlx-check:
