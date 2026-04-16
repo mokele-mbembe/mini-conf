@@ -70,12 +70,6 @@ WHERE deployment_instance_id IN (SELECT id FROM target_deployments);
 WITH target_projects AS (
     SELECT id FROM projects WHERE code LIKE 'alpha-%'
 )
-DELETE FROM releases
-WHERE project_id IN (SELECT id FROM target_projects);
-
-WITH target_projects AS (
-    SELECT id FROM projects WHERE code LIKE 'alpha-%'
-)
 DELETE FROM deployment_sync_records
 WHERE project_id IN (SELECT id FROM target_projects);
 
@@ -83,6 +77,12 @@ WITH target_projects AS (
     SELECT id FROM projects WHERE code LIKE 'alpha-%'
 )
 DELETE FROM deployment_heartbeats
+WHERE project_id IN (SELECT id FROM target_projects);
+
+WITH target_projects AS (
+    SELECT id FROM projects WHERE code LIKE 'alpha-%'
+)
+DELETE FROM releases
 WHERE project_id IN (SELECT id FROM target_projects);
 
 WITH target_projects AS (

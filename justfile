@@ -68,6 +68,12 @@ db-list-alpha-projects-local:
 db-clean-alpha-projects-local:
   @if [ -f scripts/db-clean-alpha-projects.sh ]; then source scripts/local-db-env.sh && bash scripts/db-clean-alpha-projects.sh --apply; else echo "Skipping alpha project cleanup: scripts/db-clean-alpha-projects.sh not found"; fi
 
+db-list-alpha-runtime-local:
+  @just db-list-alpha-projects-local
+
+db-clean-alpha-runtime-local:
+  @just db-clean-alpha-projects-local
+
 test-frontend:
   @if [ -f apps/web/package.json ]; then pnpm --dir apps/web test; \
   elif [ -f package.json ] || [ -f pnpm-workspace.yaml ]; then pnpm test; \

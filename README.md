@@ -205,6 +205,13 @@ just dev-server
 just dev-web
 ```
 
+查看或清理联调 runtime 库里的历史 `alpha-*` 项目：
+
+```bash
+just db-list-alpha-runtime-local
+just db-clean-alpha-runtime-local
+```
+
 ## 测试约定
 
 数据库集成测试统一使用 [`infra::testing`](./crates/infra/src/testing.rs) 提供的 helper。
