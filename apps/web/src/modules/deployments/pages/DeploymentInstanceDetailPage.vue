@@ -22,7 +22,39 @@
     <template v-else-if="project">
       <PageHeader :title="detailTitle" :subtitle="detailSubtitle">
         <template #actions>
-          <StatusBadge v-if="deployment" :status="deployment.status" />
+          <div
+            v-if="deployment"
+            class="deployment-instance-detail-page__header-actions"
+          >
+            <el-button
+              v-if="canActivate"
+              type="success"
+              size="small"
+              :loading="actionLoading === 'activate'"
+              @click="handleActivate"
+            >
+              {{ t("deployments.action.activate") }}
+            </el-button>
+            <el-button
+              v-if="canDeactivate"
+              type="warning"
+              size="small"
+              :loading="actionLoading === 'deactivate'"
+              @click="handleDeactivate"
+            >
+              {{ t("deployments.action.deactivate") }}
+            </el-button>
+            <el-button
+              v-if="canResetToken"
+              type="primary"
+              size="small"
+              :loading="actionLoading === 'reset-token'"
+              @click="handleResetToken"
+            >
+              {{ t("deployments.action.resetToken") }}
+            </el-button>
+            <StatusBadge :status="deployment.status" />
+          </div>
         </template>
       </PageHeader>
 
@@ -122,14 +154,22 @@
         </template>
       </div>
     </template>
+
+    <DeploymentTokenDialog
+      v-model:visible="tokenDialogVisible"
+      :payload="tokenPayload"
+      :mode="tokenDialogMode"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { useRoute, useRouter } from "vue-router";
 import { useProjectContext } from "@/modules/projects/composables/useProjectContext";
 import ProjectTabs from "@/modules/projects/components/ProjectTabs.vue";
+import DeploymentTokenDialog from "../components/DeploymentTokenDialog.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import StatusBadge from "@/shared/components/StatusBadge.vue";
 import LoadingState from "@/shared/states/LoadingState.vue";
@@ -140,7 +180,10 @@ import { ROUTE_NAMES } from "@/shared/constants/routes";
 import * as deploymentInstancesApi from "@/api/deployment-instances";
 import { ApiRequestError } from "@/api/error";
 import { getErrorMessage } from "@/shared/constants/error-messages";
-import type { DeploymentInstanceSummary } from "@/api/types/deployment-instance";
+import type {
+  DeploymentInstanceSummary,
+  DeploymentTokenResponse,
+} from "@/api/types/deployment-instance";
 import { useI18nText } from "@/shared/i18n";
 
 const route = useRoute();
@@ -156,10 +199,17 @@ const {
 
 const projectId = computed(() => Number(route.params.projectId));
 const deploymentId = computed(() => Number(route.params.deploymentId));
+const isAdmin = computed(() => project.value?.current_user_role === "admin");
 
 const deployment = ref<DeploymentInstanceSummary | null>(null);
 const detailLoading = ref(false);
 const detailError = ref<ApiRequestError | null>(null);
+const actionLoading = ref<"activate" | "deactivate" | "reset-token" | null>(
+  null,
+);
+const tokenDialogVisible = ref(false);
+const tokenDialogMode = ref<"activate" | "reset">("activate");
+const tokenPayload = ref<DeploymentTokenResponse | null>(null);
 const detailTitle = computed(
   () => deployment.value?.name ?? t("deployments.detail.title"),
 );
@@ -175,6 +225,23 @@ const deploymentTypeLabel = computed(() => {
     ? t("deployments.type.template")
     : t("deployments.type.instance");
 });
+const canActivate = computed(() => {
+  if (!deployment.value || !isAdmin.value) {
+    return false;
+  }
+
+  return (
+    !deployment.value.is_template && deployment.value.status === "inactive"
+  );
+});
+const canDeactivate = computed(() => {
+  if (!deployment.value || !isAdmin.value) {
+    return false;
+  }
+
+  return !deployment.value.is_template && deployment.value.status === "active";
+});
+const canResetToken = computed(() => canDeactivate.value);
 const templateSourceLabel = computed(() => {
   if (!deployment.value) {
     return "";
@@ -219,6 +286,102 @@ async function loadAll() {
   if (Number.isNaN(id)) return;
   await fetchProject(id);
   await loadDeploymentInstance();
+}
+
+function openTokenDialog(
+  payload: DeploymentTokenResponse,
+  mode: "activate" | "reset",
+) {
+  tokenPayload.value = payload;
+  tokenDialogMode.value = mode;
+  tokenDialogVisible.value = true;
+}
+
+async function handleActivate() {
+  if (!deployment.value) return;
+
+  try {
+    await ElMessageBox.confirm(
+      t("deployments.dialog.activateConfirm", { name: deployment.value.name }),
+      t("deployments.dialog.activateTitle"),
+      { type: "warning" },
+    );
+    actionLoading.value = "activate";
+    const payload = await deploymentInstancesApi.activateDeploymentInstance(
+      deployment.value.id,
+    );
+    ElMessage.success(t("toast.deployments.activated"));
+    openTokenDialog(payload, "activate");
+    await loadDeploymentInstance();
+  } catch (err) {
+    if (err === "cancel" || err === "close") return;
+    if (err instanceof ApiRequestError) {
+      ElMessage.error(getErrorMessage(err.code, err.message));
+    } else {
+      ElMessage.error(t("toast.operationFailed"));
+    }
+  } finally {
+    actionLoading.value = null;
+  }
+}
+
+async function handleDeactivate() {
+  if (!deployment.value) return;
+
+  try {
+    await ElMessageBox.confirm(
+      t("deployments.dialog.deactivateConfirm", {
+        name: deployment.value.name,
+      }),
+      t("deployments.dialog.deactivateTitle"),
+      { type: "warning" },
+    );
+    actionLoading.value = "deactivate";
+    await deploymentInstancesApi.deactivateDeploymentInstance(
+      deployment.value.id,
+    );
+    ElMessage.success(t("toast.deployments.deactivated"));
+    await loadDeploymentInstance();
+  } catch (err) {
+    if (err === "cancel" || err === "close") return;
+    if (err instanceof ApiRequestError) {
+      ElMessage.error(getErrorMessage(err.code, err.message));
+    } else {
+      ElMessage.error(t("toast.operationFailed"));
+    }
+  } finally {
+    actionLoading.value = null;
+  }
+}
+
+async function handleResetToken() {
+  if (!deployment.value) return;
+
+  try {
+    await ElMessageBox.confirm(
+      t("deployments.dialog.resetTokenConfirm", {
+        name: deployment.value.name,
+      }),
+      t("deployments.dialog.resetTokenTitle"),
+      { type: "warning" },
+    );
+    actionLoading.value = "reset-token";
+    const payload = await deploymentInstancesApi.resetDeploymentToken(
+      deployment.value.id,
+    );
+    ElMessage.success(t("toast.deployments.tokenReset"));
+    openTokenDialog(payload, "reset");
+    await loadDeploymentInstance();
+  } catch (err) {
+    if (err === "cancel" || err === "close") return;
+    if (err instanceof ApiRequestError) {
+      ElMessage.error(getErrorMessage(err.code, err.message));
+    } else {
+      ElMessage.error(t("toast.operationFailed"));
+    }
+  } finally {
+    actionLoading.value = null;
+  }
 }
 
 function backToList() {
@@ -280,6 +443,14 @@ watch(
   justify-content: flex-end;
 }
 
+.deployment-instance-detail-page__header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+}
+
 @media (max-width: 768px) {
   .deployment-instance-detail-page {
     padding: var(--spacing-md);
@@ -287,6 +458,10 @@ watch(
 
   .deployment-instance-detail-page__summary {
     flex-direction: column;
+  }
+
+  .deployment-instance-detail-page__header-actions {
+    justify-content: flex-start;
   }
 }
 </style>

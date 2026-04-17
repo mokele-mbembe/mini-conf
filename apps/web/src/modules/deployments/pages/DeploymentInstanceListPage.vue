@@ -216,19 +216,57 @@
 
             <el-table-column
               :label="t('deployments.column.actions')"
-              width="90"
+              width="260"
               align="center"
               fixed="right"
             >
               <template #default="{ row }">
-                <el-button
-                  text
-                  type="primary"
-                  size="small"
-                  @click="openDetail(row)"
-                >
-                  {{ t("deployments.action.view") }}
-                </el-button>
+                <div class="deployment-instance-list-page__actions">
+                  <el-button
+                    text
+                    type="primary"
+                    size="small"
+                    @click="openDetail(row)"
+                  >
+                    {{ t("deployments.action.view") }}
+                  </el-button>
+                  <el-button
+                    v-if="
+                      isAdmin && !row.is_template && row.status === 'inactive'
+                    "
+                    text
+                    type="success"
+                    size="small"
+                    :loading="isActionLoading(row.id, 'activate')"
+                    @click="handleActivate(row)"
+                  >
+                    {{ t("deployments.action.activate") }}
+                  </el-button>
+                  <el-button
+                    v-if="
+                      isAdmin && !row.is_template && row.status === 'active'
+                    "
+                    text
+                    type="warning"
+                    size="small"
+                    :loading="isActionLoading(row.id, 'deactivate')"
+                    @click="handleDeactivate(row)"
+                  >
+                    {{ t("deployments.action.deactivate") }}
+                  </el-button>
+                  <el-button
+                    v-if="
+                      isAdmin && !row.is_template && row.status === 'active'
+                    "
+                    text
+                    type="primary"
+                    size="small"
+                    :loading="isActionLoading(row.id, 'reset-token')"
+                    @click="handleResetToken(row)"
+                  >
+                    {{ t("deployments.action.resetToken") }}
+                  </el-button>
+                </div>
               </template>
             </el-table-column>
           </el-table>
@@ -254,15 +292,23 @@
       :project-id="projectId"
       @success="handleCreateSuccess"
     />
+
+    <DeploymentTokenDialog
+      v-model:visible="tokenDialogVisible"
+      :payload="tokenPayload"
+      :mode="tokenDialogMode"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { useRoute, useRouter } from "vue-router";
 import { useProjectContext } from "@/modules/projects/composables/useProjectContext";
 import ProjectTabs from "@/modules/projects/components/ProjectTabs.vue";
 import DeploymentInstanceCreateDialog from "../components/DeploymentInstanceCreateDialog.vue";
+import DeploymentTokenDialog from "../components/DeploymentTokenDialog.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import StatusBadge from "@/shared/components/StatusBadge.vue";
 import LoadingState from "@/shared/states/LoadingState.vue";
@@ -278,6 +324,7 @@ import { getErrorMessage } from "@/shared/constants/error-messages";
 import type {
   DeploymentInstanceStatus,
   DeploymentInstanceSummary,
+  DeploymentTokenResponse,
 } from "@/api/types/deployment-instance";
 import type { ProjectEnvironmentSummary } from "@/api/types/project-environment";
 import { useI18nText } from "@/shared/i18n";
@@ -311,6 +358,10 @@ const activeEnvironmentCount = computed(
 );
 
 const dialogVisible = ref(false);
+const tokenDialogVisible = ref(false);
+const tokenDialogMode = ref<"activate" | "reset">("activate");
+const tokenPayload = ref<DeploymentTokenResponse | null>(null);
+const actionTarget = ref<{ id: number; action: string } | null>(null);
 
 async function loadDeploymentInstances() {
   listLoading.value = true;
@@ -396,10 +447,96 @@ function openCreateDialog() {
   dialogVisible.value = true;
 }
 
+function isActionLoading(id: number, action: string) {
+  return actionTarget.value?.id === id && actionTarget.value.action === action;
+}
+
+function openTokenDialog(
+  payload: DeploymentTokenResponse,
+  mode: "activate" | "reset",
+) {
+  tokenPayload.value = payload;
+  tokenDialogMode.value = mode;
+  tokenDialogVisible.value = true;
+}
+
 function handleCreateSuccess() {
   statusFilter.value = "";
   page.value = 1;
   loadDeploymentInstances();
+}
+
+async function handleActivate(row: DeploymentInstanceSummary) {
+  try {
+    await ElMessageBox.confirm(
+      t("deployments.dialog.activateConfirm", { name: row.name }),
+      t("deployments.dialog.activateTitle"),
+      { type: "warning" },
+    );
+    actionTarget.value = { id: row.id, action: "activate" };
+    const payload = await deploymentInstancesApi.activateDeploymentInstance(
+      row.id,
+    );
+    ElMessage.success(t("toast.deployments.activated"));
+    openTokenDialog(payload, "activate");
+    await loadDeploymentInstances();
+  } catch (err) {
+    if (err === "cancel" || err === "close") return;
+    if (err instanceof ApiRequestError) {
+      ElMessage.error(getErrorMessage(err.code, err.message));
+    } else {
+      ElMessage.error(t("toast.operationFailed"));
+    }
+  } finally {
+    actionTarget.value = null;
+  }
+}
+
+async function handleDeactivate(row: DeploymentInstanceSummary) {
+  try {
+    await ElMessageBox.confirm(
+      t("deployments.dialog.deactivateConfirm", { name: row.name }),
+      t("deployments.dialog.deactivateTitle"),
+      { type: "warning" },
+    );
+    actionTarget.value = { id: row.id, action: "deactivate" };
+    await deploymentInstancesApi.deactivateDeploymentInstance(row.id);
+    ElMessage.success(t("toast.deployments.deactivated"));
+    await loadDeploymentInstances();
+  } catch (err) {
+    if (err === "cancel" || err === "close") return;
+    if (err instanceof ApiRequestError) {
+      ElMessage.error(getErrorMessage(err.code, err.message));
+    } else {
+      ElMessage.error(t("toast.operationFailed"));
+    }
+  } finally {
+    actionTarget.value = null;
+  }
+}
+
+async function handleResetToken(row: DeploymentInstanceSummary) {
+  try {
+    await ElMessageBox.confirm(
+      t("deployments.dialog.resetTokenConfirm", { name: row.name }),
+      t("deployments.dialog.resetTokenTitle"),
+      { type: "warning" },
+    );
+    actionTarget.value = { id: row.id, action: "reset-token" };
+    const payload = await deploymentInstancesApi.resetDeploymentToken(row.id);
+    ElMessage.success(t("toast.deployments.tokenReset"));
+    openTokenDialog(payload, "reset");
+    await loadDeploymentInstances();
+  } catch (err) {
+    if (err === "cancel" || err === "close") return;
+    if (err instanceof ApiRequestError) {
+      ElMessage.error(getErrorMessage(err.code, err.message));
+    } else {
+      ElMessage.error(t("toast.operationFailed"));
+    }
+  } finally {
+    actionTarget.value = null;
+  }
 }
 
 function goToEnvironmentPage() {
@@ -464,6 +601,13 @@ watch(
   margin-top: var(--spacing-md);
 }
 
+.deployment-instance-list-page__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 8px;
+}
+
 @media (max-width: 768px) {
   .deployment-instance-list-page {
     padding: var(--spacing-md);
@@ -475,6 +619,10 @@ watch(
 
   .deployment-instance-list-page__filters {
     width: 100%;
+  }
+
+  .deployment-instance-list-page__actions {
+    justify-content: flex-start;
   }
 }
 </style>

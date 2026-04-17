@@ -180,9 +180,28 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "deployments.type.template": "模板",
     "deployments.type.instance": "实例",
     "deployments.action.view": "查看",
+    "deployments.action.activate": "激活",
+    "deployments.action.deactivate": "停用",
+    "deployments.action.resetToken": "重置 Token",
     "deployments.dialog.createTitle": "新建部署实例",
     "deployments.dialog.inactiveNotice":
       "创建后状态默认为未启用，客户端暂不可消费；后续可由管理员激活并生成访问凭证。",
+    "deployments.dialog.activateTitle": "激活部署实例",
+    "deployments.dialog.activateConfirm":
+      "确认激活部署实例 {name} 吗？激活后会立即生成新的默认访问凭证。",
+    "deployments.dialog.deactivateTitle": "停用部署实例",
+    "deployments.dialog.deactivateConfirm":
+      "确认停用部署实例 {name} 吗？停用后当前默认访问凭证会立即失效。",
+    "deployments.dialog.resetTokenTitle": "重置访问凭证",
+    "deployments.dialog.resetTokenConfirm":
+      "确认重置部署实例 {name} 的默认访问凭证吗？旧 token 会立即失效。",
+    "deployments.tokenDialog.activateTitle": "激活成功，已生成访问凭证",
+    "deployments.tokenDialog.resetTitle": "访问凭证已重置",
+    "deployments.tokenDialog.notice":
+      "明文 token 只会在这里展示一次，请立即保存到客户端或部署系统中。",
+    "deployments.tokenDialog.credentialName": "凭证名称",
+    "deployments.tokenDialog.tokenPreview": "Token 预览",
+    "deployments.tokenDialog.token": "明文 Token",
     "deployments.form.name": "名称",
     "deployments.form.namePlaceholder": "如 杭州湖滨银泰 001",
     "deployments.form.deploymentKey": "实例标识",
@@ -211,6 +230,8 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "common.cancel": "取消",
     "common.save": "保存",
     "common.create": "创建",
+    "common.close": "关闭",
+    "common.copy": "复制",
     "toast.configFiles.updated": "配置文件已更新",
     "toast.configFiles.created": "配置文件已创建",
     "toast.configFiles.loadFailed": "加载配置文件详情失败",
@@ -218,6 +239,10 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "toast.projectEnvironments.updated": "项目环境已更新",
     "toast.projectEnvironments.deleted": "项目环境已删除",
     "toast.deployments.created": "部署实例已创建，当前状态为未启用",
+    "toast.deployments.activated": "部署实例已激活，并生成了新的访问凭证",
+    "toast.deployments.deactivated": "部署实例已停用，默认访问凭证已失效",
+    "toast.deployments.tokenReset": "访问凭证已重置",
+    "toast.deployments.tokenCopied": "明文 token 已复制",
     "toast.operationFailed": "操作失败，请稍后重试",
     "validation.configFiles.codeRequired": "请输入配置标识",
     "validation.configFiles.nameRequired": "请输入名称",
@@ -243,6 +268,18 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "error.deployment_instance_conflict": "部署实例标识已存在",
     "error.deployment_key_conflict": "部署实例标识已存在",
     "error.deployment_instance_not_found": "部署实例不存在",
+    "error.deployment_instance_not_template": "当前部署实例不是模板",
+    "error.deployment_instance_inactive": "部署实例未处于启用状态",
+    "error.deployment_instance_template_token_forbidden":
+      "模板实例不允许重置访问凭证",
+    "error.deployment_instance_template_activate_forbidden":
+      "模板实例不能激活为客户端消费实例",
+    "error.deployment_instance_activate_conflict":
+      "部署实例必须处于未启用状态才能激活",
+    "error.deployment_instance_template_deactivate_forbidden":
+      "模板实例不能停用",
+    "error.deployment_instance_deactivate_conflict":
+      "部署实例必须处于启用状态才能停用",
     "error.network_error": "网络连接失败，请检查网络后重试",
     "error.unknown_error": "发生未知错误，请稍后重试",
     "error.detail.invalidConfigFileFormat":
@@ -434,9 +471,29 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "deployments.type.template": "Template",
     "deployments.type.instance": "Instance",
     "deployments.action.view": "View",
+    "deployments.action.activate": "Activate",
+    "deployments.action.deactivate": "Deactivate",
+    "deployments.action.resetToken": "Reset Token",
     "deployments.dialog.createTitle": "Create Deployment",
     "deployments.dialog.inactiveNotice":
       "New deployments start inactive and cannot be consumed by clients until an admin activates them and issues a token.",
+    "deployments.dialog.activateTitle": "Activate deployment",
+    "deployments.dialog.activateConfirm":
+      "Activate deployment {name}? A new default access token will be issued immediately.",
+    "deployments.dialog.deactivateTitle": "Deactivate deployment",
+    "deployments.dialog.deactivateConfirm":
+      "Deactivate deployment {name}? The current default token will become invalid immediately.",
+    "deployments.dialog.resetTokenTitle": "Reset access token",
+    "deployments.dialog.resetTokenConfirm":
+      "Reset the default access token for deployment {name}? The previous token will become invalid immediately.",
+    "deployments.tokenDialog.activateTitle":
+      "Deployment activated and token issued",
+    "deployments.tokenDialog.resetTitle": "Access token rotated",
+    "deployments.tokenDialog.notice":
+      "The plain token is shown only once. Save it to the client or deployment system now.",
+    "deployments.tokenDialog.credentialName": "Credential Name",
+    "deployments.tokenDialog.tokenPreview": "Token Preview",
+    "deployments.tokenDialog.token": "Plain Token",
     "deployments.form.name": "Name",
     "deployments.form.namePlaceholder": "e.g. Hangzhou Store 001",
     "deployments.form.deploymentKey": "Deployment Key",
@@ -467,6 +524,8 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "common.cancel": "Cancel",
     "common.save": "Save",
     "common.create": "Create",
+    "common.close": "Close",
+    "common.copy": "Copy",
     "toast.configFiles.updated": "Config file updated",
     "toast.configFiles.created": "Config file created",
     "toast.configFiles.loadFailed": "Failed to load config file details",
@@ -474,6 +533,12 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "toast.projectEnvironments.updated": "Project environment updated",
     "toast.projectEnvironments.deleted": "Project environment deleted",
     "toast.deployments.created": "Deployment created with inactive status",
+    "toast.deployments.activated":
+      "Deployment activated and a new access token was issued",
+    "toast.deployments.deactivated":
+      "Deployment deactivated and the default token is now invalid",
+    "toast.deployments.tokenReset": "Access token rotated",
+    "toast.deployments.tokenCopied": "Plain token copied",
     "toast.operationFailed": "Operation failed. Please try again later.",
     "validation.configFiles.codeRequired": "Please enter a config key",
     "validation.configFiles.nameRequired": "Please enter a name",
@@ -508,6 +573,20 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "error.deployment_instance_conflict": "Deployment key already exists",
     "error.deployment_key_conflict": "Deployment key already exists",
     "error.deployment_instance_not_found": "Deployment not found",
+    "error.deployment_instance_not_template":
+      "The current deployment is not a template",
+    "error.deployment_instance_inactive":
+      "The deployment is not currently active",
+    "error.deployment_instance_template_token_forbidden":
+      "Template deployments cannot reset access tokens",
+    "error.deployment_instance_template_activate_forbidden":
+      "Template deployments cannot be activated for client consumption",
+    "error.deployment_instance_activate_conflict":
+      "The deployment must be inactive before activation",
+    "error.deployment_instance_template_deactivate_forbidden":
+      "Template deployments cannot be deactivated",
+    "error.deployment_instance_deactivate_conflict":
+      "The deployment must be active before deactivation",
     "error.network_error": "Network connection failed. Please try again.",
     "error.unknown_error": "An unknown error occurred. Please try again later.",
     "error.detail.invalidConfigFileFormat":

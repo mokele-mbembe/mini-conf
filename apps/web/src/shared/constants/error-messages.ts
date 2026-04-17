@@ -16,6 +16,18 @@ export const ERROR_MESSAGES: Record<string, string> = {
   deployment_instance_conflict: "error.deployment_instance_conflict",
   deployment_key_conflict: "error.deployment_key_conflict",
   deployment_instance_not_found: "error.deployment_instance_not_found",
+  deployment_instance_not_template: "error.deployment_instance_not_template",
+  deployment_instance_inactive: "error.deployment_instance_inactive",
+  deployment_instance_template_token_forbidden:
+    "error.deployment_instance_template_token_forbidden",
+  deployment_instance_template_activate_forbidden:
+    "error.deployment_instance_template_activate_forbidden",
+  deployment_instance_activate_conflict:
+    "error.deployment_instance_activate_conflict",
+  deployment_instance_template_deactivate_forbidden:
+    "error.deployment_instance_template_deactivate_forbidden",
+  deployment_instance_deactivate_conflict:
+    "error.deployment_instance_deactivate_conflict",
   deployment_not_found: "error.deployment_instance_not_found",
   network_error: "error.network_error",
   unknown_error: "error.unknown_error",
