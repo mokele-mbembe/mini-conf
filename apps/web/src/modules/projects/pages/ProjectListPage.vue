@@ -1,5 +1,5 @@
 <template>
-  <div class="project-list-page">
+  <div class="project-list-page page-container">
     <PageHeader
       :title="t('projects.list.title')"
       :subtitle="t('projects.list.subtitle')"
@@ -96,9 +96,7 @@ onMounted(fetchProjects);
 
 <style scoped>
 .project-list-page {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: var(--spacing-lg);
+  width: 100%;
 }
 .project-list-page__grid {
   display: grid;
@@ -134,9 +132,6 @@ onMounted(fetchProjects);
 }
 
 @media (max-width: 768px) {
-  .project-list-page {
-    padding: var(--spacing-md);
-  }
   .project-list-page__grid {
     grid-template-columns: 1fr;
   }

@@ -1,5 +1,5 @@
 <template>
-  <div class="config-file-list-page">
+  <div class="config-file-list-page page-container">
     <!-- Project context loading/error -->
     <LoadingState v-if="projectLoading" />
 
@@ -75,94 +75,96 @@
           </el-button>
         </EmptyState>
 
-        <el-table v-else :data="configFiles" stripe style="width: 100%">
-          <el-table-column
-            prop="code"
-            :label="t('configFiles.column.code')"
-            min-width="140"
-          >
-            <template #default="{ row }">
-              <span class="config-file-list-page__code">{{ row.code }}</span>
-            </template>
-          </el-table-column>
+        <div v-else class="config-file-list-page__table page-table-shell">
+          <el-table :data="configFiles" stripe style="width: 100%">
+            <el-table-column
+              prop="code"
+              :label="t('configFiles.column.code')"
+              min-width="140"
+            >
+              <template #default="{ row }">
+                <span class="config-file-list-page__code">{{ row.code }}</span>
+              </template>
+            </el-table-column>
 
-          <el-table-column
-            prop="name"
-            :label="t('configFiles.column.name')"
-            min-width="150"
-          />
+            <el-table-column
+              prop="name"
+              :label="t('configFiles.column.name')"
+              min-width="150"
+            />
 
-          <el-table-column
-            prop="format"
-            :label="t('configFiles.column.format')"
-            width="90"
-          >
-            <template #default="{ row }">
-              <el-tag size="small" type="info">{{ row.format }}</el-tag>
-            </template>
-          </el-table-column>
+            <el-table-column
+              prop="format"
+              :label="t('configFiles.column.format')"
+              width="90"
+            >
+              <template #default="{ row }">
+                <el-tag size="small" type="info">{{ row.format }}</el-tag>
+              </template>
+            </el-table-column>
 
-          <el-table-column
-            :label="t('configFiles.column.required')"
-            width="80"
-            align="center"
-          >
-            <template #default="{ row }">
-              <el-tag v-if="row.is_required" size="small" type="danger">
-                {{ t("configFiles.required") }}
-              </el-tag>
-              <span v-else class="config-file-list-page__optional">—</span>
-            </template>
-          </el-table-column>
+            <el-table-column
+              :label="t('configFiles.column.required')"
+              width="80"
+              align="center"
+            >
+              <template #default="{ row }">
+                <el-tag v-if="row.is_required" size="small" type="danger">
+                  {{ t("configFiles.required") }}
+                </el-tag>
+                <span v-else class="config-file-list-page__optional">—</span>
+              </template>
+            </el-table-column>
 
-          <el-table-column
-            :label="t('configFiles.column.sensitivity')"
-            width="100"
-            align="center"
-          >
-            <template #default="{ row }">
-              <el-tag
-                v-if="row.sensitivity === 'secret'"
-                size="small"
-                type="warning"
-              >
-                {{ t("configFiles.secret") }}
-              </el-tag>
-              <el-tag v-else size="small" type="info">
-                {{ t("configFiles.normal") }}
-              </el-tag>
-            </template>
-          </el-table-column>
+            <el-table-column
+              :label="t('configFiles.column.sensitivity')"
+              width="100"
+              align="center"
+            >
+              <template #default="{ row }">
+                <el-tag
+                  v-if="row.sensitivity === 'secret'"
+                  size="small"
+                  type="warning"
+                >
+                  {{ t("configFiles.secret") }}
+                </el-tag>
+                <el-tag v-else size="small" type="info">
+                  {{ t("configFiles.normal") }}
+                </el-tag>
+              </template>
+            </el-table-column>
 
-          <el-table-column
-            :label="t('configFiles.column.status')"
-            width="100"
-            align="center"
-          >
-            <template #default="{ row }">
-              <StatusBadge :status="row.status" />
-            </template>
-          </el-table-column>
+            <el-table-column
+              :label="t('configFiles.column.status')"
+              width="100"
+              align="center"
+            >
+              <template #default="{ row }">
+                <StatusBadge :status="row.status" />
+              </template>
+            </el-table-column>
 
-          <el-table-column
-            v-if="isAdmin"
-            :label="t('configFiles.column.actions')"
-            width="80"
-            align="center"
-            fixed="right"
-          >
-            <template #default="{ row }">
-              <el-button
-                text
-                type="primary"
-                size="small"
-                @click="openEditDialog(row)"
-              >
-                {{ t("configFiles.action.edit") }}
-              </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
+            <el-table-column
+              v-if="isAdmin"
+              :label="t('configFiles.column.actions')"
+              width="80"
+              align="center"
+              fixed="right"
+            >
+              <template #default="{ row }">
+                <el-button
+                  text
+                  type="primary"
+                  size="small"
+                  @click="openEditDialog(row)"
+                >
+                  {{ t("configFiles.action.edit") }}
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
       </div>
     </template>
 
@@ -282,9 +284,7 @@ watch(
 
 <style scoped>
 .config-file-list-page {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: var(--spacing-lg);
+  width: 100%;
 }
 
 .config-file-list-page__section {
@@ -315,10 +315,6 @@ watch(
 }
 
 @media (max-width: 768px) {
-  .config-file-list-page {
-    padding: var(--spacing-md);
-  }
-
   .config-file-list-page__toolbar {
     flex-direction: column;
     align-items: flex-start;

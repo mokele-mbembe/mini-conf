@@ -43,5 +43,9 @@ defineProps<{
   .page-header {
     flex-direction: column;
   }
+
+  .page-header__actions {
+    width: 100%;
+  }
 }
 </style>

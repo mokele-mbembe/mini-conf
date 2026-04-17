@@ -1,5 +1,5 @@
 <template>
-  <div class="project-section-placeholder-page">
+  <div class="project-section-placeholder-page page-container">
     <LoadingState v-if="loading" />
 
     <NotFoundState
@@ -109,9 +109,7 @@ watch(
 
 <style scoped>
 .project-section-placeholder-page {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: var(--spacing-lg);
+  width: 100%;
 }
 
 .project-section-placeholder-page__card {
@@ -133,11 +131,5 @@ watch(
   margin: 0;
   color: var(--color-text-secondary);
   line-height: 1.6;
-}
-
-@media (max-width: 768px) {
-  .project-section-placeholder-page {
-    padding: var(--spacing-md);
-  }
 }
 </style>

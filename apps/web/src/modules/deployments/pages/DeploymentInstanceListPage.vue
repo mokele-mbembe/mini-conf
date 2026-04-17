@@ -1,5 +1,5 @@
 <template>
-  <div class="deployment-instance-list-page">
+  <div class="deployment-instance-list-page page-container">
     <LoadingState v-if="projectLoading" />
 
     <NotFoundState
@@ -148,128 +148,130 @@
         </EmptyState>
 
         <template v-else>
-          <el-table :data="deployments" stripe style="width: 100%">
-            <el-table-column
-              prop="environment_code"
-              :label="t('deployments.column.environment')"
-              min-width="180"
-            >
-              <template #default="{ row }">
-                <el-tag size="small" type="info">
-                  {{ row.environment_name }} ({{ row.environment_code }})
-                </el-tag>
-              </template>
-            </el-table-column>
+          <div class="deployment-instance-list-page__table page-table-shell">
+            <el-table :data="deployments" stripe style="width: 100%">
+              <el-table-column
+                prop="environment_code"
+                :label="t('deployments.column.environment')"
+                min-width="180"
+              >
+                <template #default="{ row }">
+                  <el-tag size="small" type="info">
+                    {{ row.environment_name }} ({{ row.environment_code }})
+                  </el-tag>
+                </template>
+              </el-table-column>
 
-            <el-table-column
-              prop="deployment_key"
-              :label="t('deployments.column.deploymentKey')"
-              min-width="180"
-            >
-              <template #default="{ row }">
-                <span class="deployment-instance-list-page__code">
-                  {{ row.deployment_key }}
-                </span>
-              </template>
-            </el-table-column>
+              <el-table-column
+                prop="deployment_key"
+                :label="t('deployments.column.deploymentKey')"
+                min-width="180"
+              >
+                <template #default="{ row }">
+                  <span class="deployment-instance-list-page__code">
+                    {{ row.deployment_key }}
+                  </span>
+                </template>
+              </el-table-column>
 
-            <el-table-column
-              prop="name"
-              :label="t('deployments.column.name')"
-              min-width="170"
-            />
+              <el-table-column
+                prop="name"
+                :label="t('deployments.column.name')"
+                min-width="170"
+              />
 
-            <el-table-column
-              :label="t('deployments.column.type')"
-              width="110"
-              align="center"
-            >
-              <template #default="{ row }">
-                <el-tag v-if="row.is_template" size="small" type="warning">
-                  {{ t("deployments.type.template") }}
-                </el-tag>
-                <el-tag v-else size="small" type="success">
-                  {{ t("deployments.type.instance") }}
-                </el-tag>
-              </template>
-            </el-table-column>
+              <el-table-column
+                :label="t('deployments.column.type')"
+                width="110"
+                align="center"
+              >
+                <template #default="{ row }">
+                  <el-tag v-if="row.is_template" size="small" type="warning">
+                    {{ t("deployments.type.template") }}
+                  </el-tag>
+                  <el-tag v-else size="small" type="success">
+                    {{ t("deployments.type.instance") }}
+                  </el-tag>
+                </template>
+              </el-table-column>
 
-            <el-table-column
-              :label="t('deployments.column.status')"
-              width="110"
-              align="center"
-            >
-              <template #default="{ row }">
-                <StatusBadge :status="row.status" />
-              </template>
-            </el-table-column>
+              <el-table-column
+                :label="t('deployments.column.status')"
+                width="110"
+                align="center"
+              >
+                <template #default="{ row }">
+                  <StatusBadge :status="row.status" />
+                </template>
+              </el-table-column>
 
-            <el-table-column
-              :label="t('deployments.column.description')"
-              min-width="180"
-              show-overflow-tooltip
-            >
-              <template #default="{ row }">
-                {{ row.description || t("deployments.emptyDescription") }}
-              </template>
-            </el-table-column>
+              <el-table-column
+                :label="t('deployments.column.description')"
+                min-width="180"
+                show-overflow-tooltip
+              >
+                <template #default="{ row }">
+                  {{ row.description || t("deployments.emptyDescription") }}
+                </template>
+              </el-table-column>
 
-            <el-table-column
-              :label="t('deployments.column.actions')"
-              width="260"
-              align="center"
-              fixed="right"
-            >
-              <template #default="{ row }">
-                <div class="deployment-instance-list-page__actions">
-                  <el-button
-                    text
-                    type="primary"
-                    size="small"
-                    @click="openDetail(row)"
-                  >
-                    {{ t("deployments.action.view") }}
-                  </el-button>
-                  <el-button
-                    v-if="
-                      isAdmin && !row.is_template && row.status === 'inactive'
-                    "
-                    text
-                    type="success"
-                    size="small"
-                    :loading="isActionLoading(row.id, 'activate')"
-                    @click="handleActivate(row)"
-                  >
-                    {{ t("deployments.action.activate") }}
-                  </el-button>
-                  <el-button
-                    v-if="
-                      isAdmin && !row.is_template && row.status === 'active'
-                    "
-                    text
-                    type="warning"
-                    size="small"
-                    :loading="isActionLoading(row.id, 'deactivate')"
-                    @click="handleDeactivate(row)"
-                  >
-                    {{ t("deployments.action.deactivate") }}
-                  </el-button>
-                  <el-button
-                    v-if="
-                      isAdmin && !row.is_template && row.status === 'active'
-                    "
-                    text
-                    type="primary"
-                    size="small"
-                    :loading="isActionLoading(row.id, 'reset-token')"
-                    @click="handleResetToken(row)"
-                  >
-                    {{ t("deployments.action.resetToken") }}
-                  </el-button>
-                </div>
-              </template>
-            </el-table-column>
-          </el-table>
+              <el-table-column
+                :label="t('deployments.column.actions')"
+                width="260"
+                align="center"
+                fixed="right"
+              >
+                <template #default="{ row }">
+                  <div class="deployment-instance-list-page__actions">
+                    <el-button
+                      text
+                      type="primary"
+                      size="small"
+                      @click="openDetail(row)"
+                    >
+                      {{ t("deployments.action.view") }}
+                    </el-button>
+                    <el-button
+                      v-if="
+                        isAdmin && !row.is_template && row.status === 'inactive'
+                      "
+                      text
+                      type="success"
+                      size="small"
+                      :loading="isActionLoading(row.id, 'activate')"
+                      @click="handleActivate(row)"
+                    >
+                      {{ t("deployments.action.activate") }}
+                    </el-button>
+                    <el-button
+                      v-if="
+                        isAdmin && !row.is_template && row.status === 'active'
+                      "
+                      text
+                      type="warning"
+                      size="small"
+                      :loading="isActionLoading(row.id, 'deactivate')"
+                      @click="handleDeactivate(row)"
+                    >
+                      {{ t("deployments.action.deactivate") }}
+                    </el-button>
+                    <el-button
+                      v-if="
+                        isAdmin && !row.is_template && row.status === 'active'
+                      "
+                      text
+                      type="primary"
+                      size="small"
+                      :loading="isActionLoading(row.id, 'reset-token')"
+                      @click="handleResetToken(row)"
+                    >
+                      {{ t("deployments.action.resetToken") }}
+                    </el-button>
+                  </div>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
 
           <div class="deployment-instance-list-page__pagination">
             <el-pagination
@@ -566,9 +568,7 @@ watch(
 
 <style scoped>
 .deployment-instance-list-page {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: var(--spacing-lg);
+  width: 100%;
 }
 
 .deployment-instance-list-page__section {
@@ -609,10 +609,6 @@ watch(
 }
 
 @media (max-width: 768px) {
-  .deployment-instance-list-page {
-    padding: var(--spacing-md);
-  }
-
   .deployment-instance-list-page__toolbar {
     flex-direction: column;
   }

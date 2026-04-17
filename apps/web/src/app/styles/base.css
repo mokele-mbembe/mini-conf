@@ -19,6 +19,10 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+body {
+  min-width: 320px;
+}
+
 #app {
   height: 100%;
 }
@@ -26,4 +30,15 @@ body {
 a {
   color: var(--color-primary);
   text-decoration: none;
+}
+
+.page-container {
+  width: min(96vw, var(--content-max-width));
+  margin: 0 auto;
+  padding: var(--page-gutter-block) var(--page-gutter-inline);
+}
+
+.page-table-shell {
+  width: 100%;
+  overflow-x: auto;
 }

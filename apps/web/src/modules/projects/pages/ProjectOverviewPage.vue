@@ -1,5 +1,5 @@
 <template>
-  <div class="project-overview-page">
+  <div class="project-overview-page page-container">
     <LoadingState v-if="loading" />
 
     <NotFoundState
@@ -82,14 +82,6 @@ watch(
 
 <style scoped>
 .project-overview-page {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: var(--spacing-lg);
-}
-
-@media (max-width: 768px) {
-  .project-overview-page {
-    padding: var(--spacing-md);
-  }
+  width: 100%;
 }
 </style>

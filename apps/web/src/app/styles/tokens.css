@@ -31,4 +31,19 @@
 
   --header-height: 56px;
   --sidebar-width: 220px;
+  --content-max-width: 1880px;
+  --page-gutter-inline: clamp(16px, 2vw, 32px);
+  --page-gutter-block: 24px;
+}
+
+@media (max-width: 1280px) {
+  :root {
+    --page-gutter-block: 20px;
+  }
+}
+
+@media (max-width: 768px) {
+  :root {
+    --page-gutter-block: 16px;
+  }
 }

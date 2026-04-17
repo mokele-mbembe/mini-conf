@@ -1,5 +1,5 @@
 <template>
-  <div class="deployment-instance-detail-page">
+  <div class="deployment-instance-detail-page page-container">
     <LoadingState v-if="projectLoading" />
 
     <NotFoundState
@@ -401,9 +401,7 @@ watch(
 
 <style scoped>
 .deployment-instance-detail-page {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: var(--spacing-lg);
+  width: 100%;
 }
 
 .deployment-instance-detail-page__section {
@@ -452,10 +450,6 @@ watch(
 }
 
 @media (max-width: 768px) {
-  .deployment-instance-detail-page {
-    padding: var(--spacing-md);
-  }
-
   .deployment-instance-detail-page__summary {
     flex-direction: column;
   }

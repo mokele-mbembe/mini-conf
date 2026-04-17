@@ -1,5 +1,5 @@
 <template>
-  <div class="project-environment-list-page">
+  <div class="project-environment-list-page page-container">
     <LoadingState v-if="projectLoading" />
 
     <NotFoundState
@@ -60,74 +60,81 @@
           </el-button>
         </EmptyState>
 
-        <el-table v-else :data="environments" stripe style="width: 100%">
-          <el-table-column
-            prop="code"
-            :label="t('projectEnvironments.column.code')"
-            min-width="150"
-          />
-          <el-table-column
-            prop="name"
-            :label="t('projectEnvironments.column.name')"
-            min-width="180"
-          />
-          <el-table-column
-            :label="t('projectEnvironments.column.status')"
-            width="100"
-            align="center"
-          >
-            <template #default="{ row }">
-              <StatusBadge :status="row.status" />
-            </template>
-          </el-table-column>
-          <el-table-column
-            prop="sort_order"
-            :label="t('projectEnvironments.column.sortOrder')"
-            width="100"
-            align="center"
-          />
-          <el-table-column
-            prop="deployment_count"
-            :label="t('projectEnvironments.column.deploymentCount')"
-            width="120"
-            align="center"
-          />
-          <el-table-column
-            :label="t('projectEnvironments.column.description')"
-            min-width="220"
-            show-overflow-tooltip
-          >
-            <template #default="{ row }">
-              {{ row.description || t("projectEnvironments.emptyDescription") }}
-            </template>
-          </el-table-column>
-          <el-table-column
-            v-if="isAdmin"
-            :label="t('projectEnvironments.column.actions')"
-            width="130"
-            align="center"
-            fixed="right"
-          >
-            <template #default="{ row }">
-              <el-button
-                text
-                type="primary"
-                size="small"
-                @click="openEditDialog(row)"
-              >
-                {{ t("projectEnvironments.action.edit") }}
-              </el-button>
-              <el-button
-                text
-                type="danger"
-                size="small"
-                @click="handleDelete(row)"
-              >
-                {{ t("projectEnvironments.action.delete") }}
-              </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
+        <div
+          v-else
+          class="project-environment-list-page__table page-table-shell"
+        >
+          <el-table :data="environments" stripe style="width: 100%">
+            <el-table-column
+              prop="code"
+              :label="t('projectEnvironments.column.code')"
+              min-width="150"
+            />
+            <el-table-column
+              prop="name"
+              :label="t('projectEnvironments.column.name')"
+              min-width="180"
+            />
+            <el-table-column
+              :label="t('projectEnvironments.column.status')"
+              width="100"
+              align="center"
+            >
+              <template #default="{ row }">
+                <StatusBadge :status="row.status" />
+              </template>
+            </el-table-column>
+            <el-table-column
+              prop="sort_order"
+              :label="t('projectEnvironments.column.sortOrder')"
+              width="100"
+              align="center"
+            />
+            <el-table-column
+              prop="deployment_count"
+              :label="t('projectEnvironments.column.deploymentCount')"
+              width="120"
+              align="center"
+            />
+            <el-table-column
+              :label="t('projectEnvironments.column.description')"
+              min-width="220"
+              show-overflow-tooltip
+            >
+              <template #default="{ row }">
+                {{
+                  row.description || t("projectEnvironments.emptyDescription")
+                }}
+              </template>
+            </el-table-column>
+            <el-table-column
+              v-if="isAdmin"
+              :label="t('projectEnvironments.column.actions')"
+              width="130"
+              align="center"
+              fixed="right"
+            >
+              <template #default="{ row }">
+                <el-button
+                  text
+                  type="primary"
+                  size="small"
+                  @click="openEditDialog(row)"
+                >
+                  {{ t("projectEnvironments.action.edit") }}
+                </el-button>
+                <el-button
+                  text
+                  type="danger"
+                  size="small"
+                  @click="handleDelete(row)"
+                >
+                  {{ t("projectEnvironments.action.delete") }}
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
       </div>
     </template>
 
@@ -257,9 +264,7 @@ watch(
 
 <style scoped>
 .project-environment-list-page {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: var(--spacing-lg);
+  width: 100%;
 }
 
 .project-environment-list-page__section {
