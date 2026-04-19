@@ -217,7 +217,7 @@
 
               <el-table-column
                 :label="t('deployments.column.actions')"
-                width="260"
+                width="330"
                 align="center"
                 fixed="right"
               >
@@ -267,6 +267,16 @@
                     >
                       {{ t("deployments.action.resetToken") }}
                     </el-button>
+                    <el-button
+                      v-if="isAdmin && row.is_template"
+                      text
+                      type="primary"
+                      size="small"
+                      :disabled="activeEnvironmentCount === 0"
+                      @click="openCloneDialog(row)"
+                    >
+                      {{ t("deployments.action.cloneFromTemplate") }}
+                    </el-button>
                   </div>
                 </template>
               </el-table-column>
@@ -295,6 +305,13 @@
       @success="handleCreateSuccess"
     />
 
+    <DeploymentInstanceCloneDialog
+      v-model:visible="cloneDialogVisible"
+      :project-id="projectId"
+      :template="cloneTarget"
+      @success="handleCloneSuccess"
+    />
+
     <DeploymentTokenDialog
       v-model:visible="tokenDialogVisible"
       :payload="tokenPayload"
@@ -310,6 +327,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useProjectContext } from "@/modules/projects/composables/useProjectContext";
 import ProjectTabs from "@/modules/projects/components/ProjectTabs.vue";
 import DeploymentInstanceCreateDialog from "../components/DeploymentInstanceCreateDialog.vue";
+import DeploymentInstanceCloneDialog from "../components/DeploymentInstanceCloneDialog.vue";
 import DeploymentTokenDialog from "../components/DeploymentTokenDialog.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import StatusBadge from "@/shared/components/StatusBadge.vue";
@@ -360,6 +378,8 @@ const activeEnvironmentCount = computed(
 );
 
 const dialogVisible = ref(false);
+const cloneDialogVisible = ref(false);
+const cloneTarget = ref<DeploymentInstanceSummary | null>(null);
 const tokenDialogVisible = ref(false);
 const tokenDialogMode = ref<"activate" | "reset">("activate");
 const tokenPayload = ref<DeploymentTokenResponse | null>(null);
@@ -449,6 +469,11 @@ function openCreateDialog() {
   dialogVisible.value = true;
 }
 
+function openCloneDialog(row: DeploymentInstanceSummary) {
+  cloneTarget.value = row;
+  cloneDialogVisible.value = true;
+}
+
 function isActionLoading(id: number, action: string) {
   return actionTarget.value?.id === id && actionTarget.value.action === action;
 }
@@ -466,6 +491,16 @@ function handleCreateSuccess() {
   statusFilter.value = "";
   page.value = 1;
   loadDeploymentInstances();
+}
+
+function handleCloneSuccess(item: DeploymentInstanceSummary) {
+  router.push({
+    name: ROUTE_NAMES.DEPLOYMENT_DETAIL,
+    params: {
+      projectId: route.params.projectId,
+      deploymentId: item.id,
+    },
+  });
 }
 
 async function handleActivate(row: DeploymentInstanceSummary) {

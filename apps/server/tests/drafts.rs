@@ -770,3 +770,99 @@ async fn clone_draft_rejects_cross_project_source() -> TestResult {
     );
     teardown(&database_url, &schema, pool).await
 }
+
+#[tokio::test]
+async fn delete_draft_removes_existing_draft() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+    let (_, config_file_id, deployment_id) = seed_project_config_deployment(&pool).await?;
+
+    let cookie = login(&app).await?;
+
+    // Create a draft first
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/api/drafts/{deployment_id}/{config_file_id}"))
+                .header(header::COOKIE, &cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"content":"poll_interval_ms: 5000\n","format":"yaml"}"#,
+                ))?,
+        )
+        .await?;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Delete the draft
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/api/drafts/{deployment_id}/{config_file_id}"))
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+    // Verify GET returns 404 after delete
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/drafts/{deployment_id}/{config_file_id}"))
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let payload: ErrorResponse = read_json(response).await?;
+    assert_eq!(payload.code, "draft_not_found");
+
+    // Verify the row is gone from the database
+    let count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM drafts WHERE deployment_instance_id = $1 AND config_file_id = $2",
+    )
+    .bind(deployment_id)
+    .bind(config_file_id)
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(count, 0);
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn delete_draft_returns_not_found_when_missing() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+    let (_, config_file_id, deployment_id) = seed_project_config_deployment(&pool).await?;
+
+    let cookie = login(&app).await?;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/api/drafts/{deployment_id}/{config_file_id}"))
+                .header(header::COOKIE, cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let payload: ErrorResponse = read_json(response).await?;
+    assert_eq!(
+        payload,
+        ErrorResponse {
+            code: "draft_not_found".to_owned(),
+            message: "draft not found".to_owned(),
+        }
+    );
+
+    teardown(&database_url, &schema, pool).await
+}

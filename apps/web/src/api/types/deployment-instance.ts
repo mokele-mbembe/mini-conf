@@ -60,3 +60,41 @@ export interface DeploymentTokenResponse {
   token_preview: string;
   token: string;
 }
+
+export interface ConfigBundleDeployment {
+  key: string;
+  name: string;
+}
+
+export interface ConfigBundleItem {
+  config: string;
+  revision: string;
+  content_hash: string;
+  format: string;
+  content: string;
+}
+
+export interface ConfigBundlePreview {
+  project: string;
+  environment: string;
+  deployment: ConfigBundleDeployment;
+  configs: ConfigBundleItem[];
+}
+
+export interface DeploymentPreviewItem {
+  config_file_id: number;
+  code: string;
+  name: string;
+  is_required: boolean;
+  source: string;
+  status: string;
+  format: string;
+  content: string | null;
+  revision: string | null;
+}
+
+export interface DeploymentBundlePreviewResponse {
+  deployment_instance_id: number;
+  items: DeploymentPreviewItem[];
+  open_bundle_preview: ConfigBundlePreview;
+}

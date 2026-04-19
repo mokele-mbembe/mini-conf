@@ -78,8 +78,18 @@ const tabs = computed<Tab[]>(() => [
 
 const activeTab = computed(() => {
   const currentRouteName = route.name as string;
-  if (currentRouteName === ROUTE_NAMES.DEPLOYMENT_DETAIL) {
+  if (
+    currentRouteName === ROUTE_NAMES.DEPLOYMENT_DETAIL ||
+    currentRouteName === ROUTE_NAMES.DEPLOYMENT_PREVIEW ||
+    currentRouteName === ROUTE_NAMES.DRAFT_EDITOR
+  ) {
     return "deployments";
+  }
+  if (
+    currentRouteName === ROUTE_NAMES.RELEASE_DETAIL ||
+    currentRouteName === ROUTE_NAMES.RELEASE_DIFF
+  ) {
+    return "releases";
   }
 
   const tab = tabs.value.find((t) => t.routeName === currentRouteName);

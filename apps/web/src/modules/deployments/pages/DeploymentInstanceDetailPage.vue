@@ -27,6 +27,15 @@
             class="deployment-instance-detail-page__header-actions"
           >
             <el-button
+              v-if="canPreview"
+              text
+              type="primary"
+              size="small"
+              @click="openPreview"
+            >
+              {{ t("deployments.action.previewBundle") }}
+            </el-button>
+            <el-button
               v-if="canActivate"
               type="success"
               size="small"
@@ -52,6 +61,14 @@
               @click="handleResetToken"
             >
               {{ t("deployments.action.resetToken") }}
+            </el-button>
+            <el-button
+              v-if="canCloneFromTemplate"
+              type="primary"
+              size="small"
+              @click="openCloneDialog"
+            >
+              {{ t("deployments.action.cloneFromTemplate") }}
             </el-button>
             <StatusBadge :status="deployment.status" />
           </div>
@@ -151,6 +168,108 @@
               {{ deployment.description || t("deployments.emptyDescription") }}
             </el-descriptions-item>
           </el-descriptions>
+
+          <div class="deployment-instance-detail-page__configs">
+            <div class="deployment-instance-detail-page__configs-heading">
+              <div>
+                <h3>{{ t("deployments.configs.title") }}</h3>
+                <p>{{ t("deployments.configs.subtitle") }}</p>
+              </div>
+              <el-button
+                v-if="canPreview"
+                text
+                type="primary"
+                @click="openPreview"
+              >
+                {{ t("deployments.action.previewBundle") }}
+              </el-button>
+            </div>
+
+            <LoadingState v-if="configListLoading" />
+
+            <ErrorState
+              v-else-if="configListError"
+              :title="t('configFiles.page.loadError')"
+              :subtitle="
+                getErrorMessage(configListError.code, configListError.message)
+              "
+              @retry="loadConfigFiles"
+            />
+
+            <EmptyState
+              v-else-if="configFiles.length === 0"
+              :description="t('deployments.configs.empty')"
+            />
+
+            <div v-else class="page-table-shell">
+              <el-table :data="configFiles" stripe style="width: 100%">
+                <el-table-column
+                  prop="code"
+                  :label="t('configFiles.column.code')"
+                  min-width="150"
+                >
+                  <template #default="{ row }">
+                    <span class="deployment-instance-detail-page__code">
+                      {{ row.code }}
+                    </span>
+                  </template>
+                </el-table-column>
+
+                <el-table-column
+                  prop="name"
+                  :label="t('configFiles.column.name')"
+                  min-width="160"
+                />
+
+                <el-table-column
+                  prop="format"
+                  :label="t('configFiles.column.format')"
+                  width="90"
+                >
+                  <template #default="{ row }">
+                    <el-tag size="small" type="info">{{ row.format }}</el-tag>
+                  </template>
+                </el-table-column>
+
+                <el-table-column
+                  :label="t('configFiles.column.required')"
+                  width="90"
+                  align="center"
+                >
+                  <template #default="{ row }">
+                    <el-tag v-if="row.is_required" size="small" type="danger">
+                      {{ t("configFiles.required") }}
+                    </el-tag>
+                    <span v-else class="deployment-instance-detail-page__muted">
+                      —
+                    </span>
+                  </template>
+                </el-table-column>
+
+                <el-table-column
+                  :label="t('deployments.column.actions')"
+                  width="140"
+                  align="center"
+                  fixed="right"
+                >
+                  <template #default="{ row }">
+                    <el-button
+                      v-if="canEditDraft"
+                      text
+                      type="primary"
+                      size="small"
+                      @click="openDraft(row.id)"
+                    >
+                      {{ t("deployments.action.editDraft") }}
+                    </el-button>
+                    <span v-else class="deployment-instance-detail-page__muted">
+                      —
+                    </span>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
+          </div>
         </template>
       </div>
     </template>
@@ -159,6 +278,13 @@
       v-model:visible="tokenDialogVisible"
       :payload="tokenPayload"
       :mode="tokenDialogMode"
+    />
+
+    <DeploymentInstanceCloneDialog
+      v-model:visible="cloneDialogVisible"
+      :project-id="projectId"
+      :template="deployment"
+      @success="handleCloneSuccess"
     />
   </div>
 </template>
@@ -169,17 +295,21 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { useRoute, useRouter } from "vue-router";
 import { useProjectContext } from "@/modules/projects/composables/useProjectContext";
 import ProjectTabs from "@/modules/projects/components/ProjectTabs.vue";
+import DeploymentInstanceCloneDialog from "../components/DeploymentInstanceCloneDialog.vue";
 import DeploymentTokenDialog from "../components/DeploymentTokenDialog.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import StatusBadge from "@/shared/components/StatusBadge.vue";
 import LoadingState from "@/shared/states/LoadingState.vue";
+import EmptyState from "@/shared/states/EmptyState.vue";
 import ErrorState from "@/shared/states/ErrorState.vue";
 import ForbiddenState from "@/shared/states/ForbiddenState.vue";
 import NotFoundState from "@/shared/states/NotFoundState.vue";
 import { ROUTE_NAMES } from "@/shared/constants/routes";
 import * as deploymentInstancesApi from "@/api/deployment-instances";
+import * as configFilesApi from "@/api/config-files";
 import { ApiRequestError } from "@/api/error";
 import { getErrorMessage } from "@/shared/constants/error-messages";
+import type { ConfigFileSummary } from "@/api/types/config-file";
 import type {
   DeploymentInstanceSummary,
   DeploymentTokenResponse,
@@ -200,16 +330,24 @@ const {
 const projectId = computed(() => Number(route.params.projectId));
 const deploymentId = computed(() => Number(route.params.deploymentId));
 const isAdmin = computed(() => project.value?.current_user_role === "admin");
+const canEditDraft = computed(() => {
+  const role = project.value?.current_user_role;
+  return role === "admin" || role === "editor";
+});
 
 const deployment = ref<DeploymentInstanceSummary | null>(null);
 const detailLoading = ref(false);
 const detailError = ref<ApiRequestError | null>(null);
+const configFiles = ref<ConfigFileSummary[]>([]);
+const configListLoading = ref(false);
+const configListError = ref<ApiRequestError | null>(null);
 const actionLoading = ref<"activate" | "deactivate" | "reset-token" | null>(
   null,
 );
 const tokenDialogVisible = ref(false);
 const tokenDialogMode = ref<"activate" | "reset">("activate");
 const tokenPayload = ref<DeploymentTokenResponse | null>(null);
+const cloneDialogVisible = ref(false);
 const detailTitle = computed(
   () => deployment.value?.name ?? t("deployments.detail.title"),
 );
@@ -242,6 +380,16 @@ const canDeactivate = computed(() => {
   return !deployment.value.is_template && deployment.value.status === "active";
 });
 const canResetToken = computed(() => canDeactivate.value);
+const canPreview = computed(
+  () => canEditDraft.value && deployment.value !== null,
+);
+const canCloneFromTemplate = computed(() => {
+  if (!deployment.value || !isAdmin.value) {
+    return false;
+  }
+
+  return deployment.value.is_template;
+});
 const templateSourceLabel = computed(() => {
   if (!deployment.value) {
     return "";
@@ -281,11 +429,34 @@ async function loadDeploymentInstance() {
   }
 }
 
+async function loadConfigFiles() {
+  configListLoading.value = true;
+  configListError.value = null;
+  try {
+    const res = await configFilesApi.listConfigFiles({
+      project_id: projectId.value,
+      status: "active",
+    });
+    configFiles.value = res.items;
+  } catch (err) {
+    if (err instanceof ApiRequestError) {
+      configListError.value = err;
+    } else {
+      configListError.value = new ApiRequestError(0, {
+        code: "unknown_error",
+        message: t("configFiles.page.loadError"),
+      });
+    }
+  } finally {
+    configListLoading.value = false;
+  }
+}
+
 async function loadAll() {
   const id = projectId.value;
   if (Number.isNaN(id)) return;
   await fetchProject(id);
-  await loadDeploymentInstance();
+  await Promise.all([loadDeploymentInstance(), loadConfigFiles()]);
 }
 
 function openTokenDialog(
@@ -391,6 +562,41 @@ function backToList() {
   });
 }
 
+function openCloneDialog() {
+  cloneDialogVisible.value = true;
+}
+
+function openPreview() {
+  router.push({
+    name: ROUTE_NAMES.DEPLOYMENT_PREVIEW,
+    params: {
+      projectId: route.params.projectId,
+      deploymentId: route.params.deploymentId,
+    },
+  });
+}
+
+function openDraft(configFileId: number) {
+  router.push({
+    name: ROUTE_NAMES.DRAFT_EDITOR,
+    params: {
+      projectId: route.params.projectId,
+      deploymentId: route.params.deploymentId,
+      configFileId,
+    },
+  });
+}
+
+function handleCloneSuccess(item: DeploymentInstanceSummary) {
+  router.push({
+    name: ROUTE_NAMES.DEPLOYMENT_DETAIL,
+    params: {
+      projectId: route.params.projectId,
+      deploymentId: item.id,
+    },
+  });
+}
+
 onMounted(loadAll);
 
 watch(
@@ -449,6 +655,29 @@ watch(
   gap: var(--spacing-sm);
 }
 
+.deployment-instance-detail-page__configs {
+  margin-top: var(--spacing-lg);
+}
+
+.deployment-instance-detail-page__configs-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.deployment-instance-detail-page__configs-heading h3 {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.deployment-instance-detail-page__configs-heading p,
+.deployment-instance-detail-page__muted {
+  color: var(--color-text-secondary);
+}
+
 @media (max-width: 768px) {
   .deployment-instance-detail-page__summary {
     flex-direction: column;
@@ -456,6 +685,10 @@ watch(
 
   .deployment-instance-detail-page__header-actions {
     justify-content: flex-start;
+  }
+
+  .deployment-instance-detail-page__configs-heading {
+    flex-direction: column;
   }
 }
 </style>

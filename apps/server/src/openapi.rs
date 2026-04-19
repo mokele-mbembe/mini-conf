@@ -66,6 +66,7 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
         crate::http::api::deployment_sync_records::list_deployment_sync_records,
         crate::http::api::drafts::get_draft,
         crate::http::api::drafts::put_draft,
+        crate::http::api::drafts::delete_draft,
         crate::http::api::drafts::clone_draft,
         crate::http::api::project_members::list_project_members,
         crate::http::api::project_members::create_project_member,

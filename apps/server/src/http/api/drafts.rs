@@ -8,7 +8,7 @@ use crate::{
 use axum::{
     Json, Router,
     extract::{Path, State, rejection::JsonRejection},
-    http::HeaderMap,
+    http::{HeaderMap, StatusCode},
     routing::get,
 };
 use schema::draft::{DraftCloneResponse, DraftResponse};
@@ -59,7 +59,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route(
             "/drafts/{deployment_id}/{config_file_id}",
-            get(get_draft).put(put_draft),
+            get(get_draft).put(put_draft).delete(delete_draft),
         )
         .route(
             "/drafts/{target_deployment_id}/{config_file_id}/clone",
@@ -133,6 +133,92 @@ pub(crate) async fn get_draft(
     .ok_or_else(|| ApiError::not_found_with("draft_not_found", "draft not found"))?;
 
     Ok(Json(map_draft_row(row)))
+}
+
+#[utoipa::path(
+    delete,
+    path = "/api/drafts/{deployment_id}/{config_file_id}",
+    tag = "admin",
+    params(
+        ("deployment_id" = i64, Path, description = "Deployment instance ID"),
+        ("config_file_id" = i64, Path, description = "Config file ID")
+    ),
+    security(
+        ("session_auth" = [])
+    ),
+    responses(
+        (status = 204, description = "Draft deleted"),
+        (status = 401, description = "Missing or expired admin session", body = crate::error::ErrorResponse),
+        (status = 404, description = "Deployment instance, config file, or draft not found", body = crate::error::ErrorResponse),
+        (status = 503, description = "Database bootstrap disabled", body = crate::error::ErrorResponse),
+        (status = 500, description = "Internal server error", body = crate::error::ErrorResponse),
+    )
+)]
+pub(crate) async fn delete_draft(
+    State(state): State<AppState>,
+    Path((deployment_id, config_file_id)): Path<(i64, i64)>,
+    headers: HeaderMap,
+) -> Result<StatusCode, ApiError> {
+    let Some(pool) = state.db_pool() else {
+        return Err(ApiError::service_unavailable(
+            "database_unavailable",
+            "Database bootstrap is disabled",
+        ));
+    };
+
+    let auth = authenticate_user(pool, &headers).await?;
+    let context = load_draft_context(pool, deployment_id, config_file_id).await?;
+    require_project_role(
+        pool,
+        auth.user_id,
+        context.project_id,
+        ProjectRole::Editor,
+        "deployment_instance_not_found",
+        "deployment instance not found",
+    )
+    .await?;
+
+    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+
+    let deleted = sqlx::query_scalar::<_, i64>(
+        r#"
+        DELETE FROM drafts
+        WHERE deployment_instance_id = $1
+          AND config_file_id = $2
+        RETURNING id
+        "#,
+    )
+    .bind(deployment_id)
+    .bind(config_file_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| ApiError::internal())?;
+
+    if deleted.is_none() {
+        return Err(ApiError::not_found_with(
+            "draft_not_found",
+            "draft not found",
+        ));
+    }
+
+    write_audit_log(
+        &mut *tx,
+        AuditLogEntry {
+            project_id: Some(context.project_id),
+            user_id: Some(auth.user_id),
+            action: "draft.deleted",
+            resource_type: "draft",
+            resource_id: format!("{deployment_id}:{config_file_id}"),
+            detail: Some(serde_json::json!({
+                "deployment_instance_id": deployment_id,
+                "config_file_id": config_file_id,
+            })),
+        },
+    )
+    .await?;
+    tx.commit().await.map_err(|_| ApiError::internal())?;
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[utoipa::path(

@@ -4,6 +4,7 @@ import type {
   CreateDeploymentInstanceRequest,
   DeploymentInstanceListResponse,
   DeploymentInstanceSummary,
+  DeploymentBundlePreviewResponse,
   DeploymentTokenResponse,
   ListDeploymentInstancesParams,
   UpdateDeploymentInstanceRequest,
@@ -92,5 +93,13 @@ export function resetDeploymentToken(
 ): Promise<DeploymentTokenResponse> {
   return client.post<DeploymentTokenResponse>(
     `/deployment-instances/${id}/token/reset`,
+  );
+}
+
+export function previewDeploymentBundle(
+  id: number,
+): Promise<DeploymentBundlePreviewResponse> {
+  return client.get<DeploymentBundlePreviewResponse>(
+    `/deployment-instances/${id}/preview-bundle`,
   );
 }

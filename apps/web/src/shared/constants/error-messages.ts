@@ -29,6 +29,16 @@ export const ERROR_MESSAGES: Record<string, string> = {
   deployment_instance_deactivate_conflict:
     "error.deployment_instance_deactivate_conflict",
   deployment_not_found: "error.deployment_instance_not_found",
+  draft_not_found: "error.draft_not_found",
+  draft_version_conflict: "error.draft_version_conflict",
+  draft_validation_failed: "error.draft_validation_failed",
+  draft_clone_cross_project_forbidden:
+    "error.draft_clone_cross_project_forbidden",
+  required_config_missing: "error.required_config_missing",
+  deployment_instance_template_publish_forbidden:
+    "error.deployment_instance_template_publish_forbidden",
+  release_publish_failed: "error.release_publish_failed",
+  release_not_found: "error.release_not_found",
   network_error: "error.network_error",
   unknown_error: "error.unknown_error",
 };

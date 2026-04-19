@@ -12,6 +12,9 @@ import ConfigFileListPage from "@/modules/config-files/pages/ConfigFileListPage.
 import ProjectEnvironmentListPage from "@/modules/project-environments/pages/ProjectEnvironmentListPage.vue";
 import DeploymentInstanceListPage from "@/modules/deployments/pages/DeploymentInstanceListPage.vue";
 import DeploymentInstanceDetailPage from "@/modules/deployments/pages/DeploymentInstanceDetailPage.vue";
+import DeploymentPreviewPage from "@/modules/deployments/pages/DeploymentPreviewPage.vue";
+import DraftEditorPage from "@/modules/drafts/pages/DraftEditorPage.vue";
+import ReleaseListPage from "@/modules/releases/pages/ReleaseListPage.vue";
 
 export const routes: RouteRecordRaw[] = [
   {
@@ -67,8 +70,28 @@ export const routes: RouteRecordRaw[] = [
         component: DeploymentInstanceDetailPage,
       },
       {
+        path: ROUTE_PATHS.DEPLOYMENT_PREVIEW,
+        name: ROUTE_NAMES.DEPLOYMENT_PREVIEW,
+        component: DeploymentPreviewPage,
+      },
+      {
+        path: ROUTE_PATHS.DRAFT_EDITOR,
+        name: ROUTE_NAMES.DRAFT_EDITOR,
+        component: DraftEditorPage,
+      },
+      {
         path: ROUTE_PATHS.RELEASE_LIST,
         name: ROUTE_NAMES.RELEASE_LIST,
+        component: ReleaseListPage,
+      },
+      {
+        path: ROUTE_PATHS.RELEASE_DETAIL,
+        name: ROUTE_NAMES.RELEASE_DETAIL,
+        component: ProjectSectionPlaceholderPage,
+      },
+      {
+        path: ROUTE_PATHS.RELEASE_DIFF,
+        name: ROUTE_NAMES.RELEASE_DIFF,
         component: ProjectSectionPlaceholderPage,
       },
       {
