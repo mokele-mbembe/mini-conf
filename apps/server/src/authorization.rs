@@ -104,3 +104,29 @@ pub async fn load_project_role(
     row.map(|row| ProjectRole::parse(row.get::<String, _>("role").as_str()))
         .transpose()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::ProjectRole;
+
+    #[test]
+    fn project_role_allows_matches_role_hierarchy() {
+        for (actual, required, expected) in [
+            (ProjectRole::Viewer, ProjectRole::Viewer, true),
+            (ProjectRole::Viewer, ProjectRole::Editor, false),
+            (ProjectRole::Viewer, ProjectRole::Admin, false),
+            (ProjectRole::Editor, ProjectRole::Viewer, true),
+            (ProjectRole::Editor, ProjectRole::Editor, true),
+            (ProjectRole::Editor, ProjectRole::Admin, false),
+            (ProjectRole::Admin, ProjectRole::Viewer, true),
+            (ProjectRole::Admin, ProjectRole::Editor, true),
+            (ProjectRole::Admin, ProjectRole::Admin, true),
+        ] {
+            assert_eq!(
+                actual.allows(required),
+                expected,
+                "{actual:?} allowing {required:?} should be {expected}"
+            );
+        }
+    }
+}

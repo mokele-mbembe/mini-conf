@@ -255,7 +255,11 @@ fn bearer_token(headers: &HeaderMap) -> Result<&str, ApiError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{deployment_token_preview, generate_deployment_token, hash_bearer_token};
+    use super::{
+        bearer_token, clear_session_cookie_header, deployment_token_preview,
+        generate_deployment_token, hash_bearer_token, session_cookie_header,
+    };
+    use axum::http::{HeaderMap, HeaderValue, header};
 
     #[test]
     fn hashes_bearer_token_to_sha256_hex() {
@@ -279,5 +283,85 @@ mod tests {
             deployment_token_preview("mc_live_1234567890abcdef"),
             "mc_live_***"
         );
+    }
+
+    #[test]
+    fn deployment_token_preview_masks_non_live_tokens_generically() {
+        assert_eq!(deployment_token_preview("legacy-token"), "***");
+        assert_eq!(deployment_token_preview(""), "***");
+    }
+
+    #[test]
+    fn bearer_token_extracts_authorization_header() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::AUTHORIZATION,
+            HeaderValue::from_static("Bearer mc_live_token"),
+        );
+
+        assert_eq!(bearer_token(&headers), Ok("mc_live_token"));
+    }
+
+    #[test]
+    fn bearer_token_rejects_missing_authorization_header() {
+        let headers = HeaderMap::new();
+
+        assert_eq!(
+            bearer_token(&headers).map_err(|error| error.into_body().code),
+            Err("missing_token".to_owned())
+        );
+    }
+
+    #[test]
+    fn bearer_token_rejects_missing_bearer_prefix() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::AUTHORIZATION,
+            HeaderValue::from_static("Token mc_live_token"),
+        );
+
+        assert_eq!(
+            bearer_token(&headers).map_err(|error| error.into_body().code),
+            Err("invalid_token".to_owned())
+        );
+    }
+
+    #[test]
+    fn bearer_token_rejects_empty_token() {
+        for raw in ["Bearer ", "Bearer    "] {
+            let mut headers = HeaderMap::new();
+            headers.insert(
+                header::AUTHORIZATION,
+                HeaderValue::from_str(raw).expect("test header value should be valid"),
+            );
+
+            assert_eq!(
+                bearer_token(&headers).map_err(|error| error.into_body().code),
+                Err("invalid_token".to_owned())
+            );
+        }
+    }
+
+    #[test]
+    fn session_cookie_header_sets_expected_security_attributes() {
+        let value = session_cookie_header("session-token");
+        let cookie = value.to_str().expect("session cookie should be ascii");
+
+        assert!(cookie.contains("mini_conf_session=session-token"));
+        assert!(cookie.contains("Path=/"));
+        assert!(cookie.contains("HttpOnly"));
+        assert!(cookie.contains("SameSite=Lax"));
+    }
+
+    #[test]
+    fn clear_session_cookie_header_expires_session_cookie() {
+        let value = clear_session_cookie_header();
+        let cookie = value.to_str().expect("clear cookie should be ascii");
+
+        assert!(cookie.contains("mini_conf_session="));
+        assert!(cookie.contains("Path=/"));
+        assert!(cookie.contains("HttpOnly"));
+        assert!(cookie.contains("SameSite=Lax"));
+        assert!(cookie.contains("Max-Age=0"));
     }
 }

@@ -200,7 +200,7 @@ fn parse_bool(field: &'static str, raw: &str) -> Result<bool, ConfigError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{AppConfig, AppEnv};
+    use super::{AppConfig, AppEnv, parse_bool};
     use std::{
         collections::HashMap,
         path::PathBuf,
@@ -302,6 +302,33 @@ mod tests {
     }
 
     #[test]
+    fn app_env_parse_accepts_supported_values_directly() {
+        for (raw, expected) in [
+            (" dev ", AppEnv::Dev),
+            ("DEVELOPMENT", AppEnv::Dev),
+            ("test", AppEnv::Test),
+            ("Testing", AppEnv::Test),
+            ("staging", AppEnv::Staging),
+            ("PROD", AppEnv::Prod),
+            ("production", AppEnv::Prod),
+        ] {
+            assert_eq!(
+                AppEnv::parse(raw),
+                Ok(expected),
+                "APP_ENV={raw} should parse directly"
+            );
+        }
+    }
+
+    #[test]
+    fn app_env_parse_rejects_unknown_values_directly() {
+        let error = AppEnv::parse("qa").expect_err("unknown APP_ENV should be rejected");
+
+        assert_eq!(error.field(), "APP_ENV");
+        assert_eq!(error.to_string(), "APP_ENV: unsupported APP_ENV value: qa");
+    }
+
+    #[test]
     fn from_lookup_rejects_unknown_app_env() {
         let error = AppConfig::from_lookup(|key| match key {
             "APP_ENV" => Some("qa".to_owned()),
@@ -330,6 +357,17 @@ mod tests {
     }
 
     #[test]
+    fn parse_bool_accepts_enabled_values_directly() {
+        for raw in [" 1 ", "TRUE", "yes", "On"] {
+            assert_eq!(
+                parse_bool("TEST_BOOL", raw),
+                Ok(true),
+                "{raw} should parse as true"
+            );
+        }
+    }
+
+    #[test]
     fn from_lookup_parses_disabled_boolean_db_boot_flag() {
         for raw in ["0", "false", "no", "off"] {
             let config = AppConfig::from_lookup(|key| match key {
@@ -343,6 +381,29 @@ mod tests {
                 "INIT_DB_ON_BOOT={raw} should disable DB boot"
             );
         }
+    }
+
+    #[test]
+    fn parse_bool_accepts_disabled_values_directly() {
+        for raw in [" 0 ", "FALSE", "no", "Off"] {
+            assert_eq!(
+                parse_bool("TEST_BOOL", raw),
+                Ok(false),
+                "{raw} should parse as false"
+            );
+        }
+    }
+
+    #[test]
+    fn parse_bool_rejects_unknown_values_directly() {
+        let error =
+            parse_bool("TEST_BOOL", "sometimes").expect_err("unknown bool should be rejected");
+
+        assert_eq!(error.field(), "TEST_BOOL");
+        assert_eq!(
+            error.to_string(),
+            "TEST_BOOL: unsupported TEST_BOOL value: sometimes"
+        );
     }
 
     #[test]

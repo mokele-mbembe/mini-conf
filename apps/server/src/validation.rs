@@ -147,13 +147,50 @@ fn redact_segments(document: &mut JsonValue, segments: &mut Vec<String>) -> bool
 
 fn parse_secret_path(path: &str) -> Option<Vec<String>> {
     let trimmed = path.trim();
-    let path = trimmed.strip_prefix("$.")?;
-    let segments: Vec<String> = path
-        .split('.')
-        .map(str::trim)
-        .filter(|segment| !segment.is_empty())
-        .map(ToOwned::to_owned)
-        .collect();
+    let mut chars = trimmed.chars().peekable();
+    if chars.next()? != '$' {
+        return None;
+    }
+
+    let mut segments = Vec::new();
+    while let Some(next) = chars.peek().copied() {
+        match next {
+            '.' => {
+                chars.next();
+                let mut segment = String::new();
+                while let Some(ch) = chars.peek().copied() {
+                    if ch == '.' || ch == '[' {
+                        break;
+                    }
+                    segment.push(ch);
+                    chars.next();
+                }
+                let segment = segment.trim();
+                if segment.is_empty() {
+                    return None;
+                }
+                segments.push(segment.to_owned());
+            }
+            '[' => {
+                chars.next();
+                let mut segment = String::new();
+                let mut closed = false;
+                for ch in chars.by_ref() {
+                    if ch == ']' {
+                        closed = true;
+                        break;
+                    }
+                    segment.push(ch);
+                }
+                let segment = segment.trim();
+                if !closed || segment.is_empty() || !segment.chars().all(|ch| ch.is_ascii_digit()) {
+                    return None;
+                }
+                segments.push(segment.to_owned());
+            }
+            _ => return None,
+        }
+    }
 
     if segments.is_empty() {
         None
@@ -216,6 +253,70 @@ mod tests {
         assert!(result.redacted);
         assert!(result.content.contains(REDACTED_PLACEHOLDER));
         assert!(!result.content.contains("secret"));
+    }
+
+    #[test]
+    fn redacts_json_array_paths() {
+        let result = redact_content(
+            "json",
+            r#"[{"password":"secret","name":"primary"}]"#,
+            "secret",
+            Some(&["$[0].password".to_owned()]),
+        );
+
+        assert!(result.redacted);
+        assert!(result.content.contains(REDACTED_PLACEHOLDER));
+        assert!(result.content.contains("primary"));
+        assert!(!result.content.contains("secret"));
+    }
+
+    #[test]
+    fn redacts_nested_array_paths_under_object_keys() {
+        let result = redact_content(
+            "json",
+            r#"{"devices":[{"token":"secret","name":"camera"}]}"#,
+            "secret",
+            Some(&["$.devices[0].token".to_owned()]),
+        );
+
+        assert!(result.redacted);
+        assert!(result.content.contains(REDACTED_PLACEHOLDER));
+        assert!(result.content.contains("camera"));
+        assert!(!result.content.contains("secret"));
+    }
+
+    #[test]
+    fn fully_redacts_when_secret_paths_do_not_match() {
+        let result = redact_content(
+            "json",
+            r#"{"password":"secret","name":"primary"}"#,
+            "secret",
+            Some(&["$.missing.password".to_owned()]),
+        );
+
+        assert!(result.redacted);
+        assert_eq!(result.content, r#"{"redacted":"***REDACTED***"}"#);
+    }
+
+    #[test]
+    fn fully_redacts_empty_secret_paths() {
+        let result = redact_content(
+            "yaml",
+            "password: secret\n",
+            "secret",
+            Some(&Vec::<String>::new()),
+        );
+
+        assert!(result.redacted);
+        assert_eq!(result.content, "redacted: ***REDACTED***\n");
+    }
+
+    #[test]
+    fn fully_redacts_empty_content_for_secret_values() {
+        let result = redact_content("json", "", "secret", Some(&["$.password".to_owned()]));
+
+        assert!(result.redacted);
+        assert_eq!(result.content, r#"{"redacted":"***REDACTED***"}"#);
     }
 
     #[test]
