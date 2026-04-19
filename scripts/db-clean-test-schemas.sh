@@ -60,7 +60,7 @@ if [[ -z "${database_url}" ]]; then
   exit 1
 fi
 
-schema_regex='^mini_conf_(auth_session|bootstrap_users|config_files|db_bootstrap|deployment_tokens|deployments|drafts|members|open_bundle|open_heartbeat|open_release|open_resolve|open_sync|projects|releases|test)_[0-9]+$'
+schema_regex='^mini_conf_(alpha_full|alpha_smoke|auth_session|bootstrap_users|config_files|db_bootstrap|deployment_tokens|deployments|drafts|e2e|members|open_bundle|open_heartbeat|open_release|open_resolve|open_sync|projects|releases|test)_[0-9]+$'
 
 connection_summary="$(
   psql "${database_url}" -X -v ON_ERROR_STOP=1 -Atc \

@@ -17,28 +17,36 @@ async function login(page: Page) {
   await expect(page).toHaveURL(/\/projects/, { timeout: 10_000 });
 }
 
-async function getAdminProjectId(page: Page): Promise<number> {
-  const response = await page.request.get("/api/projects");
+async function createProject(page: Page, suffix: string): Promise<number> {
+  const response = await page.request.post("/api/projects", {
+    data: {
+      code: `e2e-project-${suffix}`,
+      name: `E2E Project ${suffix}`,
+      description: "Isolated Playwright project",
+    },
+  });
   expect(response.ok()).toBeTruthy();
-  const payload = (await response.json()) as {
-    items: Array<{ id: number; current_user_role?: string }>;
-  };
-  const project = payload.items.find(
-    (item) => item.current_user_role === "admin",
-  );
-  expect(project).toBeTruthy();
-  return project!.id;
+  const payload = (await response.json()) as { id: number };
+  return payload.id;
 }
 
 test("main path: login → project list → project detail", async ({ page }) => {
+  const suffix = Date.now().toString();
   await login(page);
+  const projectId = await createProject(page, suffix);
 
-  const firstCard = page.locator(".el-card").first();
-  await expect(firstCard).toBeVisible({ timeout: 10_000 });
+  await page.goto("/projects");
 
-  await firstCard.click();
+  const projectCard = page.locator(".el-card", {
+    hasText: `e2e-project-${suffix}`,
+  });
+  await expect(projectCard).toBeVisible({ timeout: 10_000 });
 
-  await expect(page).toHaveURL(/\/projects\/\d+/, { timeout: 10_000 });
+  await projectCard.click();
+
+  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}`), {
+    timeout: 10_000,
+  });
   await expect(page.locator(".el-descriptions")).toBeVisible({
     timeout: 10_000,
   });
@@ -54,11 +62,14 @@ test("deployment lifecycle path: environment → inactive deployment → activat
   const deploymentKey = `e2e-deployment-${suffix}`;
 
   await login(page);
-  const projectId = await getAdminProjectId(page);
+  const projectId = await createProject(page, suffix);
 
   await page.goto(`/projects/${projectId}/environments`);
-  await expect(page.getByRole("button", { name: "新建环境" })).toBeVisible();
-  await page.getByRole("button", { name: "新建环境" }).click();
+  const createEnvironmentButton = page
+    .getByRole("button", { name: "新建环境" })
+    .first();
+  await expect(createEnvironmentButton).toBeVisible();
+  await createEnvironmentButton.click();
 
   const environmentDialog = page.getByRole("dialog", { name: "新建项目环境" });
   await expect(environmentDialog).toBeVisible();
@@ -76,10 +87,11 @@ test("deployment lifecycle path: environment → inactive deployment → activat
   await expect(page).toHaveURL(
     new RegExp(`/projects/${projectId}/deployments`),
   );
-  await expect(
-    page.getByRole("button", { name: "新建部署实例" }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "新建部署实例" }).click();
+  const createDeploymentButton = page
+    .getByRole("button", { name: "新建部署实例" })
+    .first();
+  await expect(createDeploymentButton).toBeVisible();
+  await createDeploymentButton.click();
 
   const deploymentDialog = page.getByRole("dialog", { name: "新建部署实例" });
   await expect(deploymentDialog).toBeVisible();

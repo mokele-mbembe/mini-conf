@@ -216,8 +216,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     env:
-      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
-      HTTP_ADDR: 127.0.0.1:18080
+      TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -366,73 +365,12 @@ jobs:
         run: pnpm --dir apps/web exec playwright install --with-deps chromium
 
       - name: Build server
-        run: cargo build --bin server --bin dev-seed-demo
+        run: cargo build --bin server
 
-      - name: Run migrations
-        run: just db-migrate-up
+      - name: Run isolated Playwright smoke
+        run: just test-e2e
 
-      - name: Seed demo data
-        run: just dev-seed-demo
-
-      - name: Start backend and run Playwright smoke
-        run: |
-          # Start backend server in background
-          env \
-            APP_ENV=dev \
-            HTTP_ADDR="${HTTP_ADDR}" \
-            DATABASE_URL="${DATABASE_URL}" \
-            INIT_DB_ON_BOOT=true \
-            cargo run --bin server &
-          SERVER_PID=$!
-
-          # Wait for backend to be ready
-          for i in $(seq 1 60); do
-            if curl --silent --fail http://${HTTP_ADDR}/api/healthz >/dev/null 2>&1; then
-              break
-            fi
-            if ! kill -0 $SERVER_PID 2>/dev/null; then
-              echo "Backend server exited unexpectedly" >&2
-              exit 1
-            fi
-            sleep 1
-          done
-
-          if ! curl --silent --fail http://${HTTP_ADDR}/api/healthz >/dev/null 2>&1; then
-            echo "Backend did not become ready within 60s" >&2
-            kill $SERVER_PID 2>/dev/null || true
-            exit 1
-          fi
-
-          # Start Vite preview server (serves the built frontend)
-          VITE_API_TARGET="http://${HTTP_ADDR}" \
-            pnpm --dir apps/web preview --host 127.0.0.1 --port 4173 --strictPort &
-          PREVIEW_PID=$!
-
-          # Wait for preview server to be ready
-          for i in $(seq 1 30); do
-            if curl --silent --fail http://127.0.0.1:4173/ >/dev/null 2>&1; then
-              break
-            fi
-            if ! kill -0 $PREVIEW_PID 2>/dev/null; then
-              echo "Preview server exited unexpectedly" >&2
-              kill $SERVER_PID 2>/dev/null || true
-              exit 1
-            fi
-            sleep 1
-          done
-
-          if ! curl --silent --fail http://127.0.0.1:4173/ >/dev/null 2>&1; then
-            echo "Preview server did not become ready within 30s" >&2
-            kill $PREVIEW_PID 2>/dev/null || true
-            kill $SERVER_PID 2>/dev/null || true
-            exit 1
-          fi
-
-          # Run Playwright smoke test
-          PLAYWRIGHT_BASE_URL="http://127.0.0.1:4173" \
-            pnpm --dir apps/web test:e2e
-          TEST_EXIT=$?
-
-          kill $PREVIEW_PID 2>/dev/null || true
-          kill $SERVER_PID 2>/dev/null || true
-          exit $TEST_EXIT
+      - name: Clean leftover test schemas
+        if: ${{ always() }}
+        continue-on-error: true
+        run: bash scripts/db-clean-test-schemas.sh --apply

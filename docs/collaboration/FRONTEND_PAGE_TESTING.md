@@ -265,21 +265,28 @@ pnpm --dir apps/web run format:check
 
 ## 10. 本地复现前端 smoke CI 的推荐方式
 
-如果要在 push 前尽量模拟 CI，推荐按这组端口和步骤执行：
+如果要在 push 前尽量模拟 CI，使用统一的隔离入口：
 
 ```bash
-pnpm --dir apps/web build
-just dev-seed-demo
-APP_ENV=dev HTTP_ADDR=127.0.0.1:18080 INIT_DB_ON_BOOT=true cargo run --bin server
-VITE_API_TARGET=http://127.0.0.1:18080 pnpm --dir apps/web preview --port 4173 --strictPort
-PLAYWRIGHT_BASE_URL=http://127.0.0.1:4173 pnpm --dir apps/web test:e2e
+source scripts/local-db-env.sh
+just test-e2e-local
 ```
 
-这样复现的目标是：
+这个入口会：
 
-- 不依赖 dev server 的额外行为
-- 尽量贴近 GitHub Actions 里的 `frontend-smoke` job
-- 在 push 前发现代理、登录、预览页和主链路问题
+- 从 `TEST_DATABASE_URL` 派生临时 schema
+- 启动只服务本次测试的后端进程
+- 启动只服务本次测试的 Vite 前端进程
+- 运行 Playwright 后清理进程和临时 schema
+- 尽量贴近 GitHub Actions 里的 `frontend-smoke` job，同时避免污染长期 runtime DB
+
+只有在调试一个已经手动启动的页面时，才显式允许共享服务：
+
+```bash
+E2E_ALLOW_SHARED_SERVER=1 PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 pnpm --dir apps/web test:e2e
+```
+
+这条命令可能写入目标服务背后的数据库，不作为提交前标准检查。
 
 ## 11. 推荐的提交前最小检查
 
@@ -289,7 +296,7 @@ PLAYWRIGHT_BASE_URL=http://127.0.0.1:4173 pnpm --dir apps/web test:e2e
 pnpm --dir apps/web typecheck
 pnpm --dir apps/web build
 pnpm --dir apps/web run format:check
-pnpm --dir apps/web run test:e2e
+just test-e2e-local
 ```
 
 如果是联调相关修改，再额外做：

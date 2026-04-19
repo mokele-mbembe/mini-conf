@@ -154,13 +154,13 @@ MVP 默认采用 `DeploymentInstance` 作为配置组织模型，因为它最贴
 当前约定：
 
 - 所有 Linux 协作者至少满足 `Core` 工作流：`just lint`、`just test`、`just openapi-check`
-- MVP 发布前采用 `single-maintainer main-first`：单人开发默认直接在 `main` 上迭代，push 前至少跑 `just ci-local`，数据库主路径额外跑 `just ci-local-db`
+- MVP 发布前采用 `single-maintainer main-first`：单人开发默认直接在 `main` 上迭代，push 前至少跑 `just ci-local`，数据库或前端主链路改动优先跑 `just ci-local-full`
 - 承担数据库主路径开发与 PR 级 PostgreSQL 集成测试的环境满足 `Isolated DB` 工作流：`just db-migrate-up`、`just test-backend-db`
 - 共享黑盒环境与生产部署额外属于 `Blackbox / Staging` 和 `Production` 工作流，不复用开发机脚本
 - `~/.config/mini-conf/dev-env.sh` 是唯一推荐的本机环境入口
 - 默认采用 `database-per-instance`，数据库名由部署者按场景自定义；允许同一 PostgreSQL server 承载多套独立 database
 - `secret-tool` 只是兼容选项，不是标准前提
-- 本机 CI 入口分层为：`just ci-local` 负责非 DB 基线，`just ci-local-db` 对齐 GitHub `backend-db` 并在缺少运行库配置时复用 local test DB，`just ci-local-full` 串联两层
+- 本机 CI 入口分层为：`just ci-local` 负责非 DB 基线，`just ci-local-db` 对齐 GitHub `backend-db`，`just test-e2e-local` 以临时 schema 启动隔离前后端，`just ci-local-full` 串联三层
 - 当前后端开发阶段，本机优先恢复 `just test-backend-db-local`；`just run-server-local` 只在确实需要联调时启用
 
 ## 本机联调启动
@@ -212,6 +212,8 @@ just db-list-alpha-runtime-local
 just db-clean-alpha-runtime-local
 ```
 
+这组 runtime 清理命令只用于历史污染恢复。正常自动化测试不应再写入联调 runtime 库。
+
 ## 测试约定
 
 数据库集成测试统一使用 [`infra::testing`](./crates/infra/src/testing.rs) 提供的 helper。
@@ -224,6 +226,8 @@ just db-clean-alpha-runtime-local
 - 当前 Rust 后端集成测试主要通过 in-process router `oneshot(...)` 执行，不依赖 `HTTP_ADDR` 或固定 `8080`
 - 需要隔离 schema 时，使用 `unique_schema_name(...)`
 - 需要按 schema 建连接时，使用 `with_search_path(...)`
+- Alpha HTTP 与 Web E2E 都只允许使用 `TEST_DATABASE_URL` 派生临时 schema；`just test-e2e-local` 会自动启动隔离后端、隔离 Vite 和 Playwright
+- 裸 `pnpm --dir apps/web test:e2e` 默认拒绝连接共享服务；如需手动打已有服务，必须显式设置 `E2E_ALLOW_SHARED_SERVER=1 PLAYWRIGHT_BASE_URL=...`
 
 这样可以把多环境差异收口到一处，避免新增测试时遗漏空值回退或 search path 逻辑
 

@@ -31,6 +31,7 @@ just alpha-full-local
 当前实现约定：
 
 - 默认端口使用 `127.0.0.1:18080`
-- `DATABASE_URL` 是必需项
-- `alpha-*-local` 会在本机没有 runtime DSN 时，临时复用 `TEST_DATABASE_URL`
+- `DATABASE_URL` 是必需项，且只作为 alpha 测试 base DB
+- `alpha-*-local` 强制从 `TEST_DATABASE_URL` 派生临时 schema，不写入联调 runtime 库
+- suite 结束后会 `DROP SCHEMA ... CASCADE`；异常中断后的残留 schema 用 `just db-clean-test-schemas-local` 清理
 - 所有请求统一通过 `{{base_url}}` 变量构造，避免写死 `8080`

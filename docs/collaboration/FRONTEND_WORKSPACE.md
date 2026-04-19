@@ -55,13 +55,13 @@
 - `pnpm --dir apps/web build`
 - `pnpm --dir apps/web lint`
 - `pnpm --dir apps/web typecheck`
-- `pnpm --dir apps/web test:e2e`
+- `just test-e2e-local`
 
 根级脚本和 `justfile` 仍然是团队推荐入口：
 
 - `just dev-web`
 - `just lint`
-- `just test-e2e`
+- `just test-e2e-local`
 
 ## 5. 本地启动顺序
 

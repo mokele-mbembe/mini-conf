@@ -56,13 +56,14 @@
 - `just db-migrate-up`
 - `just test-backend-db`
 - `just ci-local-db` 或等价组合
-  当前本机 wrapper 允许在缺少运行库配置时复用 local test DB 来完成这条 CI 路径
+- `just test-e2e-local`，用于需要浏览器和真实 HTTP 服务的前端 smoke
 
 约束：
 
 - 使用显式 `DATABASE_URL` 和 `TEST_DATABASE_URL`
 - `TEST_DATABASE_URL` 不能由 `DATABASE_URL` 隐式派生
 - 数据库集成测试必须使用隔离 schema
+- Web E2E 必须从 `TEST_DATABASE_URL` 派生临时 schema，并由脚本自动启动临时后端和前端
 
 ### 3.3 Local Preview / UI Dev
 
@@ -197,6 +198,7 @@
 - `just dev-db-prepare-local`
 - `just run-server-local`
 - `just ci-local-db`
+- `just test-e2e-local`
 - `just ci-local-full`
 
 兼容别名：
@@ -216,6 +218,7 @@
 - 页面联调库通过 `MINI_CONF_LOCAL_DB_*` 单独维护
 - 先执行 `just dev-db-prepare-local` 准备 runtime DB 和 demo 数据
 - 再分别运行 `just run-server-local` 与 `just dev-web`
+- 页面生命周期或联调相关改动提交前执行 `just test-e2e-local`，不要直接把 E2E 打到长期 runtime DB
 
 如果当前仍只做后端数据库主路径，本机最小适配优先恢复：
 
@@ -280,6 +283,10 @@
 6. `just test-backend-db` 或 `just test-backend-db-local`
 7. 优先使用 `just ci-local-db`，或直接跑 `just ci-local-full`
 
+涉及前端页面生命周期、登录、代理、真实 HTTP 或管理端主链路时，额外执行：
+
+8. `just test-e2e-local`；如果同时涉及数据库主路径，直接执行 `just ci-local-full`
+
 说明：
 
 - `just openapi-check` 失败通常表示接口定义已变化，但 `docs/artifacts/openapi.json` 没有同步提交
@@ -293,7 +300,7 @@
 1. 日常开发直接在 `main` 上进行
 2. 每次提交尽量只覆盖一个主题，避免把 schema、接口、前端脚手架和文档大杂烩塞进同一提交
 3. 非 DB 改动 push 前至少执行 `just ci-local`
-4. 涉及迁移、SQL、权限、发布链路或运行库初始化时，额外执行 `just ci-local-db`；需要时直接执行 `just ci-local-full`
+4. 涉及迁移、SQL、权限、发布链路、运行库初始化或前端主链路时，额外执行 `just ci-local-db` / `just test-e2e-local`；需要时直接执行 `just ci-local-full`
 5. push 后以 GitHub Actions 结果为最终兜底；若 CI 失败，优先立即修复，不在 `main` 上继续叠加新主题
 6. 临时分支只用于隔离高风险实验或修复 CI；回收时优先 `git merge --ff-only`
 

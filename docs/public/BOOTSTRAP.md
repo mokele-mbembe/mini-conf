@@ -170,6 +170,7 @@ OPENAPI_EXPORT_PATH=docs/artifacts/openapi.json
 - `just dev-seed-demo-local`
 - `just dev-db-prepare-local`
 - `just test-e2e`
+- `just test-e2e-local`
 - `just ci-local`
 - `just ci-local-db`
 - `just ci-local-full`
@@ -183,7 +184,7 @@ OPENAPI_EXPORT_PATH=docs/artifacts/openapi.json
 - `Isolated DB` 工作流：`just db-migrate-up`、`just db-migrate-down`、`just test-backend-db`
 - `Local Preview / UI Dev` 工作流：`just db-migrate-up-local`、`just dev-seed-demo-local`、`just dev-db-prepare-local`、`just run-server-local`、`just dev-web`
 - 本机 local wrapper：`just run-server-local`、`just db-migrate-up-local`、`just db-migrate-down-local`、`just test-backend-db-local`
-- 本机 CI 分层：`just ci-local` 不要求数据库；`just ci-local-db` 复用 local wrapper 对齐 GitHub `backend-db`，并在缺少运行库配置时回退到 local test DB；`just ci-local-full` 串联两层
+- 本机 CI 分层：`just ci-local` 不要求数据库；`just ci-local-db` 复用 local wrapper 对齐 GitHub `backend-db`；`just test-e2e-local` 使用 `TEST_DATABASE_URL` 下的临时 schema 启动隔离前后端；`just ci-local-full` 串联三层
 
 统一规范见 [docs/agents/STANDARD_WORKFLOW.md](../agents/STANDARD_WORKFLOW.md)。
 
@@ -239,7 +240,9 @@ OPENAPI_EXPORT_PATH=docs/artifacts/openapi.json
 - `pnpm format:check`
 - `pnpm typecheck`
 - `pnpm test`
-- `pnpm test:e2e`
+- `just test-e2e-local`
+
+`pnpm test:e2e` 默认会拒绝连接隐式共享服务；只有调试已手动启动的页面时，才显式设置 `E2E_ALLOW_SHARED_SERVER=1 PLAYWRIGHT_BASE_URL=...`。
 
 ## 9. 首个里程碑
 

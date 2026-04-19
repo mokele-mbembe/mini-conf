@@ -80,15 +80,20 @@ test-frontend:
   else echo "Skipping frontend tests: package manifest not found"; fi
 
 test-e2e:
-  @if [ -f apps/web/package.json ]; then pnpm --dir apps/web test:e2e; \
+  @if [ -f scripts/e2e-web.sh ]; then bash scripts/e2e-web.sh; \
+  elif [ -f apps/web/package.json ]; then pnpm --dir apps/web test:e2e; \
   elif [ -f package.json ] || [ -f pnpm-workspace.yaml ]; then pnpm test:e2e; \
   else echo "Skipping e2e tests: package manifest not found"; fi
+
+test-e2e-local:
+  @if [ -f scripts/e2e-web.sh ]; then source scripts/local-db-env.sh && just test-e2e; \
+  else echo "Skipping e2e tests: scripts/e2e-web.sh not found"; fi
 
 alpha-smoke:
   @if [ ! -f Cargo.toml ]; then \
     echo "Skipping alpha smoke: Cargo.toml not found"; \
   elif [ -z "${DATABASE_URL:-}" ]; then \
-    echo "DATABASE_URL is required; use just alpha-smoke-local for current developer-local test DB reuse" >&2; \
+    echo "DATABASE_URL is required; use just alpha-smoke-local for local isolated test schema setup" >&2; \
     exit 1; \
   else \
     bash scripts/alpha-http.sh smoke; \
@@ -98,7 +103,7 @@ alpha-full:
   @if [ ! -f Cargo.toml ]; then \
     echo "Skipping alpha full: Cargo.toml not found"; \
   elif [ -z "${DATABASE_URL:-}" ]; then \
-    echo "DATABASE_URL is required; use just alpha-full-local for current developer-local test DB reuse" >&2; \
+    echo "DATABASE_URL is required; use just alpha-full-local for local isolated test schema setup" >&2; \
     exit 1; \
   else \
     bash scripts/alpha-http.sh full; \
@@ -258,6 +263,7 @@ ci-local-db:
 ci-local-full:
   @just ci-local
   @just ci-local-db
+  @just test-e2e-local
 
 run-server:
   @if [ -f Cargo.toml ]; then cargo run --bin server; else echo "Skipping run-server: Cargo workspace not initialized"; fi
