@@ -866,3 +866,102 @@ async fn delete_draft_returns_not_found_when_missing() -> TestResult {
 
     teardown(&database_url, &schema, pool).await
 }
+
+#[tokio::test]
+async fn saving_draft_generates_saved_version() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+    let (_, config_file_id, deployment_id) = seed_project_config_deployment(&pool).await?;
+
+    let cookie = login(&app).await?;
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/api/drafts/{deployment_id}/{config_file_id}"))
+                .header(header::COOKIE, &cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"content":"log_level: debug\n","format":"yaml"}"#,
+                ))?,
+        )
+        .await?;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*) FROM draft_saved_versions
+        WHERE deployment_instance_id = $1
+          AND config_file_id = $2
+          AND deleted_at IS NULL
+        "#,
+    )
+    .bind(deployment_id)
+    .bind(config_file_id)
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(
+        count, 1,
+        "saving a draft should auto-generate a saved version"
+    );
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn deleting_draft_does_not_delete_saved_versions() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+    let (_, config_file_id, deployment_id) = seed_project_config_deployment(&pool).await?;
+
+    let cookie = login(&app).await?;
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/api/drafts/{deployment_id}/{config_file_id}"))
+                .header(header::COOKIE, &cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"content":"log_level: warn\n","format":"yaml"}"#,
+                ))?,
+        )
+        .await?;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/api/drafts/{deployment_id}/{config_file_id}"))
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+    let count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*) FROM draft_saved_versions
+        WHERE deployment_instance_id = $1
+          AND config_file_id = $2
+          AND deleted_at IS NULL
+        "#,
+    )
+    .bind(deployment_id)
+    .bind(config_file_id)
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(
+        count, 1,
+        "deleting current draft should not remove saved versions"
+    );
+
+    teardown(&database_url, &schema, pool).await
+}

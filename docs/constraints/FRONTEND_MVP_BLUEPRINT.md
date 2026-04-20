@@ -277,16 +277,24 @@
 
 页面目标：
 
-- 编辑某个实例下单个配置文件的当前 Draft
+- 以“配置工作台”形式管理某个实例下单个配置文件的 Current Draft
+- 让历史 Saved Versions 和 Releases 成为可恢复的只读来源，而不是并列可编辑 Draft
 
 依赖接口：
 
 - `GET /api/drafts/:deploymentId/:configFileId`
 - `PUT /api/drafts/:deploymentId/:configFileId`
+- `GET /api/draft-saved-versions?deployment_instance_id=&config_file_id=`
+- `GET /api/draft-saved-versions/:id`
+- `PATCH /api/draft-saved-versions/:id`
+- `POST /api/draft-saved-versions/:id/restore`
+- `DELETE /api/draft-saved-versions/:id`
+- 当前后端已提供 Saved Versions 初版接口，前端工作台尚未接入
 
 加载态 / 空状态 / 缺权限状态：
 
-- Draft 不存在时，前端进入“新建 Draft”态
+- Current Draft 不存在时，前端进入“新建 Draft”态
+- Saved Versions / Releases 面板为空时，显示空状态而不是隐藏整个历史区
 
 表单字段与校验：
 
@@ -296,16 +304,65 @@
 
 关键交互：
 
+- 编辑器严格只对应 Current Draft
 - 显示当前版本号
 - 保存时传递 `base_version`
 - 冲突时提示用户刷新
+- 页面层级建议采用：
+  - 左栏：配置文件导航
+  - 中栏：Current Draft 编辑区
+  - 右栏：Saved Versions / Releases 历史面板
 
 失败提示：
 
 - `draft_version_conflict`
 - `draft_validation_failed`
 
-## 11. 单配置 Clone 弹窗 / 流程
+与当前产品规则绑定的限制：
+
+- 同一实例同一配置文件只有一份 Current Draft
+- 历史记录不应继续命名为多个 Draft
+
+## 11. Saved Versions 历史面板
+
+页面目标：
+
+- 给用户提供从历史保存内容快速找回继续编辑的入口
+
+依赖接口：
+
+- 当前后端已提供：
+  - `GET /api/draft-saved-versions?deployment_instance_id=&config_file_id=`
+  - `GET /api/draft-saved-versions/:id`
+  - `POST /api/draft-saved-versions/:id/restore`
+  - `PATCH /api/draft-saved-versions/:id`
+  - `DELETE /api/draft-saved-versions/:id`
+- 当前仍未提供：
+  - `POST /api/draft-saved-versions`
+
+加载态 / 空状态 / 缺权限状态：
+
+- 无历史保存版本时显示空状态
+
+关键交互：
+
+- 每次保存 Current Draft 后生成一条 Saved Version
+- 自动生成基于时间的默认标题
+- 允许用户追加备注 `note`
+- Saved Version 只读，不直接编辑
+- 可执行：
+  - 查看
+  - 对比 Current Draft
+  - 恢复到 Current Draft
+  - 删除历史版本
+
+与当前产品规则绑定的限制：
+
+- Saved Versions 不是并行可编辑 Draft 分支
+- 发布时不能直接发布某条 Saved Version，必须先恢复到 Current Draft
+- 前端接入前，Saved Versions 的 viewer 可见性与后端权限收口结果需要再次确认
+
+## 12. 单配置 Clone 弹窗 / 流程
 
 页面目标：
 
@@ -339,7 +396,7 @@
 - 不提供后端批量 clone 接口
 - 单配置 clone 默认覆盖目标 Draft，并递增版本
 
-## 12. 整实例预览页
+## 13. 整实例预览页
 
 页面目标：
 
@@ -371,11 +428,12 @@
 - Draft 优先于 Release
 - 必选配置缺失必须显式展示，不允许静默忽略
 
-## 13. Release 历史页
+## 14. Release 历史页
 
 页面目标：
 
 - 浏览实例 / 配置文件的发布历史
+- 作为只读回看来源，不直接编辑
 
 依赖接口：
 
@@ -391,8 +449,16 @@
 - 支持按 `deployment_instance_id` / `config_file_id` 过滤
 - 进入详情后查看返回的 `content`、`revision`、`change_summary`
 - secret 配置按后端脱敏后的内容展示
+- 在显眼位置展示：
+  - `published_at`
+  - `published_by`
+  - `published_by_username`（若后端可提供）
+- 可执行：
+  - 查看
+  - 对比 Current Draft
+  - 恢复到 Current Draft
 
-## 14. Diff 对比页
+## 15. Diff 对比页
 
 页面目标：
 
@@ -408,11 +474,11 @@
 - 固定展示“当前 release 与上一版 release”的对比
 - secret 配置按后端脱敏后的内容展示
 
-## 15. 发布确认流程
+## 16. 发布确认流程
 
 页面目标：
 
-- 发布某个实例下的单个配置文件
+- 发布某个实例下单个配置文件的 Current Draft
 
 依赖接口：
 
@@ -422,6 +488,9 @@
 
 - 发布前建议先跳转预览页或内嵌预览摘要
 - 发布失败时直接透出业务错误码
+- 如果用户想发布历史 Saved Version 或历史 Release：
+  - 必须先恢复到 Current Draft
+  - 再发布 Current Draft
 
 失败提示：
 
@@ -434,7 +503,7 @@
 - Template 不允许发布
 - 任一必选配置缺失都会阻塞当前这次单配置发布
 
-## 16. 项目成员页
+## 17. 项目成员页
 
 页面目标：
 

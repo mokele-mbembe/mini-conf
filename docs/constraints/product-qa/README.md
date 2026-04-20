@@ -28,3 +28,5 @@
 - `0005-project-members-permissions-audit.md`
 - `0006-config-file-format-and-ux-alignment.md`
 - `0007-config-identity-and-heartbeats.md`
+- `0008-current-draft-saved-versions-and-release-workspace.md`
+- `0009-saved-versions-api-and-rollout.md`

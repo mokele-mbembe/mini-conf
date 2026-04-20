@@ -12,6 +12,30 @@
 
 ## 1.1 最近完成
 
+2026-04-20 本轮已完成 Saved Versions 后端初版落地，并补了对应的后端测试骨架：
+
+- 新增迁移 `0014_saved_versions`
+- 新增 `draft_saved_versions` 表，`content_hash` 使用 `VARCHAR(64)` 并带长度检查
+- Current Draft 保存链路现在会自动生成 Saved Version；与最近一条相同内容时不重复生成
+- 新增 `GET /api/draft-saved-versions`
+- 新增 `GET /api/draft-saved-versions/:id`
+- 新增 `PATCH /api/draft-saved-versions/:id`
+- 新增 `POST /api/draft-saved-versions/:id/restore`
+- 新增 `DELETE /api/draft-saved-versions/:id`
+- 已补 `crates/schema::saved_version`
+- 已补 `apps/server/tests/saved_versions.rs`
+- 已补 `apps/server/tests/drafts.rs` 的 Saved Version 回归断言
+
+本轮审查后确认：
+
+- `cargo test -p server --test saved_versions` 通过
+- `cargo test -p server --test drafts` 通过
+- 但当前实现仍有两处需要收口：
+  - Saved Versions 列表接口当前会把工作过程数据暴露给 `viewer`
+  - `saved_version.updated` 审计 detail 中的 `deployment_instance_id` 字段写错了值
+
+因此当前状态应视为“后端初版已落地，但仍未完全收口”，前端工作台接入前需要先修这两处问题。
+
 2026-04-20 本轮已完成部署实例页前端加载优化与缓存/竞态收口：
 
 - 路由页面已改为懒加载，降低管理台主包首屏压力

@@ -18,16 +18,23 @@
 1. [`docs/collaboration/FRONTEND_TASK_WORKFLOW.md`](./FRONTEND_TASK_WORKFLOW.md)
 2. [`docs/collaboration/FRONTEND_HANDOFF.md`](./FRONTEND_HANDOFF.md)
 3. [`docs/collaboration/FRONTEND_IMPLEMENTATION_PLAN.md`](./FRONTEND_IMPLEMENTATION_PLAN.md)
-4. [`docs/collaboration/FRONTEND_WORKSPACE.md`](./FRONTEND_WORKSPACE.md)
-5. [`docs/collaboration/FRONTEND_PAGE_TESTING.md`](./FRONTEND_PAGE_TESTING.md)
-6. [`docs/constraints/FRONTEND_MVP_BLUEPRINT.md`](../constraints/FRONTEND_MVP_BLUEPRINT.md)
-7. [`docs/constraints/product-qa/README.md`](../constraints/product-qa/README.md)
-8. [`docs/constraints/ADMIN_API.md`](../constraints/ADMIN_API.md)
-9. [`docs/artifacts/openapi.json`](../artifacts/openapi.json)
-10. [`docs/constraints/AUTH_AND_SECURITY.md`](../constraints/AUTH_AND_SECURITY.md)
-11. [`docs/public/CLIENT_HTTP_PROTOCOL.md`](../public/CLIENT_HTTP_PROTOCOL.md)
-12. [`docs/constraints/product-qa/0007-config-identity-and-heartbeats.md`](../constraints/product-qa/0007-config-identity-and-heartbeats.md)
-13. [`docs/constraints/DEMO_SCENARIO_COFFEE_MIDDLEWARE.md`](../constraints/DEMO_SCENARIO_COFFEE_MIDDLEWARE.md)
+4. [`docs/collaboration/FRONTEND_CONFIG_WORKSPACE_PLAN.md`](./FRONTEND_CONFIG_WORKSPACE_PLAN.md)
+5. [`docs/collaboration/FRONTEND_WORKSPACE.md`](./FRONTEND_WORKSPACE.md)
+6. [`docs/collaboration/FRONTEND_PAGE_TESTING.md`](./FRONTEND_PAGE_TESTING.md)
+7. [`docs/constraints/FRONTEND_MVP_BLUEPRINT.md`](../constraints/FRONTEND_MVP_BLUEPRINT.md)
+8. [`docs/constraints/product-qa/README.md`](../constraints/product-qa/README.md)
+9. [`docs/constraints/product-qa/0008-current-draft-saved-versions-and-release-workspace.md`](../constraints/product-qa/0008-current-draft-saved-versions-and-release-workspace.md)
+10. [`docs/constraints/product-qa/0009-saved-versions-api-and-rollout.md`](../constraints/product-qa/0009-saved-versions-api-and-rollout.md)
+11. [`docs/constraints/ADMIN_API.md`](../constraints/ADMIN_API.md)
+12. [`docs/artifacts/openapi.json`](../artifacts/openapi.json)
+13. [`docs/constraints/AUTH_AND_SECURITY.md`](../constraints/AUTH_AND_SECURITY.md)
+14. [`docs/public/CLIENT_HTTP_PROTOCOL.md`](../public/CLIENT_HTTP_PROTOCOL.md)
+15. [`docs/constraints/product-qa/0007-config-identity-and-heartbeats.md`](../constraints/product-qa/0007-config-identity-and-heartbeats.md)
+16. [`docs/constraints/DEMO_SCENARIO_COFFEE_MIDDLEWARE.md`](../constraints/DEMO_SCENARIO_COFFEE_MIDDLEWARE.md)
+
+后端实施 Saved Versions 时，建议同时参考：
+
+- [`docs/collaboration/BACKEND_SAVED_VERSIONS_CHECKLIST.md`](./BACKEND_SAVED_VERSIONS_CHECKLIST.md)
 
 推荐真值优先级：
 
@@ -87,6 +94,7 @@
 
 - 用户管理后台
 - 多候选 Draft
+- Saved Versions 历史保存版本
 - 整实例一键发布
 - 动态 Scope / labels
 - 审批流
@@ -99,9 +107,11 @@
 - `ConfigFile` 是项目级配置文件定义，例如 `main`、`vision`。
 - `DeploymentInstance` 是项目在某个环境下的一份独立部署实例。
 - `Template` 不是单独模型，而是 `DeploymentInstance.is_template = true` 的特殊实例。
-- 同一个实例下有多份配置文件，每份配置文件各自拥有自己的 Draft / Release 历史。
+- 同一个实例下有多份配置文件，每份配置文件各自拥有自己的 Current Draft / Release 历史。
 - `publish` 不是整实例发布，而是“某实例下某配置文件发布”。
-- 同一个 `deployment_instance + config_file` 只有一份当前 Draft。
+- 同一个 `deployment_instance + config_file` 只有一份 Current Draft。
+- 长期推荐模型是 `Current Draft + Saved Versions + Releases`，而不是多个并列可编辑 Draft。
+- `Saved Versions` 和 `Releases` 都是只读来源；需要继续编辑或发布时，先恢复到 Current Draft。
 - 消费端 token 是部署实例级共享凭证，不是进程级凭证。
 - 部署实例只使用 `active / inactive`。创建和 clone 默认 `inactive`，激活后才允许 Open API 消费。
 - 客户端配置标识统一为 `ConfigFile.code`。前端不要再引入 `process_key`，同步记录和心跳筛选使用 `config_file_id`。
@@ -186,18 +196,27 @@
 - token reset 仅 active 普通实例可用，成功后旧 token 立即失效
 - 列表响应是分页形状：`items / total / page / page_size`
 
-### 5.6 Draft 编辑
+### 5.6 Current Draft / 配置工作台
 
 - `GET /api/drafts/:deploymentId/:configFileId`
 - `PUT /api/drafts/:deploymentId/:configFileId`
 - `POST /api/drafts/:targetDeploymentId/:configFileId/clone`
+- `GET /api/draft-saved-versions?deployment_instance_id=&config_file_id=`
+- `GET /api/draft-saved-versions/:id`
+- `PATCH /api/draft-saved-versions/:id`
+- `POST /api/draft-saved-versions/:id/restore`
+- `DELETE /api/draft-saved-versions/:id`
 
 前端规则：
 
-- Draft 不存在时进入“新建 Draft”态
+- 当前后端已提供的是唯一 `Current Draft`
+- Current Draft 不存在时进入“新建 Draft”态
 - 保存时必须带 `base_version`
 - 冲突错误码是 `draft_version_conflict`
-- 单配置 clone 默认覆盖目标 Draft，并递增版本
+- 单配置 clone 默认覆盖 Current Draft，并递增版本
+- 长期入口建议命名为“配置工作台”，不要只暴露“编辑 Draft”
+- 后端已提供 Saved Versions 初版接口，但前端尚未接入工作台历史面板
+- Saved Versions 当前目标权限仍以 `admin / editor` 可见为准；前端接入前应以后端最终收口结果为准
 
 ### 5.7 发布历史 / Diff / 发布确认
 
@@ -209,6 +228,8 @@
 前端规则：
 
 - `publish` 是单配置发布
+- 发布对象始终是 Current Draft
+- 如果要发布历史 Saved Version 或历史 Release，先恢复到 Current Draft 再发布
 - `diff` 固定和上一版比较，不支持任意两版自由比较
 - secret 配置在管理端 `release detail / diff` 中会返回脱敏内容
 - 发布前如果必选配置缺失，会阻塞当前这次单配置发布
@@ -232,7 +253,9 @@
 - `Template` 不是单独资源类型，而是实例的一个状态。
 - 模板不能发布，只能 clone。
 - `publish` 是单配置发布，不是整实例发布。
-- 同一实例同一配置文件只有一份当前 Draft，不支持多候选稿。
+- 同一实例同一配置文件只有一份 Current Draft，不支持多候选稿。
+- 推荐历史模型是 `Current Draft + Saved Versions + Releases`，不是多个并列可编辑 Draft。
+- `Saved Versions` 和 `Releases` 只能恢复到 Current Draft，不能直接编辑。
 - `Draft > latest_release` 是 preview-bundle 的固定优先级。
 - `is_required` 的含义是“发布门槛”，不是“实例创建时立刻必填”。
 - `required` 配置满足条件是“有 Draft 或有历史 Release”，不是必须两者都有。
@@ -309,6 +332,8 @@
 6. secret 内容是否要在前端加二次复制确认或额外遮罩。
 7. 心跳页面是否需要前端自行定义“离线阈值”。
 8. 审计页是否只给 `admin`，以及是否需要事件类型筛选器。
+9. 配置工作台首版是否直接采用三栏布局：配置导航 / Current Draft / 历史面板。
+10. Saved Versions 备注交互是“保存时轻量输入”还是“保存后补备注”。
 
 ## 11. 建议的前端第一阶段实现顺序
 
@@ -318,12 +343,13 @@
 2. 部署实例列表 / 详情
 3. 部署实例激活 / 停用 / token reset
 4. 模板 clone 创建实例
-5. Draft 编辑
+5. 配置工作台（Current Draft）
 6. 发布确认 + Release 历史 + Diff
 7. preview-bundle
-8. 项目成员
-9. sync records / heartbeats
-10. audit logs
+8. Saved Versions 历史面板
+9. 项目成员
+10. sync records / heartbeats
+11. audit logs
 
 原因：
 

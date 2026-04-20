@@ -388,6 +388,73 @@ pub(crate) async fn put_draft(
         },
     )
     .await?;
+
+    let new_hash = hash_content(&payload.content);
+    let latest_hash: Option<String> = sqlx::query_scalar(
+        r#"
+        SELECT content_hash
+        FROM draft_saved_versions
+        WHERE deployment_instance_id = $1
+          AND config_file_id = $2
+          AND deleted_at IS NULL
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(deployment_id)
+    .bind(config_file_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| ApiError::internal())?;
+
+    if latest_hash.as_deref() != Some(&new_hash) {
+        let sv_id: i64 = sqlx::query_scalar(
+            r#"
+            INSERT INTO draft_saved_versions (
+                project_id,
+                deployment_instance_id,
+                config_file_id,
+                title,
+                content,
+                content_hash,
+                format,
+                source_draft_version,
+                created_by
+            )
+            VALUES ($1, $2, $3, to_char(NOW() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI'), $4, $5, $6, $7, $8)
+            RETURNING id
+            "#,
+        )
+        .bind(context.project_id)
+        .bind(deployment_id)
+        .bind(config_file_id)
+        .bind(&payload.content)
+        .bind(&new_hash)
+        .bind(&payload.format)
+        .bind(summary.version)
+        .bind(auth.user_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|_| ApiError::internal())?;
+
+        write_audit_log(
+            &mut *tx,
+            AuditLogEntry {
+                project_id: Some(context.project_id),
+                user_id: Some(auth.user_id),
+                action: "saved_version.created",
+                resource_type: "saved_version",
+                resource_id: sv_id.to_string(),
+                detail: Some(serde_json::json!({
+                    "deployment_instance_id": deployment_id,
+                    "config_file_id": config_file_id,
+                    "source_draft_version": summary.version,
+                })),
+            },
+        )
+        .await?;
+    }
+
     tx.commit().await.map_err(|_| ApiError::internal())?;
 
     Ok(Json(summary))

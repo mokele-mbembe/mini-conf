@@ -1645,6 +1645,438 @@
         ]
       }
     },
+    "/api/draft-saved-versions": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "list_saved_versions",
+        "parameters": [
+          {
+            "name": "deployment_instance_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "config_file_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List saved versions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedVersionListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or expired admin session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database bootstrap disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_auth": []
+          }
+        ]
+      }
+    },
+    "/api/draft-saved-versions/{id}": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "get_saved_version",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Saved version ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Saved version detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedVersionDetailResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or expired admin session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Saved version not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database bootstrap disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_auth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "delete_saved_version",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Saved version ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Saved version deleted"
+          },
+          "401": {
+            "description": "Missing or expired admin session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Saved version not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database bootstrap disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_auth": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "update_saved_version",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Saved version ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSavedVersionRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Saved version updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedVersionDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or expired admin session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Saved version not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Note too long",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database bootstrap disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_auth": []
+          }
+        ]
+      }
+    },
+    "/api/draft-saved-versions/{id}/restore": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "restore_saved_version",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Saved version ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreSavedVersionRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Current Draft restored from saved version",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedVersionRestoreResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or expired admin session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Saved version not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Draft version conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database bootstrap disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_auth": []
+          }
+        ]
+      }
+    },
     "/api/drafts/{deployment_id}/{config_file_id}": {
       "get": {
         "tags": [
@@ -5457,6 +5889,25 @@
           }
         }
       },
+      "ListSavedVersionsParams": {
+        "type": "object",
+        "properties": {
+          "config_file_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "deployment_instance_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          }
+        }
+      },
       "LoginRequestBody": {
         "type": "object",
         "required": [
@@ -6027,6 +6478,180 @@
           }
         }
       },
+      "RestoreSavedVersionRequestBody": {
+        "type": "object",
+        "properties": {
+          "base_version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "SavedVersionDetail": {
+        "type": "object",
+        "required": [
+          "id",
+          "project_id",
+          "deployment_instance_id",
+          "config_file_id",
+          "title",
+          "content",
+          "content_hash",
+          "format",
+          "source_draft_version",
+          "created_by",
+          "created_by_username",
+          "created_at"
+        ],
+        "properties": {
+          "config_file_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "content": {
+            "type": "string"
+          },
+          "content_hash": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "created_by": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "created_by_username": {
+            "type": "string"
+          },
+          "deployment_instance_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "format": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "project_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "source_draft_version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "SavedVersionDetailResponse": {
+        "type": "object",
+        "required": [
+          "saved_version"
+        ],
+        "properties": {
+          "saved_version": {
+            "$ref": "#/components/schemas/SavedVersionDetail"
+          }
+        }
+      },
+      "SavedVersionListResponse": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SavedVersionSummary"
+            }
+          }
+        }
+      },
+      "SavedVersionRestoreResponse": {
+        "type": "object",
+        "required": [
+          "draft"
+        ],
+        "properties": {
+          "draft": {
+            "$ref": "#/components/schemas/DraftResponse"
+          }
+        }
+      },
+      "SavedVersionSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "project_id",
+          "deployment_instance_id",
+          "config_file_id",
+          "title",
+          "format",
+          "source_draft_version",
+          "created_by",
+          "created_by_username",
+          "created_at"
+        ],
+        "properties": {
+          "config_file_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "created_by": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "created_by_username": {
+            "type": "string"
+          },
+          "deployment_instance_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "format": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "project_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "source_draft_version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
       "UpdateConfigFileRequestBody": {
         "type": "object",
         "required": [
@@ -6198,6 +6823,17 @@
           },
           "status": {
             "type": "string"
+          }
+        }
+      },
+      "UpdateSavedVersionRequestBody": {
+        "type": "object",
+        "properties": {
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       }

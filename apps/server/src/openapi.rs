@@ -23,6 +23,10 @@ use schema::{
         ReleaseDetailResponse, ReleaseDiffResponse, ReleaseDiffSummary, ReleaseListResponse,
         ReleaseSummary,
     },
+    saved_version::{
+        SavedVersionDetail, SavedVersionDetailResponse, SavedVersionListResponse,
+        SavedVersionRestoreResponse, SavedVersionSummary,
+    },
 };
 use std::{fs, path::Path, sync::OnceLock};
 use utoipa::{
@@ -85,6 +89,11 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
         crate::http::api::releases::publish_release,
         crate::http::api::releases::get_release_detail,
         crate::http::api::releases::get_release_diff,
+        crate::http::api::saved_versions::list_saved_versions,
+        crate::http::api::saved_versions::get_saved_version,
+        crate::http::api::saved_versions::update_saved_version,
+        crate::http::api::saved_versions::restore_saved_version,
+        crate::http::api::saved_versions::delete_saved_version,
         crate::http::api::open::configs::resolve_config,
         crate::http::api::open::releases::get_release,
         crate::http::api::open::deployments::get_config_bundle,
@@ -126,6 +135,11 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
             ReleaseListResponse,
             ReleaseDetailResponse,
             ReleaseDiffResponse,
+            SavedVersionSummary,
+            SavedVersionListResponse,
+            SavedVersionDetail,
+            SavedVersionDetailResponse,
+            SavedVersionRestoreResponse,
             LoginRequestBody,
             CreateConfigFileRequestBody,
             CreateDeploymentInstanceRequestBody,
@@ -148,6 +162,9 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
             ListDeploymentInstancesParams,
             ListProjectsParams,
             ListReleasesParams,
+            ListSavedVersionsParams,
+            UpdateSavedVersionRequestBody,
+            RestoreSavedVersionRequestBody,
             ResolveConfigParams,
             ConfigBundleParams,
             DeploymentSyncRecordRequestBody,
@@ -365,6 +382,23 @@ pub struct ListReleasesParams {
 
 #[derive(Debug, IntoParams, ToSchema)]
 #[into_params(parameter_in = Query)]
+pub struct ListSavedVersionsParams {
+    pub deployment_instance_id: Option<i64>,
+    pub config_file_id: Option<i64>,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
+pub struct UpdateSavedVersionRequestBody {
+    pub note: Option<String>,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
+pub struct RestoreSavedVersionRequestBody {
+    pub base_version: Option<i64>,
+}
+
+#[derive(Debug, IntoParams, ToSchema)]
+#[into_params(parameter_in = Query)]
 pub struct ListAuditLogsParams {
     pub project_id: Option<i64>,
     pub user_id: Option<i64>,
@@ -486,6 +520,9 @@ mod tests {
         assert!(paths.contains_key("/api/open/releases/{revision}"));
         assert!(paths.contains_key("/api/open/deployments/{deployment_key}/config-bundle"));
         assert!(paths.contains_key("/api/open/deployment-sync-records"));
+        assert!(paths.contains_key("/api/draft-saved-versions"));
+        assert!(paths.contains_key("/api/draft-saved-versions/{id}"));
+        assert!(paths.contains_key("/api/draft-saved-versions/{id}/restore"));
         assert!(paths.contains_key("/api/open/heartbeats"));
 
         let components = openapi.components.expect("components should exist");

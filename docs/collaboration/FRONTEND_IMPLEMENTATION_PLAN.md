@@ -156,17 +156,17 @@
 ### 4.2 Draft 与发布
 
 - `admin`
-  - 可编辑 Draft
+  - 可编辑 Current Draft
   - 可单配置 clone
   - 可预览 preview-bundle
   - 可发布
 - `editor`
-  - 可编辑 Draft
+  - 可编辑 Current Draft
   - 可单配置 clone
   - 可预览 preview-bundle
   - 可发布
 - `viewer`
-  - 不显示 Draft 编辑入口
+  - 不显示 Current Draft 编辑入口
   - 不显示 clone 入口
   - 不显示 preview 入口
   - 不显示发布入口
@@ -301,7 +301,7 @@
 
 交付物：
 
-- Draft 编辑页
+- 配置工作台（Current Draft）
 - 单配置 clone
 - preview-bundle
 - 发布确认
@@ -335,6 +335,7 @@
 - `useConfigFiles`
 - `useDeploymentInstances`
 - `useDraftEditor`
+- `useSavedVersions`
 - `useReleases`
 - `useOperationsFilters`
 
@@ -347,6 +348,7 @@
 ## 8. 对前端最容易踩坑的点
 
 - 不要把“发布”理解成整实例发布。
+- 不要把历史 Saved Version 直接当成可编辑 Draft；编辑器只对应 Current Draft。
 - 不要自己拼 preview 逻辑，直接信后端 `preview-bundle`。
 - 不要把 `404` 都当成真正不存在；在项目资源里它也可能表示“非成员不可见”。
 - 不要自己实现 secret 字段脱敏算法；直接显示后端返回内容。
@@ -357,9 +359,10 @@
 
 ## 9. 建议的首版验收清单
 
-- admin 能完整走通：登录、建项目、建配置、建实例、激活实例、编辑 Draft、发布、看历史、管理成员、停用和重置 token
-- editor 能完整走通：查看项目、编辑 Draft、预览、发布、看 sync records / heartbeats
+- admin 能完整走通：登录、建项目、建配置、建实例、激活实例、编辑 Current Draft、发布、看历史、管理成员、停用和重置 token
+- editor 能完整走通：查看项目、编辑 Current Draft、预览、发布、看 sync records / heartbeats
 - viewer 能完整走通：查看项目、看 release、看 sync records / heartbeats，但不能做写操作
 - secret 配置在 release 详情和 diff 页不会显示明文
 - 必选配置缺失时，发布页能给出明确阻塞提示
 - Draft 冲突时，编辑页能提示刷新而不是静默覆盖
+- 如果后续补 Saved Versions，用户能从历史保存版本恢复到 Current Draft 再继续发布

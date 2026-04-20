@@ -11,6 +11,7 @@ pub(crate) mod project_environments;
 pub(crate) mod project_members;
 pub(crate) mod projects;
 pub(crate) mod releases;
+pub(crate) mod saved_versions;
 
 use axum::Router;
 
@@ -29,4 +30,5 @@ pub fn router() -> Router<crate::state::AppState> {
         .merge(project_environments::router())
         .merge(projects::router())
         .merge(releases::router())
+        .merge(saved_versions::router())
 }
