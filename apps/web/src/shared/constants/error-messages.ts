@@ -39,6 +39,8 @@ export const ERROR_MESSAGES: Record<string, string> = {
     "error.deployment_instance_template_publish_forbidden",
   release_publish_failed: "error.release_publish_failed",
   release_not_found: "error.release_not_found",
+  saved_version_not_found: "error.saved_version_not_found",
+  saved_version_note_too_long: "error.saved_version_note_too_long",
   network_error: "error.network_error",
   unknown_error: "error.unknown_error",
 };

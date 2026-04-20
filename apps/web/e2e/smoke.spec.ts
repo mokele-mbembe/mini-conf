@@ -157,3 +157,432 @@ test("deployment lifecycle path: environment → inactive deployment → activat
     "未启用",
   );
 });
+
+// ---------------------------------------------------------------------------
+// Saved Versions: full CRUD flow via the Draft Editor right panel
+// ---------------------------------------------------------------------------
+
+async function setupDraftEditorContext(
+  page: Page,
+  suffix: string,
+): Promise<{
+  projectId: number;
+  deploymentId: number;
+  configFileId: number;
+}> {
+  const projectId = await createProject(page, suffix);
+
+  const envResponse = await page.request.post(
+    `/api/projects/${projectId}/environments`,
+    {
+      data: {
+        code: `e2e-env-${suffix}`,
+        name: `E2E Env ${suffix}`,
+      },
+    },
+  );
+  expect(envResponse.ok()).toBeTruthy();
+  const env = (await envResponse.json()) as { id: number };
+
+  const cfResponse = await page.request.post("/api/config-files", {
+    data: {
+      project_id: projectId,
+      code: `e2e-cfg-${suffix}`,
+      name: `E2E Config ${suffix}`,
+      format: "yaml",
+    },
+  });
+  expect(cfResponse.ok()).toBeTruthy();
+  const configFile = (await cfResponse.json()) as { id: number };
+
+  const diResponse = await page.request.post("/api/deployment-instances", {
+    data: {
+      project_id: projectId,
+      environment_id: env.id,
+      deployment_key: `e2e-di-${suffix}`,
+      name: `E2E Deployment ${suffix}`,
+    },
+  });
+  expect(diResponse.ok()).toBeTruthy();
+  const deployment = (await diResponse.json()) as { id: number };
+
+  return {
+    projectId,
+    deploymentId: deployment.id,
+    configFileId: configFile.id,
+  };
+}
+
+test("saved versions: save → list → note → restore → delete", async ({
+  page,
+}) => {
+  const suffix = Date.now().toString();
+  await login(page);
+  const { projectId, deploymentId, configFileId } =
+    await setupDraftEditorContext(page, suffix);
+
+  // Navigate to draft editor
+  await page.goto(
+    `/projects/${projectId}/deployments/${deploymentId}/configs/${configFileId}/draft`,
+  );
+
+  const editor = page.locator(".draft-editor-page__editor textarea");
+  await expect(editor).toBeVisible({ timeout: 10_000 });
+
+  // Saved versions panel should be visible for admin, initially empty
+  const panel = page.locator(".draft-editor-page__history");
+  await expect(panel).toBeVisible();
+  await expect(panel).toContainText("暂无 Saved Version");
+
+  // ---- Save draft #1 -------------------------------------------------------
+  await editor.fill("key: value_1");
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+
+  // Wait for the success toast to confirm the save completed
+  await expect(page.locator(".el-message", { hasText: "已保存" })).toBeVisible({
+    timeout: 5_000,
+  });
+
+  // Panel should now contain 1 saved version item
+  const items = panel.locator(".draft-editor-page__history-item");
+  await expect(items).toHaveCount(1, { timeout: 5_000 });
+
+  // First item should be auto-selected; detail section should be visible
+  const detail = panel.locator(".draft-editor-page__history-detail");
+  await expect(detail.locator(".el-descriptions")).toBeVisible({
+    timeout: 5_000,
+  });
+
+  // ---- Update note ----------------------------------------------------------
+  // Wait for the previous toast to disappear to avoid strict-mode violations
+  await expect(page.locator(".el-message")).toHaveCount(0, { timeout: 6_000 });
+
+  const noteTextarea = panel.locator(
+    ".draft-editor-page__history-note textarea",
+  );
+  await noteTextarea.fill("E2E test note");
+  await panel.getByRole("button", { name: "保存备注" }).click();
+  await expect(
+    page.locator(".el-message", { hasText: "备注已更新" }),
+  ).toBeVisible({ timeout: 5_000 });
+
+  // ---- Save draft #2 -------------------------------------------------------
+  await expect(page.locator(".el-message")).toHaveCount(0, { timeout: 6_000 });
+
+  await editor.fill("key: value_2");
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(page.locator(".el-message", { hasText: "已保存" })).toBeVisible({
+    timeout: 5_000,
+  });
+  await expect(items).toHaveCount(2, { timeout: 5_000 });
+
+  // ---- Restore older saved version ------------------------------------------
+  // Wait for toasts to clear
+  await expect(page.locator(".el-message")).toHaveCount(0, { timeout: 6_000 });
+
+  // List is ordered newest-first, so the second item is the older one (value_1)
+  await items.nth(1).click();
+  await expect(detail.locator(".el-descriptions")).toBeVisible({
+    timeout: 5_000,
+  });
+
+  await panel.getByRole("button", { name: "恢复到 Current Draft" }).click();
+
+  // Restore confirmation dialog
+  const restoreDialog = page.locator(".el-message-box");
+  await expect(restoreDialog).toBeVisible();
+  await restoreDialog.getByRole("button", { name: "确认恢复" }).click();
+
+  // Editor content should revert to value_1
+  await expect(editor).toHaveValue("key: value_1", { timeout: 5_000 });
+
+  // Restore does NOT create a new saved version, count stays 2
+  await expect(items).toHaveCount(2, { timeout: 5_000 });
+
+  // ---- Delete a saved version -----------------------------------------------
+  // Wait for toasts to clear
+  await expect(page.locator(".el-message")).toHaveCount(0, { timeout: 6_000 });
+
+  // Select the first item (newest) and delete it
+  await items.first().click();
+  await expect(detail.locator(".el-descriptions")).toBeVisible({
+    timeout: 5_000,
+  });
+
+  await panel.getByRole("button", { name: "删除" }).click();
+
+  // Delete confirmation dialog
+  const deleteDialog = page.locator(".el-message-box");
+  await expect(deleteDialog).toBeVisible();
+  await deleteDialog.getByRole("button", { name: "确认删除" }).click();
+
+  await expect(page.locator(".el-message", { hasText: "已删除" })).toBeVisible({
+    timeout: 5_000,
+  });
+  await expect(items).toHaveCount(1, { timeout: 5_000 });
+});
+
+// ---------------------------------------------------------------------------
+// Clone from other instance: open dialog → search → select → clone draft
+// ---------------------------------------------------------------------------
+
+test("clone from other instance: search source → select → clone draft", async ({
+  page,
+}) => {
+  const suffix = Date.now().toString();
+  await login(page);
+
+  // --- seed: project + env + config file + 2 deployments ---
+  const projectId = await createProject(page, suffix);
+
+  const envResponse = await page.request.post(
+    `/api/projects/${projectId}/environments`,
+    { data: { code: `e2e-env-${suffix}`, name: `E2E Env ${suffix}` } },
+  );
+  expect(envResponse.ok()).toBeTruthy();
+  const env = (await envResponse.json()) as { id: number };
+
+  const cfResponse = await page.request.post("/api/config-files", {
+    data: {
+      project_id: projectId,
+      code: `e2e-cfg-${suffix}`,
+      name: `E2E Config ${suffix}`,
+      format: "yaml",
+    },
+  });
+  expect(cfResponse.ok()).toBeTruthy();
+  const configFile = (await cfResponse.json()) as { id: number };
+
+  // source deployment (will have a draft)
+  const srcResponse = await page.request.post("/api/deployment-instances", {
+    data: {
+      project_id: projectId,
+      environment_id: env.id,
+      deployment_key: `e2e-src-${suffix}`,
+      name: `Source ${suffix}`,
+    },
+  });
+  expect(srcResponse.ok()).toBeTruthy();
+  const srcDeployment = (await srcResponse.json()) as { id: number };
+
+  // target deployment (clone destination)
+  const tgtResponse = await page.request.post("/api/deployment-instances", {
+    data: {
+      project_id: projectId,
+      environment_id: env.id,
+      deployment_key: `e2e-tgt-${suffix}`,
+      name: `Target ${suffix}`,
+    },
+  });
+  expect(tgtResponse.ok()).toBeTruthy();
+  const tgtDeployment = (await tgtResponse.json()) as { id: number };
+
+  // seed a draft on the source instance
+  const draftContent = `greeting: hello-from-source-${suffix}`;
+  const putDraftResponse = await page.request.put(
+    `/api/drafts/${srcDeployment.id}/${configFile.id}`,
+    { data: { content: draftContent, format: "yaml", base_version: 0 } },
+  );
+  expect(putDraftResponse.ok()).toBeTruthy();
+
+  // --- navigate to target's draft editor ---
+  await page.goto(
+    `/projects/${projectId}/deployments/${tgtDeployment.id}/configs/${configFile.id}/draft`,
+  );
+  const editor = page.locator(".draft-editor-page__editor textarea");
+  await expect(editor).toBeVisible({ timeout: 10_000 });
+
+  // --- open clone dialog ---
+  await page.getByRole("button", { name: "从其他实例复制" }).click();
+  const dialog = page.getByRole("dialog", { name: "从其他实例复制配置" });
+  await expect(dialog).toBeVisible();
+
+  // --- click the select to open the dropdown ---
+  await dialog.locator(".el-select").click();
+
+  // The source instance should appear with "Draft ✓" badge
+  const sourceOption = page.locator(".el-select-dropdown__item", {
+    hasText: `e2e-src-${suffix}`,
+  });
+  await expect(sourceOption).toBeVisible({ timeout: 5_000 });
+  await expect(sourceOption).toContainText("Draft ✓");
+
+  // Select the source instance
+  await sourceOption.click();
+
+  // Draft radio should be enabled (selected by default)
+  const draftRadio = dialog.locator(".el-radio", { hasText: "Draft" });
+  await expect(draftRadio).toBeVisible();
+
+  // --- submit clone ---
+  await dialog.getByRole("button", { name: "复制到当前 Draft" }).click();
+
+  // Success toast
+  await expect(
+    page.locator(".el-message", { hasText: "已从其他实例复制" }),
+  ).toBeVisible({ timeout: 5_000 });
+
+  // Editor should now contain the source draft content
+  await expect(editor).toHaveValue(draftContent, { timeout: 5_000 });
+});
+
+// ---------------------------------------------------------------------------
+// Clone dialog: keyword search + load-more carries keyword (full UI flow)
+// ---------------------------------------------------------------------------
+
+test("clone dialog: remote search filters by keyword and pagination carries keyword", async ({
+  page,
+}) => {
+  const suffix = Date.now().toString();
+  await login(page);
+
+  const projectId = await createProject(page, suffix);
+
+  const envResponse = await page.request.post(
+    `/api/projects/${projectId}/environments`,
+    { data: { code: `e2e-env-${suffix}`, name: `E2E Env ${suffix}` } },
+  );
+  expect(envResponse.ok()).toBeTruthy();
+  const env = (await envResponse.json()) as { id: number };
+
+  const cfResponse = await page.request.post("/api/config-files", {
+    data: {
+      project_id: projectId,
+      code: `e2e-cfg-${suffix}`,
+      name: `E2E Config ${suffix}`,
+      format: "yaml",
+    },
+  });
+  expect(cfResponse.ok()).toBeTruthy();
+  const configFile = (await cfResponse.json()) as { id: number };
+
+  // Create 4 deployments: alpha-a, alpha-b, alpha-c (sources), target-one,
+  // plus beta-one (non-alpha source) — 5 total
+  const names = [
+    "alpha-a",
+    "alpha-b",
+    "alpha-c",
+    "target-one",
+    "beta-one",
+  ] as const;
+  const deploymentIds: number[] = [];
+  for (const name of names) {
+    const r = await page.request.post("/api/deployment-instances", {
+      data: {
+        project_id: projectId,
+        environment_id: env.id,
+        deployment_key: `${name}-${suffix}`,
+        name: `${name} ${suffix}`,
+      },
+    });
+    expect(r.ok()).toBeTruthy();
+    const d = (await r.json()) as { id: number };
+    deploymentIds.push(d.id);
+  }
+
+  // Seed drafts on alpha-a, alpha-b, alpha-c, and beta-one
+  for (const id of [
+    deploymentIds[0],
+    deploymentIds[1],
+    deploymentIds[2],
+    deploymentIds[4],
+  ]) {
+    const r = await page.request.put(`/api/drafts/${id}/${configFile.id}`, {
+      data: { content: `key: val-${id}`, format: "yaml", base_version: 0 },
+    });
+    expect(r.ok()).toBeTruthy();
+  }
+
+  // Intercept clone-sources API responses to simulate limit=2 pagination.
+  // We truncate responses with >2 items and set next_cursor so the frontend
+  // sees a paginated result and shows the "load more" button.
+  // The regex requires a `?` after the path to avoid matching Vite module URLs.
+  await page.route(/\/api\/clone-sources\?/, async (route) => {
+    const response = await route.fetch();
+    const json = (await response.json()) as {
+      items: Array<{ deployment_instance_id: number }>;
+      next_cursor: number | null;
+    };
+    if (json.items.length > 2) {
+      await route.fulfill({
+        status: response.status(),
+        headers: response.headers(),
+        body: JSON.stringify({
+          items: json.items.slice(0, 2),
+          next_cursor: json.items[1].deployment_instance_id,
+        }),
+      });
+    } else {
+      await route.fulfill({
+        status: response.status(),
+        headers: response.headers(),
+        body: JSON.stringify(json),
+      });
+    }
+  });
+
+  // Target: target-one
+  const targetId = deploymentIds[3];
+  await page.goto(
+    `/projects/${projectId}/deployments/${targetId}/configs/${configFile.id}/draft`,
+  );
+  const editor = page.locator(".draft-editor-page__editor textarea");
+  await expect(editor).toBeVisible({ timeout: 10_000 });
+
+  // Open clone dialog
+  await page.getByRole("button", { name: "从其他实例复制" }).click();
+  const dialog = page.getByRole("dialog", { name: "从其他实例复制配置" });
+  await expect(dialog).toBeVisible();
+
+  // Open dropdown
+  await dialog.locator(".el-select").click();
+  const dropdownItems = page.getByRole("listbox").last().getByRole("option");
+
+  // Initial load (limit=2): shows first 2 of 4 sources
+  await expect(dropdownItems).toHaveCount(2, { timeout: 5_000 });
+
+  // Type "alpha" → remote search with keyword (debounce 300ms)
+  const selectInput = dialog.getByRole("combobox", { name: "来源实例" });
+  // Wait for the keyword search response to settle before proceeding.
+  // fill() triggers handleCloneRemoteSearch which debounces 300ms.
+  const keywordSearchDone = page.waitForResponse(
+    (resp) =>
+      resp.url().includes("/api/clone-sources?") &&
+      resp.url().includes("keyword=alpha") &&
+      resp.status() === 200,
+  );
+  await selectInput.fill("alpha");
+  await keywordSearchDone;
+
+  // After debounce + API (intercepted to 2), shows 2 of 3 alpha sources + load-more
+  await expect(dropdownItems).toHaveCount(2, { timeout: 5_000 });
+  // All visible items must be alpha-*
+  for (const item of await dropdownItems.all()) {
+    await expect(item).toContainText("alpha-");
+  }
+
+  // "加载更多…" button should be visible
+  const loadMoreBtn = page.getByRole("button", { name: "加载更多" });
+  await expect(loadMoreBtn).toBeVisible();
+
+  // Click load-more — should fetch page 2 with keyword=alpha
+  await Promise.all([
+    page.waitForResponse(
+      (resp) =>
+        resp.url().includes("/api/clone-sources?") && resp.status() === 200,
+    ),
+    loadMoreBtn.click(),
+  ]);
+
+  // Now 3 alpha items total, no beta items
+  await expect(dropdownItems).toHaveCount(3, { timeout: 5_000 });
+  for (const item of await dropdownItems.all()) {
+    await expect(item).toContainText("alpha-");
+  }
+
+  // Load-more should be gone (no more pages)
+  await expect(loadMoreBtn).not.toBeVisible();
+
+  // Close dialog
+  await dialog.getByRole("button", { name: "取消" }).click();
+});

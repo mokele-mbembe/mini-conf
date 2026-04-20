@@ -192,13 +192,158 @@
             class="draft-editor-page__notice"
           />
 
-          <el-input
-            v-model="content"
-            type="textarea"
-            :rows="24"
-            :placeholder="t('drafts.editor.placeholder')"
-            class="draft-editor-page__editor"
-          />
+          <div class="draft-editor-page__workspace">
+            <div class="draft-editor-page__main">
+              <el-input
+                v-model="content"
+                type="textarea"
+                :rows="24"
+                :placeholder="t('drafts.editor.placeholder')"
+                class="draft-editor-page__editor"
+              />
+            </div>
+
+            <aside
+              v-if="canViewSavedVersions"
+              class="draft-editor-page__history"
+            >
+              <div class="draft-editor-page__history-header">
+                <div class="draft-editor-page__history-title">
+                  {{ t("savedVersions.panel.title") }}
+                </div>
+                <el-tag size="small" type="info">
+                  {{ savedVersions.length }}
+                </el-tag>
+              </div>
+
+              <el-alert
+                v-if="savedVersionsError"
+                :title="t('savedVersions.error.loadList')"
+                type="error"
+                :description="
+                  getErrorMessage(
+                    savedVersionsError.code,
+                    savedVersionsError.message,
+                  )
+                "
+                show-icon
+                :closable="false"
+                class="draft-editor-page__history-alert"
+              />
+
+              <div
+                v-else-if="savedVersionsLoading"
+                class="draft-editor-page__history-loading"
+              >
+                <el-skeleton :rows="4" animated />
+              </div>
+
+              <el-empty
+                v-else-if="savedVersions.length === 0"
+                :description="t('savedVersions.empty')"
+              />
+
+              <template v-else>
+                <div class="draft-editor-page__history-list">
+                  <button
+                    v-for="item in savedVersions"
+                    :key="item.id"
+                    type="button"
+                    class="draft-editor-page__history-item"
+                    :class="{
+                      'is-active': selectedSavedVersionId === item.id,
+                    }"
+                    @click="selectSavedVersion(item.id)"
+                  >
+                    <div class="draft-editor-page__history-item-title">
+                      {{ item.title }}
+                    </div>
+                    <div class="draft-editor-page__history-item-meta">
+                      <span>
+                        {{ t("savedVersions.field.version") }}
+                        {{ item.source_draft_version }}
+                      </span>
+                      <span>{{ item.created_by_username }}</span>
+                    </div>
+                  </button>
+                </div>
+
+                <el-divider />
+
+                <div class="draft-editor-page__history-detail">
+                  <el-skeleton
+                    v-if="savedVersionDetailLoading"
+                    :rows="4"
+                    animated
+                  />
+
+                  <template v-else-if="savedVersionDetail">
+                    <el-descriptions :column="1" border size="small">
+                      <el-descriptions-item
+                        :label="t('savedVersions.field.title')"
+                      >
+                        {{ savedVersionDetail.title }}
+                      </el-descriptions-item>
+                      <el-descriptions-item
+                        :label="t('savedVersions.field.createdAt')"
+                      >
+                        {{ savedVersionDetail.created_at }}
+                      </el-descriptions-item>
+                      <el-descriptions-item
+                        :label="t('savedVersions.field.author')"
+                      >
+                        {{ savedVersionDetail.created_by_username }}
+                      </el-descriptions-item>
+                    </el-descriptions>
+
+                    <div class="draft-editor-page__history-note">
+                      <div class="draft-editor-page__history-note-header">
+                        <span>{{ t("savedVersions.field.note") }}</span>
+                        <span>
+                          {{ savedVersionNote.length }}/{{
+                            SAVED_VERSION_NOTE_MAX_LENGTH
+                          }}
+                        </span>
+                      </div>
+                      <el-input
+                        v-model="savedVersionNote"
+                        type="textarea"
+                        :rows="3"
+                        :maxlength="SAVED_VERSION_NOTE_MAX_LENGTH"
+                        :placeholder="t('savedVersions.note.placeholder')"
+                      />
+                    </div>
+
+                    <div class="draft-editor-page__history-actions">
+                      <el-button
+                        size="small"
+                        :loading="updatingSavedVersionNote"
+                        @click="handleUpdateSavedVersionNote"
+                      >
+                        {{ t("savedVersions.action.saveNote") }}
+                      </el-button>
+                      <el-button
+                        size="small"
+                        type="warning"
+                        :loading="restoringFromSavedVersion"
+                        @click="handleRestoreSavedVersion"
+                      >
+                        {{ t("savedVersions.action.restore") }}
+                      </el-button>
+                      <el-button
+                        size="small"
+                        type="danger"
+                        :loading="deletingSavedVersion"
+                        @click="handleDeleteSavedVersion"
+                      >
+                        {{ t("savedVersions.action.delete") }}
+                      </el-button>
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </aside>
+          </div>
         </template>
       </div>
     </template>
@@ -207,33 +352,120 @@
     <el-dialog
       v-model="cloneDialogVisible"
       :title="t('drafts.cloneDialog.title')"
-      width="480px"
+      width="520px"
       destroy-on-close
     >
+      <el-alert
+        v-if="cloneLoadError"
+        type="error"
+        :closable="false"
+        style="margin-bottom: 16px"
+      >
+        {{ t("drafts.cloneDialog.loadError") }}
+      </el-alert>
       <el-form label-position="top">
         <el-form-item :label="t('drafts.cloneDialog.sourceInstance')">
           <el-select
             v-model="cloneSourceInstanceId"
             :placeholder="t('drafts.cloneDialog.selectInstance')"
             filterable
+            remote
+            :remote-method="handleCloneRemoteSearch"
             style="width: 100%"
             :loading="cloneInstancesLoading"
           >
             <el-option
-              v-for="inst in cloneableInstances"
-              :key="inst.id"
-              :label="`${inst.name} (${inst.deployment_key})`"
-              :value="inst.id"
-            />
+              v-for="src in cloneSources"
+              :key="src.deployment_instance_id"
+              :label="
+                src.is_template
+                  ? `${src.name} (${src.deployment_key}) [${t('drafts.cloneDialog.templateTag')}]`
+                  : `${src.name} (${src.deployment_key})`
+              "
+              :value="src.deployment_instance_id"
+            >
+              <div
+                style="
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+                "
+              >
+                <span>
+                  {{ src.name }}
+                  <span style="color: var(--el-text-color-secondary)">
+                    ({{ src.deployment_key }})
+                  </span>
+                  <el-tag
+                    v-if="src.is_template"
+                    size="small"
+                    type="info"
+                    style="margin-left: 4px"
+                  >
+                    {{ t("drafts.cloneDialog.templateTag") }}
+                  </el-tag>
+                </span>
+                <span
+                  style="font-size: 12px; color: var(--el-text-color-secondary)"
+                >
+                  <template v-if="cloneSourceHasNoAvailableSources(src)">
+                    {{ t("drafts.cloneDialog.noSources") }}
+                  </template>
+                  <template v-else>
+                    <span
+                      v-if="src.available_sources.draft"
+                      style="margin-right: 6px"
+                    >
+                      Draft ✓
+                    </span>
+                    <span v-if="src.available_sources.latest_release">
+                      Release ✓
+                    </span>
+                  </template>
+                </span>
+              </div>
+            </el-option>
+            <template v-if="cloneNextCursor" #footer>
+              <el-button
+                text
+                :loading="cloneLoadingMore"
+                style="width: 100%"
+                @mousedown.prevent
+                @click="loadMoreCloneSources"
+              >
+                {{ t("drafts.cloneDialog.loadMore") }}
+              </el-button>
+            </template>
           </el-select>
         </el-form-item>
         <el-form-item :label="t('drafts.cloneDialog.sourceKind')">
           <el-radio-group v-model="cloneSourceKind">
-            <el-radio value="draft">
+            <el-radio value="draft" :disabled="cloneDraftOptionDisabled">
               {{ t("drafts.cloneDialog.kindDraft") }}
+              <span
+                v-if="selectedCloneSourceDraftUnavailable"
+                style="color: var(--el-text-color-secondary); font-size: 12px"
+              >
+                ({{ t("drafts.cloneDialog.sourceUnavailable") }})
+              </span>
             </el-radio>
-            <el-radio value="latest_release">
+            <el-radio
+              value="latest_release"
+              :disabled="cloneReleaseOptionDisabled"
+            >
               {{ t("drafts.cloneDialog.kindRelease") }}
+              <span
+                v-if="selectedCloneSource?.is_template"
+                style="color: var(--el-text-color-secondary); font-size: 12px"
+              >
+                ({{ t("drafts.cloneDialog.templateNoRelease") }})
+              </span>
+              <span
+                v-else-if="selectedCloneSourceReleaseUnavailable"
+                style="color: var(--el-text-color-secondary); font-size: 12px"
+              >
+                ({{ t("drafts.cloneDialog.sourceUnavailable") }})
+              </span>
             </el-radio>
           </el-radio-group>
         </el-form-item>
@@ -245,7 +477,7 @@
         <el-button
           type="primary"
           :loading="cloning"
-          :disabled="!cloneSourceInstanceId"
+          :disabled="cloneSubmitDisabled"
           @click="handleCloneFromInstance"
         >
           {{ t("drafts.cloneDialog.submit") }}
@@ -271,12 +503,21 @@ import * as deploymentInstancesApi from "@/api/deployment-instances";
 import * as configFilesApi from "@/api/config-files";
 import * as draftsApi from "@/api/drafts";
 import * as releasesApi from "@/api/releases";
+import * as savedVersionsApi from "@/api/saved-versions";
+import * as cloneSourcesApi from "@/api/clone-sources";
 import { ApiRequestError } from "@/api/error";
 import { getErrorMessage } from "@/shared/constants/error-messages";
 import type { ConfigFileSummary } from "@/api/types/config-file";
 import type { DeploymentInstanceSummary } from "@/api/types/deployment-instance";
 import type { DraftResponse } from "@/api/types/draft";
+import type { CloneSourceSummary } from "@/api/types/clone-source";
+import type {
+  SavedVersionDetail,
+  SavedVersionSummary,
+} from "@/api/types/saved-version";
 import { useI18nText } from "@/shared/i18n";
+
+const SAVED_VERSION_NOTE_MAX_LENGTH = 500;
 
 const route = useRoute();
 const router = useRouter();
@@ -318,9 +559,67 @@ const previewStatusMap = ref<Record<number, string>>({});
 const cloneDialogVisible = ref(false);
 const cloneSourceInstanceId = ref<number | null>(null);
 const cloneSourceKind = ref<"draft" | "latest_release">("draft");
-const cloneableInstances = ref<DeploymentInstanceSummary[]>([]);
+const cloneSources = ref<CloneSourceSummary[]>([]);
 const cloneInstancesLoading = ref(false);
+const cloneLoadingMore = ref(false);
+const cloneLoadError = ref(false);
 const cloning = ref(false);
+const cloneNextCursor = ref<number | null>(null);
+const cloneSearchKeyword = ref<string | undefined>(undefined);
+let cloneSearchTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+let cloneSearchSeq = 0;
+
+const selectedCloneSource = computed(() =>
+  cloneSources.value.find(
+    (s) => s.deployment_instance_id === cloneSourceInstanceId.value,
+  ),
+);
+const cloneDraftOptionDisabled = computed(
+  () =>
+    selectedCloneSource.value !== undefined &&
+    !selectedCloneSource.value.available_sources.draft,
+);
+const cloneReleaseOptionDisabled = computed(
+  () =>
+    selectedCloneSource.value !== undefined &&
+    (!selectedCloneSource.value.available_sources.latest_release ||
+      selectedCloneSource.value.is_template),
+);
+const selectedCloneSourceDraftUnavailable = computed(
+  () =>
+    selectedCloneSource.value !== undefined &&
+    !selectedCloneSource.value.available_sources.draft,
+);
+const selectedCloneSourceReleaseUnavailable = computed(
+  () =>
+    selectedCloneSource.value !== undefined &&
+    !selectedCloneSource.value.available_sources.latest_release,
+);
+
+const cloneSubmitDisabled = computed(() => {
+  if (!cloneSourceInstanceId.value || !selectedCloneSource.value) return true;
+  const src = selectedCloneSource.value;
+  if (cloneSourceKind.value === "draft" && !src.available_sources.draft)
+    return true;
+  if (
+    cloneSourceKind.value === "latest_release" &&
+    !src.available_sources.latest_release
+  )
+    return true;
+  return false;
+});
+
+const savedVersions = ref<SavedVersionSummary[]>([]);
+const savedVersionsLoading = ref(false);
+const savedVersionsError = ref<ApiRequestError | null>(null);
+const selectedSavedVersionId = ref<number | null>(null);
+const savedVersionDetail = ref<SavedVersionDetail | null>(null);
+const savedVersionDetailLoading = ref(false);
+const savedVersionNote = ref("");
+const savedNoteSnapshot = ref("");
+const updatingSavedVersionNote = ref(false);
+const restoringFromSavedVersion = ref(false);
+const deletingSavedVersion = ref(false);
 
 const resourceNotFound = computed(() => resourceError.value?.status === 404);
 const resourceForbidden = computed(() => resourceError.value?.status === 403);
@@ -329,6 +628,12 @@ const isDirty = computed(() => content.value !== savedContent.value);
 const canPublish = computed(
   () =>
     canEdit.value && deployment.value !== null && !deployment.value.is_template,
+);
+const canViewSavedVersions = computed(() => canEdit.value);
+const isNoteDirty = computed(
+  () =>
+    savedVersionDetail.value !== null &&
+    savedVersionNote.value !== savedNoteSnapshot.value,
 );
 const pageTitle = computed(() => {
   if (configFile.value) {
@@ -353,6 +658,10 @@ const versionLabel = computed(() => {
     ? t("drafts.field.newDraft")
     : t("drafts.field.unknownVersion");
 });
+
+function cloneSourceHasNoAvailableSources(src: CloneSourceSummary): boolean {
+  return !src.available_sources.draft && !src.available_sources.latest_release;
+}
 
 function configStatusTagType(source: string) {
   switch (source) {
@@ -425,6 +734,12 @@ async function loadDraftResources() {
   content.value = "";
   savedContent.value = "";
   draftWasMissing.value = false;
+  savedVersions.value = [];
+  savedVersionsError.value = null;
+  selectedSavedVersionId.value = null;
+  savedVersionDetail.value = null;
+  savedVersionNote.value = "";
+  savedNoteSnapshot.value = "";
 
   try {
     const [deploymentResult, configResult, configListResult] =
@@ -457,6 +772,9 @@ async function loadDraftResources() {
 
     // Load preview status for config switcher badges (non-blocking)
     loadPreviewStatus(did);
+    if (canViewSavedVersions.value) {
+      await loadSavedVersions({ keepSelection: false });
+    }
 
     try {
       const draftResult = await draftsApi.getDraft(did, cid);
@@ -518,6 +836,238 @@ function applyDraft(value: DraftResponse) {
   savedContent.value = value.content;
 }
 
+async function loadSavedVersions(options?: { keepSelection?: boolean }) {
+  if (!canViewSavedVersions.value) {
+    return;
+  }
+
+  savedVersionsLoading.value = true;
+  savedVersionsError.value = null;
+  try {
+    const result = await savedVersionsApi.listSavedVersions({
+      deployment_instance_id: deploymentId.value,
+      config_file_id: configFileId.value,
+    });
+    savedVersions.value = result.items;
+
+    if (result.items.length === 0) {
+      selectedSavedVersionId.value = null;
+      savedVersionDetail.value = null;
+      savedVersionNote.value = "";
+      return;
+    }
+
+    const keepSelection = options?.keepSelection ?? true;
+    const keepCurrent =
+      keepSelection &&
+      selectedSavedVersionId.value !== null &&
+      result.items.some((item) => item.id === selectedSavedVersionId.value);
+
+    const nextSelectedId = keepCurrent
+      ? selectedSavedVersionId.value
+      : result.items[0].id;
+    if (nextSelectedId !== null) {
+      await selectSavedVersion(nextSelectedId);
+    }
+  } catch (err) {
+    if (err instanceof ApiRequestError) {
+      savedVersionsError.value = err;
+    } else {
+      savedVersionsError.value = new ApiRequestError(0, {
+        code: "unknown_error",
+        message: t("savedVersions.error.loadList"),
+      });
+    }
+  } finally {
+    savedVersionsLoading.value = false;
+  }
+}
+
+async function confirmIfNoteDirty(): Promise<boolean> {
+  if (!isNoteDirty.value) return true;
+  try {
+    await ElMessageBox.confirm(
+      t("savedVersions.note.discardPrompt"),
+      t("savedVersions.note.discardTitle"),
+      {
+        confirmButtonText: t("savedVersions.note.discardConfirm"),
+        cancelButtonText: t("common.cancel"),
+        type: "warning",
+      },
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function selectSavedVersion(id: number) {
+  if (!(await confirmIfNoteDirty())) return;
+  // Skip re-fetch if same item is already loaded and note is clean
+  if (
+    selectedSavedVersionId.value === id &&
+    savedVersionDetail.value?.id === id
+  )
+    return;
+  selectedSavedVersionId.value = id;
+  savedVersionDetailLoading.value = true;
+  try {
+    const result = await savedVersionsApi.getSavedVersion(id);
+    // Stale-response guard: discard if user already clicked another item
+    if (selectedSavedVersionId.value !== id) return;
+    savedVersionDetail.value = result.saved_version;
+    savedVersionNote.value = result.saved_version.note ?? "";
+    savedNoteSnapshot.value = savedVersionNote.value;
+  } catch (err) {
+    if (selectedSavedVersionId.value !== id) return;
+    if (err instanceof ApiRequestError) {
+      ElMessage.error(getErrorMessage(err.code, err.message));
+    } else {
+      ElMessage.error(t("toast.operationFailed"));
+    }
+  } finally {
+    if (selectedSavedVersionId.value === id) {
+      savedVersionDetailLoading.value = false;
+    }
+  }
+}
+
+async function handleUpdateSavedVersionNote() {
+  if (!savedVersionDetail.value) {
+    return;
+  }
+
+  const note = savedVersionNote.value.trim();
+  if (note.length > SAVED_VERSION_NOTE_MAX_LENGTH) {
+    ElMessage.error(t("savedVersions.error.noteTooLong"));
+    return;
+  }
+
+  updatingSavedVersionNote.value = true;
+  try {
+    const result = await savedVersionsApi.updateSavedVersion(
+      savedVersionDetail.value.id,
+      {
+        note: note.length > 0 ? note : null,
+      },
+    );
+    savedVersionDetail.value = result.saved_version;
+    savedVersionNote.value = result.saved_version.note ?? "";
+    savedNoteSnapshot.value = savedVersionNote.value;
+    savedVersions.value = savedVersions.value.map((item) => {
+      if (item.id !== result.saved_version.id) {
+        return item;
+      }
+      return {
+        ...item,
+        note: result.saved_version.note,
+      };
+    });
+    ElMessage.success(t("toast.savedVersions.noteSaved"));
+  } catch (err) {
+    if (err instanceof ApiRequestError) {
+      ElMessage.error(getErrorMessage(err.code, err.message));
+    } else {
+      ElMessage.error(t("toast.operationFailed"));
+    }
+  } finally {
+    updatingSavedVersionNote.value = false;
+  }
+}
+
+async function handleRestoreSavedVersion() {
+  if (!savedVersionDetail.value) {
+    return;
+  }
+
+  if (isDirty.value) {
+    try {
+      await ElMessageBox.confirm(
+        t("drafts.navigate.prompt"),
+        t("drafts.navigate.title"),
+        {
+          confirmButtonText: t("drafts.navigate.confirm"),
+          cancelButtonText: t("common.cancel"),
+          type: "warning",
+        },
+      );
+    } catch {
+      return;
+    }
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      t("savedVersions.restore.prompt"),
+      t("savedVersions.restore.title"),
+      {
+        confirmButtonText: t("savedVersions.restore.confirm"),
+        cancelButtonText: t("common.cancel"),
+        type: "warning",
+      },
+    );
+  } catch {
+    return;
+  }
+
+  restoringFromSavedVersion.value = true;
+  try {
+    const result = await savedVersionsApi.restoreSavedVersion(
+      savedVersionDetail.value.id,
+      {
+        base_version: draft.value?.version ?? null,
+      },
+    );
+    applyDraft(result.draft);
+    ElMessage.success(t("toast.savedVersions.restored"));
+    loadPreviewStatus(deploymentId.value);
+    await loadSavedVersions();
+  } catch (err) {
+    if (err instanceof ApiRequestError) {
+      ElMessage.error(getErrorMessage(err.code, err.message));
+    } else {
+      ElMessage.error(t("toast.operationFailed"));
+    }
+  } finally {
+    restoringFromSavedVersion.value = false;
+  }
+}
+
+async function handleDeleteSavedVersion() {
+  if (!savedVersionDetail.value) {
+    return;
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      t("savedVersions.delete.prompt"),
+      t("savedVersions.delete.title"),
+      {
+        confirmButtonText: t("savedVersions.delete.confirm"),
+        cancelButtonText: t("common.cancel"),
+        type: "warning",
+      },
+    );
+  } catch {
+    return;
+  }
+
+  deletingSavedVersion.value = true;
+  try {
+    await savedVersionsApi.deleteSavedVersion(savedVersionDetail.value.id);
+    ElMessage.success(t("toast.savedVersions.deleted"));
+    await loadSavedVersions({ keepSelection: false });
+  } catch (err) {
+    if (err instanceof ApiRequestError) {
+      ElMessage.error(getErrorMessage(err.code, err.message));
+    } else {
+      ElMessage.error(t("toast.operationFailed"));
+    }
+  } finally {
+    deletingSavedVersion.value = false;
+  }
+}
+
 async function handleSave() {
   if (!configFile.value) return;
 
@@ -533,6 +1083,7 @@ async function handleSave() {
       },
     );
     applyDraft(result);
+    await loadSavedVersions({ keepSelection: false });
     ElMessage.success(t("toast.drafts.saved"));
   } catch (err) {
     if (err instanceof ApiRequestError) {
@@ -682,28 +1233,91 @@ async function handlePublish() {
 }
 
 // Clone from other instance
-async function loadCloneableInstances() {
+const CLONE_ERROR_KEYS: Record<string, string> = {
+  draft_not_found: "drafts.cloneDialog.error.sourceDraftNotFound",
+  release_not_found: "drafts.cloneDialog.error.sourceReleaseNotFound",
+  draft_validation_failed: "drafts.cloneDialog.error.validationFailed",
+};
+
+async function searchCloneSources(keyword?: string) {
+  const seq = ++cloneSearchSeq;
+  const normalizedKeyword = keyword || undefined;
+  cloneSearchKeyword.value = normalizedKeyword;
   cloneInstancesLoading.value = true;
+  cloneLoadError.value = false;
+  cloneNextCursor.value = null;
   try {
-    const result = await deploymentInstancesApi.listDeploymentInstances({
+    const result = await cloneSourcesApi.listCloneSources({
       project_id: projectId.value,
-      page_size: 200,
+      target_deployment_id: deploymentId.value,
+      config_file_id: configFileId.value,
+      keyword: normalizedKeyword,
+      limit: 50,
     });
-    cloneableInstances.value = result.items.filter(
-      (inst) => inst.id !== deploymentId.value,
-    );
+    if (seq !== cloneSearchSeq) return;
+    cloneSources.value = result.items;
+    cloneNextCursor.value = result.next_cursor;
   } catch {
-    cloneableInstances.value = [];
+    if (seq !== cloneSearchSeq) return;
+    cloneSources.value = [];
+    cloneLoadError.value = true;
   } finally {
-    cloneInstancesLoading.value = false;
+    if (seq === cloneSearchSeq) {
+      cloneInstancesLoading.value = false;
+    }
   }
+}
+
+async function loadMoreCloneSources() {
+  if (!cloneNextCursor.value || cloneLoadingMore.value) return;
+  const seq = cloneSearchSeq;
+  cloneLoadingMore.value = true;
+  try {
+    const result = await cloneSourcesApi.listCloneSources({
+      project_id: projectId.value,
+      target_deployment_id: deploymentId.value,
+      config_file_id: configFileId.value,
+      keyword: cloneSearchKeyword.value,
+      limit: 50,
+      cursor: cloneNextCursor.value,
+    });
+    if (seq !== cloneSearchSeq) return;
+    cloneSources.value = [...cloneSources.value, ...result.items];
+    cloneNextCursor.value = result.next_cursor;
+  } catch {
+    // silently ignore load-more errors; user can retry
+  } finally {
+    if (seq === cloneSearchSeq) {
+      cloneLoadingMore.value = false;
+    }
+  }
+}
+
+function handleCloneRemoteSearch(keyword: string) {
+  if (cloneSearchTimer) globalThis.clearTimeout(cloneSearchTimer);
+  if (cloneLoadingMore.value) return;
+  cloneSearchTimer = globalThis.setTimeout(() => {
+    searchCloneSources(keyword);
+  }, 300);
 }
 
 watch(cloneDialogVisible, (visible) => {
   if (visible) {
     cloneSourceInstanceId.value = null;
     cloneSourceKind.value = "draft";
-    loadCloneableInstances();
+    cloneLoadError.value = false;
+    cloneSources.value = [];
+    cloneNextCursor.value = null;
+    cloneSearchKeyword.value = undefined;
+    searchCloneSources();
+  }
+});
+
+// Auto-select best available source kind when instance changes
+watch(selectedCloneSource, (src) => {
+  if (!src) return;
+  if (src.is_template || !src.available_sources.latest_release) {
+    cloneSourceKind.value = "draft";
   }
 });
 
@@ -742,7 +1356,12 @@ async function handleCloneFromInstance() {
     loadPreviewStatus(deploymentId.value);
   } catch (err) {
     if (err instanceof ApiRequestError) {
-      ElMessage.error(getErrorMessage(err.code, err.message));
+      const cloneErrorKey = CLONE_ERROR_KEYS[err.code];
+      ElMessage.error(
+        cloneErrorKey
+          ? t(cloneErrorKey)
+          : getErrorMessage(err.code, err.message),
+      );
     } else {
       ElMessage.error(t("toast.operationFailed"));
     }
@@ -816,6 +1435,9 @@ onMounted(() => {
   globalThis.addEventListener("beforeunload", onBeforeUnloadHandler);
 });
 onBeforeUnmount(() => {
+  if (cloneSearchTimer) {
+    globalThis.clearTimeout(cloneSearchTimer);
+  }
   globalThis.removeEventListener("beforeunload", onBeforeUnloadHandler);
 });
 </script>
@@ -865,6 +1487,101 @@ onBeforeUnmount(() => {
 .draft-editor-page__meta,
 .draft-editor-page__notice {
   margin-bottom: var(--spacing-md);
+}
+
+.draft-editor-page__workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: var(--spacing-md);
+}
+
+.draft-editor-page__history {
+  border: 1px solid var(--el-border-color-light);
+  border-radius: var(--el-border-radius-base);
+  padding: var(--spacing-sm);
+  background: var(--el-bg-color-page);
+  min-height: 560px;
+}
+
+.draft-editor-page__history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-sm);
+}
+
+.draft-editor-page__history-title {
+  font-weight: 600;
+}
+
+.draft-editor-page__history-alert {
+  margin-bottom: var(--spacing-sm);
+}
+
+.draft-editor-page__history-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs, 6px);
+  max-height: 240px;
+  overflow: auto;
+}
+
+.draft-editor-page__history-item {
+  border: 1px solid var(--el-border-color-light);
+  background: var(--el-bg-color);
+  border-radius: var(--el-border-radius-base);
+  padding: 8px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.draft-editor-page__history-item.is-active {
+  border-color: var(--el-color-primary);
+  box-shadow: 0 0 0 1px var(--el-color-primary-light-5) inset;
+}
+
+.draft-editor-page__history-item-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.draft-editor-page__history-item-meta {
+  margin-top: 4px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  display: flex;
+  gap: 8px;
+}
+
+.draft-editor-page__history-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.draft-editor-page__history-note {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.draft-editor-page__history-note-header {
+  display: flex;
+  justify-content: space-between;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+.draft-editor-page__history-actions {
+  display: flex;
+  gap: var(--spacing-xs, 6px);
+  flex-wrap: wrap;
+}
+
+@media (max-width: 1200px) {
+  .draft-editor-page__workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .draft-editor-page__code {
