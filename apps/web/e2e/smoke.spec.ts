@@ -586,3 +586,117 @@ test("clone dialog: remote search filters by keyword and pagination carries keyw
   // Close dialog
   await dialog.getByRole("button", { name: "取消" }).click();
 });
+
+// ---------------------------------------------------------------------------
+// Release detail & diff: publish → detail page → diff page
+// ---------------------------------------------------------------------------
+
+test("release detail and diff: publish draft → view detail → view diff", async ({
+  page,
+}) => {
+  const suffix = Date.now().toString();
+  await login(page);
+  const { projectId, deploymentId, configFileId } =
+    await setupDraftEditorContext(page, suffix);
+
+  // Navigate to draft editor and create a draft
+  await page.goto(
+    `/projects/${projectId}/deployments/${deploymentId}/configs/${configFileId}/draft`,
+  );
+  const editor = page.locator(".draft-editor-page__editor textarea");
+  await expect(editor).toBeVisible({ timeout: 10_000 });
+
+  // Write and save a draft
+  await editor.fill("greeting: hello-release-test");
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(page.locator(".el-message", { hasText: "已保存" })).toBeVisible({
+    timeout: 5_000,
+  });
+  await expect(page.locator(".el-message")).toHaveCount(0, { timeout: 6_000 });
+
+  // Publish the draft
+  await page.getByRole("button", { name: "发布 Release" }).click();
+  const publishDialog = page.locator(".el-message-box");
+  await expect(publishDialog).toBeVisible();
+  await publishDialog.locator("textarea").fill("E2E release test");
+  await publishDialog.getByRole("button", { name: "发布" }).click();
+
+  // After publish, should redirect to release detail page
+  await expect(page).toHaveURL(
+    new RegExp(`/projects/${projectId}/releases/\\d+`),
+    { timeout: 10_000 },
+  );
+
+  // Release detail: verify meta info is visible
+  await expect(page.locator(".el-descriptions")).toBeVisible({
+    timeout: 10_000,
+  });
+
+  // Verify revision is displayed
+  const metaSection = page.locator(".release-detail-page__meta");
+  await expect(metaSection).toBeVisible();
+
+  // Verify published time is shown
+  await expect(metaSection).toContainText("发布时间");
+
+  // Verify readonly content is displayed
+  const content = page.locator(".release-detail-page__content");
+  await expect(content).toBeVisible();
+  await expect(content).toContainText("greeting: hello-release-test");
+
+  // Verify readonly hint
+  await expect(page.locator(".release-detail-page__alert")).toBeVisible();
+
+  // Click "查看 Diff" to navigate to diff page
+  await page.getByRole("button", { name: "查看 Diff" }).click();
+  await expect(page).toHaveURL(
+    new RegExp(`/projects/${projectId}/releases/\\d+/diff`),
+    { timeout: 10_000 },
+  );
+
+  // Diff page: verify meta is visible
+  await expect(page.locator(".release-diff-page__meta")).toBeVisible({
+    timeout: 10_000,
+  });
+
+  // First release should show "首个发布版本" hint
+  await expect(page.locator(".release-diff-page__alert")).toContainText(
+    "首个发布版本",
+  );
+
+  // Current version content should be visible
+  const diffContent = page.locator(".release-diff-page__content");
+  await expect(diffContent.first()).toBeVisible();
+  await expect(diffContent.first()).toContainText(
+    "greeting: hello-release-test",
+  );
+
+  // Navigate back to detail
+  await page.getByRole("button", { name: "返回发布详情" }).click();
+  await expect(page).toHaveURL(
+    new RegExp(`/projects/${projectId}/releases/\\d+$`),
+    { timeout: 10_000 },
+  );
+
+  // Navigate back to release list
+  await page.getByRole("button", { name: "返回发布列表" }).click();
+  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}/releases$`), {
+    timeout: 10_000,
+  });
+
+  // Release list: verify "查看" and "Diff" action buttons are present
+  const releaseRow = page.locator(".el-table__row").first();
+  await expect(releaseRow).toBeVisible({ timeout: 10_000 });
+  await expect(releaseRow.getByRole("button", { name: "查看" })).toBeVisible();
+  await expect(releaseRow.getByRole("button", { name: "Diff" })).toBeVisible();
+
+  // Click "查看" to go to detail again
+  await releaseRow.getByRole("button", { name: "查看" }).click();
+  await expect(page).toHaveURL(
+    new RegExp(`/projects/${projectId}/releases/\\d+`),
+    { timeout: 10_000 },
+  );
+  await expect(page.locator(".release-detail-page__content")).toBeVisible({
+    timeout: 10_000,
+  });
+});

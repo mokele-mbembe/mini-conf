@@ -104,6 +104,31 @@
               :label="t('releases.column.publishedAt')"
               min-width="180"
             />
+
+            <el-table-column
+              :label="t('releases.column.actions')"
+              width="160"
+              fixed="right"
+            >
+              <template #default="{ row }">
+                <el-button
+                  size="small"
+                  link
+                  type="primary"
+                  @click="goToDetail(row)"
+                >
+                  {{ t("releases.action.view") }}
+                </el-button>
+                <el-button
+                  size="small"
+                  link
+                  type="primary"
+                  @click="goToDiff(row)"
+                >
+                  {{ t("releases.action.diff") }}
+                </el-button>
+              </template>
+            </el-table-column>
           </el-table>
         </div>
       </div>
@@ -113,7 +138,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { useProjectContext } from "@/modules/projects/composables/useProjectContext";
 import ProjectTabs from "@/modules/projects/components/ProjectTabs.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
@@ -131,9 +156,11 @@ import { getErrorMessage } from "@/shared/constants/error-messages";
 import type { ConfigFileSummary } from "@/api/types/config-file";
 import type { DeploymentInstanceSummary } from "@/api/types/deployment-instance";
 import type { ReleaseSummary } from "@/api/types/release";
+import { ROUTE_NAMES } from "@/shared/constants/routes";
 import { useI18nText } from "@/shared/i18n";
 
 const route = useRoute();
+const router = useRouter();
 const { t } = useI18nText();
 
 const {
@@ -216,6 +243,20 @@ function deploymentLabel(id: number): string {
 function configLabel(id: number): string {
   const config = configFiles.value.find((item) => item.id === id);
   return config ? `${config.name} / ${config.code}` : String(id);
+}
+
+function goToDetail(row: ReleaseSummary) {
+  router.push({
+    name: ROUTE_NAMES.RELEASE_DETAIL,
+    params: { projectId: route.params.projectId, releaseId: row.id },
+  });
+}
+
+function goToDiff(row: ReleaseSummary) {
+  router.push({
+    name: ROUTE_NAMES.RELEASE_DIFF,
+    params: { projectId: route.params.projectId, releaseId: row.id },
+  });
 }
 
 onMounted(loadAll);

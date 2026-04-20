@@ -24,6 +24,10 @@ const DraftEditorPage = () =>
   import("@/modules/drafts/pages/DraftEditorPage.vue");
 const ReleaseListPage = () =>
   import("@/modules/releases/pages/ReleaseListPage.vue");
+const ReleaseDetailPage = () =>
+  import("@/modules/releases/pages/ReleaseDetailPage.vue");
+const ReleaseDiffPage = () =>
+  import("@/modules/releases/pages/ReleaseDiffPage.vue");
 
 export const routes: RouteRecordRaw[] = [
   {
@@ -96,12 +100,12 @@ export const routes: RouteRecordRaw[] = [
       {
         path: ROUTE_PATHS.RELEASE_DETAIL,
         name: ROUTE_NAMES.RELEASE_DETAIL,
-        component: ProjectSectionPlaceholderPage,
+        component: ReleaseDetailPage,
       },
       {
         path: ROUTE_PATHS.RELEASE_DIFF,
         name: ROUTE_NAMES.RELEASE_DIFF,
-        component: ProjectSectionPlaceholderPage,
+        component: ReleaseDiffPage,
       },
       {
         path: ROUTE_PATHS.PROJECT_MEMBERS,

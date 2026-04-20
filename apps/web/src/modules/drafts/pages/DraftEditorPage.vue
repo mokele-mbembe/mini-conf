@@ -1213,12 +1213,8 @@ async function handlePublish() {
       t("toast.releases.published", { revision: release.revision }),
     );
     router.push({
-      name: ROUTE_NAMES.RELEASE_LIST,
-      params: { projectId: route.params.projectId },
-      query: {
-        deployment_instance_id: String(deploymentId.value),
-        config_file_id: String(configFileId.value),
-      },
+      name: ROUTE_NAMES.RELEASE_DETAIL,
+      params: { projectId: route.params.projectId, releaseId: release.id },
     });
   } catch (err) {
     if (err === "cancel" || err === "close") return;
