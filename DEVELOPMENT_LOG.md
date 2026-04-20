@@ -12,6 +12,17 @@
 
 ## 1.1 最近完成
 
+2026-04-20 本轮完成 Draft / preview-bundle / publish 主路径文档复核，并补充后续体验改造规划：
+
+- 当前前端已基本打通 `Current Draft -> preview-bundle -> publish -> release history` 主闭环
+- Saved Versions 后端和前端历史面板均已接入，保存 Current Draft 后会生成历史保存版本
+- 单配置 clone 已改为专用 clone-sources 查询，支持可用来源元数据、远程搜索、分页加载和 E2E 覆盖
+- 当前明确剩余体验缺口：
+  - Release 详情 / Diff 前端路由仍是占位页，缺少不可编辑文本框回看当前 release 内容的页面
+  - 部署实例列表仍把模板和普通实例混排，后续应拆成“模板”和“部署实例”两个区块
+  - deployment archive / delete 目前不在现有模型里；新规划采用 `deployment_uid + is_archived + deleted_at`，归档可恢复且不释放 key，删除不可恢复但释放 `deployment_key`
+- 新增产品澄清 `docs/constraints/product-qa/0010-release-readonly-template-split-and-deployment-archive.md`
+
 2026-04-20 本轮已完成 Saved Versions 后端初版落地，并补了对应的后端测试骨架：
 
 - 新增迁移 `0014_saved_versions`
@@ -30,11 +41,8 @@
 
 - `cargo test -p server --test saved_versions` 通过
 - `cargo test -p server --test drafts` 通过
-- 但当前实现仍有两处需要收口：
-  - Saved Versions 列表接口当前会把工作过程数据暴露给 `viewer`
-  - `saved_version.updated` 审计 detail 中的 `deployment_instance_id` 字段写错了值
-
-因此当前状态应视为“后端初版已落地，但仍未完全收口”，前端工作台接入前需要先修这两处问题。
+- 后续已修复 Saved Versions 列表 viewer 可见性和 `saved_version.updated` 审计 detail 字段问题
+- 前端已接入 Saved Versions 历史面板，可查看、备注、恢复和删除历史保存版本
 
 2026-04-20 本轮已完成部署实例页前端加载优化与缓存/竞态收口：
 
@@ -242,20 +250,23 @@
 - [x] 登录页
 - [x] 项目列表 / 详情页骨架
 - [x] 配置文件列表 / 编辑页
-- [ ] 部署实例列表 / 详情页
-- [ ] 模板创建实例流程
-- [ ] Draft 编辑页
-- [ ] 单配置 clone 交互
-- [ ] preview-bundle 预览页
-- [ ] release history / diff 页
+- [x] 部署实例列表 / 详情页
+- [x] 模板创建实例流程
+- [x] Draft 编辑页
+- [x] 单配置 clone 交互
+- [x] preview-bundle 预览页
+- [x] release history 列表
+- [ ] release 详情 / diff 前端页面
+- [ ] 部署实例列表拆分模板 / 普通实例区块
+- [ ] deployment archive 生命周期
 
 ## 4. 当前阶段剩余工作
 
 推荐顺序：
 
-1. 前端 API 类型与 client 收口
-2. 部署实例列表 / 详情 / 生命周期操作
-3. Draft / preview / publish 主路径
+1. Release 只读详情 / Diff 前端页面
+2. 部署实例列表拆成模板 / 普通实例两个区块
+3. deployment archive + tombstone delete 生命周期设计与实现
 4. 咖啡中间件 demo 程序
 5. `sqlx-check` 恢复为强制检查的时机评估
 6. 黑盒与覆盖率基线的持续补量
@@ -263,20 +274,18 @@
 理由：
 
 - 后端主路径、项目级权限、审计日志、配置标识收口、部署实例生命周期和开放接口活跃态约束已经完成
-- 当前更大的风险已从“后端功能缺失”转向“前端按新 API 语义接入、demo 真实链路跑通、覆盖率持续抬升和 compile-time SQLx metadata 时机”
+- Draft / preview-bundle / publish 主路径前端已经基本闭环
+- 当前更大的风险已从“核心链路缺失”转向“历史回看、实例查找、归档 / 删除生命周期和 demo 真实链路体验”
 - alpha 黑盒已覆盖成员权限、审计查询、模板 clone、二次发布 diff 和 token 失效回归
-- 前端首版 scaffold、build、配置文件页和最小 smoke 已就位，下一步应继续按文档切片推进部署实例和 Draft / Release 主路径
+- 前端 E2E 已覆盖部署生命周期、Saved Versions 和 clone-sources 主要交互
 
 前端下一批推荐顺序：
 
-1. API 类型与 client：deployment list 分页、activate、deactivate、sync/heartbeat `config_file_id`
-2. 部署实例列表 / 详情页
-3. 部署实例激活 / 停用 / token reset
-4. 模板创建实例流程
-5. Draft 编辑页
-6. preview-bundle 预览页
-7. release history / diff 页
-8. 项目成员页与审计 / 同步 / 心跳页面
+1. Release 只读详情页：不可编辑内容框、发布账号、恢复到 Current Draft、跳转 Diff
+2. Release Diff 页：展示当前 release 与上一版 release 的只读对比
+3. 部署实例列表拆分为“模板”和“部署实例”两个区块
+4. deployment archive / delete：按 `deployment_uid + is_archived + deleted_at` 语义做后端模型、前端归档弹窗、恢复和删除操作
+5. 项目成员页与审计 / 同步 / 心跳页面
 
 ## 5. 下一个会话建议先跑的命令
 

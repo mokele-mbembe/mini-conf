@@ -477,22 +477,24 @@ Preview 页每行建议提供：
 
 ### 阶段 1
 
-- 新增工作台路由
-- 复用现有 Draft 编辑能力进入中栏
-- 左栏配置导航接入
-- 右栏先接 Releases
+- 现有 Draft 编辑页继续承载 Current Draft 编辑、配置切换、Saved Versions 历史面板和发布入口
+- 补 Release 只读详情页与 Diff 页
+- Release 详情页提供不可编辑内容框、发布账号、恢复到 Current Draft
 
 ### 阶段 2
 
-- 新增 Saved Versions 后端模型与接口
-- 接入 Saved Versions 列表与详情
-- 支持恢复与删除
+- 将部署实例列表拆成“模板”和“部署实例”两个区块
+- 模板区主操作聚焦“创建实例”
+- 普通实例区主操作聚焦详情、激活、停用、token reset、预览和发布
 
 ### 阶段 3
 
-- 增加对比体验
-- 增加备注编辑
-- 增加页头摘要与局部状态刷新优化
+- 如确认需要隐藏和释放 key，引入 deployment archive + tombstone delete 生命周期
+- 新增 `deployment_uid` 作为内部不可复用实体身份
+- 默认列表排除 archived 和 deleted
+- 通过已归档入口查看和恢复，恢复后状态为 `inactive`
+- delete 后不可恢复并释放 `deployment_key`；历史页面通过 tombstone row 和 `deployment_uid` 区分同 key 旧实体
+- 补后端 API、OpenAPI、前端交互和 E2E / 集成测试
 
 ## 14. 验收标准
 

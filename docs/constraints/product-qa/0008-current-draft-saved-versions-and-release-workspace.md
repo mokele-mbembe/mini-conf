@@ -184,14 +184,15 @@ Release 应保持只读，不直接编辑。
 - 从其他实例复制到 Current Draft
 - 从最新 Release 恢复到 Current Draft
 - 发布 Current Draft
-- Release 列表与详情
+- Release 列表
 - Saved Versions 后端数据模型与列表 / 详情 / 备注 / 恢复 / 删除接口初版
+- Draft 编辑页中的 Saved Versions 历史面板
 
 当前未实现但下一步建议补：
 
-- 配置工作台页
+- Release 只读详情页和 Diff 页
 - Release 回看中显眼展示发布账号
-- Saved Versions 前端工作台接入与最终权限收口
+- 配置工作台页的独立三栏布局；当前能力仍主要承载在 Draft 编辑页中
 
 ## 当前结论
 

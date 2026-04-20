@@ -86,7 +86,7 @@
 
 - 列表展示 `environment / deployment_key / name / is_template / status`
 - 支持 `environment / status / keyword` 过滤
-- 明确区分模板和普通实例
+- 拆成“模板”和“部署实例”两个区块，避免两类资源混排
 - 使用分页响应 `items / total / page / page_size`
 - admin 可创建、编辑、clone、activate、deactivate、reset token
 - 创建和 clone 后默认 `inactive`
@@ -118,7 +118,8 @@
 
 - 支持按实例和配置文件过滤
 - 历史页能看 revision、发布时间、摘要
-- 详情页能看返回的 `content`
+- 详情页能用不可编辑文本框查看返回的 `content`
+- 详情页显眼展示发布账号和发布时间
 - diff 页能用前后文本直接渲染对比
 - secret 配置按后端脱敏结果展示
 
@@ -354,7 +355,8 @@
 - 不要自己实现 secret 字段脱敏算法；直接显示后端返回内容。
 - 不要假设 reset token 后旧 token 还能用一段时间。
 - 不要假设心跳页天然有在线/离线结论；当前接口只给最近状态。
-- 不要为 deployment 实现 archived 状态；未启用和已停用都显示为 inactive。
+- 当前不要把 deployment archived 当成已有能力；如果要实现“归档默认隐藏、归档列表找回、恢复为 inactive”，应按 `deployment_uid + is_archived + deleted_at` 模型推进，而不是把 `archived` 加回 `status`。
+- 如果要释放 `deployment_key`，通过产品层 delete 完成；底层保留 tombstone row 用于历史解释。
 - 不要再新增 `process_key`；客户端配置标识统一使用 `config`，管理端筛选使用 `config_file_id`。
 
 ## 9. 建议的首版验收清单
@@ -365,4 +367,5 @@
 - secret 配置在 release 详情和 diff 页不会显示明文
 - 必选配置缺失时，发布页能给出明确阻塞提示
 - Draft 冲突时，编辑页能提示刷新而不是静默覆盖
-- 如果后续补 Saved Versions，用户能从历史保存版本恢复到 Current Draft 再继续发布
+- 用户能从历史保存版本恢复到 Current Draft 再继续发布
+- 用户能从 Release 只读详情页查看内容并恢复到 Current Draft

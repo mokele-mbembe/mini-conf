@@ -201,7 +201,16 @@ inactive
 active
 ```
 
-不再为部署实例引入 `archived`；停用和未启用统一使用 `inactive`，历史动作由审计日志记录。
+当前实现仍然只有 `inactive / active`；停用和未启用统一使用 `inactive`，历史动作由审计日志记录。
+
+如果后续需要“隐藏但可恢复”和“删除后释放 deployment_key”的使用体验，建议按 `product-qa/0010` 引入 `is_archived + deleted_at` 模型：
+
+- 默认列表不展示 archived 和 deleted
+- 已归档实例通过“已归档部署实例”入口查看
+- archived 实例不允许激活、发布、token reset、preview
+- archived 实例只能恢复为 `inactive`
+- deleted 实例不可恢复，但释放 `deployment_key`
+- 底层保留 tombstone row 和 `deployment_uid`，用于历史 Release、sync、heartbeat 和 audit 解释
 
 ## 9. 最小前端范围
 

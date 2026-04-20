@@ -86,6 +86,8 @@ token 特点：
 - 可手动重置
 - 可吊销
 - 数据库只存 hash
+- token 是鉴权凭证，不是唯一寻址参数；Open API 仍要求请求携带 `project / environment / deployment_key`
+- 服务端应校验 token 所属部署实例与请求中的 `deployment_key` 一致
 
 ## 6. 密码与 token 存储
 
@@ -187,7 +189,7 @@ token 存储建议：
 
 - 审计日志和 tracing 日志不得记录敏感配置明文
 - 如需记录配置差异，应记录脱敏后的摘要或字段路径
-- `detail` 只允许记录安全元数据，例如 `project_id`、`deployment_instance_id`、`config_file_id`、`revision`、`username`、`role`、`changed_fields`、`source_kind`、`token_preview`
+- `detail` 只允许记录安全元数据，例如 `project_id`、`deployment_instance_id`、`deployment_uid`、`deployment_key` 快照、`config_file_id`、`revision`、`username`、`role`、`changed_fields`、`source_kind`、`token_preview`
 
 ## 10. 开放接口安全要求
 

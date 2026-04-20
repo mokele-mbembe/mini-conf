@@ -219,7 +219,8 @@
 
 关键交互：
 
-- 列表显式区分模板
+- 列表应拆成“模板”和“部署实例”两个区块，避免模板与真实实例混排
+- 首版可在前端基于 `is_template` 对同一接口响应分组；如数量继续增长，再考虑后端增加 `is_template` 查询参数
 - 支持筛选 `environment_id` / `status`
 - 列表使用分页响应中的 `items / total / page / page_size`
 - 环境通过受控下拉选择，不再允许自由文本输入
@@ -227,6 +228,14 @@
 - 新建实例默认为 `inactive`
 - 激活实例时展示一次性 token；停用后旧 token 应立即失效
 - `PUT` 只允许修改 `environment_id / deployment_key / name / description`
+
+后续归档需求：
+
+- 当前部署实例状态仍只有 `active / inactive`
+- 如需归档后默认隐藏，应新增 `is_archived` 软归档维度，不应把 `archived` 加回 `status`
+- 已归档实例恢复后只能回到 `inactive`，不能直接恢复为 `active`
+- 如需释放 `deployment_key`，应通过严格确认后的产品层 delete 完成
+- delete 后底层保留 tombstone row 和 `deployment_uid`，用于审计和历史页面区分同 key 不同实体
 
 失败提示：
 
@@ -289,7 +298,7 @@
 - `PATCH /api/draft-saved-versions/:id`
 - `POST /api/draft-saved-versions/:id/restore`
 - `DELETE /api/draft-saved-versions/:id`
-- 当前后端已提供 Saved Versions 初版接口，前端工作台尚未接入
+- 当前后端和 Draft 编辑页前端均已接入 Saved Versions 主路径
 
 加载态 / 空状态 / 缺权限状态：
 
@@ -360,7 +369,7 @@
 
 - Saved Versions 不是并行可编辑 Draft 分支
 - 发布时不能直接发布某条 Saved Version，必须先恢复到 Current Draft
-- 前端接入前，Saved Versions 的 viewer 可见性与后端权限收口结果需要再次确认
+- Saved Versions 属于工作过程数据，首版只对 `admin / editor` 可见
 
 ## 12. 单配置 Clone 弹窗 / 流程
 
@@ -370,6 +379,7 @@
 
 依赖接口：
 
+- `GET /api/clone-sources`
 - `POST /api/drafts/:targetDeploymentId/:configFileId/clone`
 
 加载态 / 空状态 / 缺权限状态：
@@ -383,7 +393,9 @@
 
 关键交互：
 
-- 允许从同项目内其他实例选择来源
+- 允许从同项目内其他实例选择可复制来源
+- 来源列表应使用后端 clone-sources 专用接口，不再复用通用部署实例列表
+- 来源选择支持远程搜索、分页加载和 `draft / latest_release` 可用性展示
 - 前端批量 clone 时，通过多次调用单配置 clone 完成
 
 失败提示：
@@ -434,6 +446,7 @@
 
 - 浏览实例 / 配置文件的发布历史
 - 作为只读回看来源，不直接编辑
+- 提供不可编辑文本框直接回看某次 Release 内容
 
 依赖接口：
 
@@ -448,6 +461,7 @@
 
 - 支持按 `deployment_instance_id` / `config_file_id` 过滤
 - 进入详情后查看返回的 `content`、`revision`、`change_summary`
+- 详情页使用不可编辑文本框展示 `content`
 - secret 配置按后端脱敏后的内容展示
 - 在显眼位置展示：
   - `published_at`
@@ -457,6 +471,11 @@
   - 查看
   - 对比 Current Draft
   - 恢复到 Current Draft
+
+当前状态：
+
+- Release 列表已实现
+- Release 详情 / Diff 前端路由仍需从占位页补为真实页面
 
 ## 15. Diff 对比页
 

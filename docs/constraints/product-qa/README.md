@@ -30,3 +30,4 @@
 - `0007-config-identity-and-heartbeats.md`
 - `0008-current-draft-saved-versions-and-release-workspace.md`
 - `0009-saved-versions-api-and-rollout.md`
+- `0010-release-readonly-template-split-and-deployment-archive.md`

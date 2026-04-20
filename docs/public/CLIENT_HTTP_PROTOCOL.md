@@ -92,6 +92,8 @@ Authorization: Bearer <token>
 - 同一部署实例上的多个进程可以共享同一份 token
 - token 默认长期有效
 - 可通过管理端激活、停用和手动重置
+- token 是鉴权凭证，不是唯一寻址参数；客户端仍需要在请求中携带 `project / environment / deployment_key / config`
+- 服务端会校验 Bearer token 所属部署实例与请求中的 `deployment_key` 是否一致
 
 ## 4. 请求约定
 

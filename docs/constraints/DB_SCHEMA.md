@@ -131,6 +131,23 @@
 - 管理端创建实例时默认写入 `inactive`；激活后才允许 Open API 消费
 - `inactive` 同时表达“未启用”和“已停用”，历史由审计日志表达，不再引入 `archived`
 
+后续软归档 / 删除改造建议见 `product-qa/0010`：
+
+- 不建议把 `archived` 加回 `status`
+- 增加不可复用内部身份 `deployment_uid uuid`
+- 增加 `is_archived / archived_at / archived_by / archive_reason`
+- 增加 `deleted_at / deleted_by / delete_reason`
+- `archive` 可恢复，不释放 `deployment_key`
+- `delete` 是产品层删除，不可恢复，释放 `deployment_key`
+- 底层保留 tombstone row，不物理删除 `deployment_instances` 行
+- `deployment_key` 唯一约束改为只约束未删除行：
+
+```sql
+CREATE UNIQUE INDEX deployment_instances_live_key_unique
+ON deployment_instances (project_id, environment_id, deployment_key)
+WHERE deleted_at IS NULL;
+```
+
 ### drafts
 
 - `id` bigserial pk
