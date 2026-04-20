@@ -300,6 +300,136 @@
         ]
       }
     },
+    "/api/clone-sources": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "list_clone_sources",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "target_deployment_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "config_file_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List clone sources with availability",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloneSourceListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or expired admin session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Project not found or no access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database bootstrap disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_auth": []
+          }
+        ]
+      }
+    },
     "/api/config-files": {
       "get": {
         "tags": [
@@ -4828,6 +4958,79 @@
           }
         }
       },
+      "CloneSourceAvailability": {
+        "type": "object",
+        "required": [
+          "draft",
+          "latest_release"
+        ],
+        "properties": {
+          "draft": {
+            "type": "boolean"
+          },
+          "latest_release": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CloneSourceListResponse": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CloneSourceSummary"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "CloneSourceSummary": {
+        "type": "object",
+        "required": [
+          "deployment_instance_id",
+          "deployment_key",
+          "name",
+          "environment_id",
+          "environment_name",
+          "is_template",
+          "available_sources"
+        ],
+        "properties": {
+          "available_sources": {
+            "$ref": "#/components/schemas/CloneSourceAvailability"
+          },
+          "deployment_instance_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "deployment_key": {
+            "type": "string"
+          },
+          "environment_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "environment_name": {
+            "type": "string"
+          },
+          "is_template": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
       "ConfigBundleItem": {
         "type": "object",
         "required": [
@@ -5721,6 +5924,48 @@
               "integer",
               "null"
             ],
+            "format": "int64"
+          }
+        }
+      },
+      "ListCloneSourcesParams": {
+        "type": "object",
+        "required": [
+          "project_id",
+          "target_deployment_id",
+          "config_file_id"
+        ],
+        "properties": {
+          "config_file_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "cursor": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "keyword": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "project_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "target_deployment_id": {
+            "type": "integer",
             "format": "int64"
           }
         }

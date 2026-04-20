@@ -1,5 +1,6 @@
 pub mod audit;
 pub mod auth;
+pub mod clone_source;
 pub mod config_file;
 pub mod deployment_instance;
 pub mod draft;

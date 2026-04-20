@@ -1,5 +1,6 @@
 pub(crate) mod audit_logs;
 pub(crate) mod auth;
+pub(crate) mod clone_sources;
 pub(crate) mod config_files;
 pub(crate) mod deployment_heartbeats;
 pub(crate) mod deployment_instances;
@@ -19,6 +20,7 @@ pub fn router() -> Router<crate::state::AppState> {
     Router::new()
         .merge(audit_logs::router())
         .merge(auth::router())
+        .merge(clone_sources::router())
         .merge(config_files::router())
         .merge(deployment_instances::router())
         .merge(deployment_heartbeats::router())

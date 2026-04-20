@@ -6,6 +6,7 @@ use schema::{
         DeploymentHeartbeatSummary, DeploymentSyncRecordListResponse, DeploymentSyncRecordSummary,
     },
     auth::{AuthSessionResponse, AuthUser},
+    clone_source::{CloneSourceAvailability, CloneSourceListResponse, CloneSourceSummary},
     config_file::{ConfigFileListResponse, ConfigFileSummary},
     deployment_instance::{
         DeploymentBundlePreviewResponse, DeploymentInstanceListResponse, DeploymentInstanceSummary,
@@ -53,6 +54,7 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
         crate::http::api::auth::logout,
         crate::http::api::auth::me,
         crate::http::api::audit_logs::list_audit_logs,
+        crate::http::api::clone_sources::list_clone_sources,
         crate::http::api::config_files::list_config_files,
         crate::http::api::config_files::create_config_file,
         crate::http::api::config_files::get_config_file,
@@ -107,6 +109,9 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
             AuthUser,
             AuditLogSummary,
             AuditLogListResponse,
+            CloneSourceAvailability,
+            CloneSourceSummary,
+            CloneSourceListResponse,
             DeploymentHeartbeatSummary,
             DeploymentHeartbeatListResponse,
             ConfigFileSummary,
@@ -156,6 +161,7 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
             UpdateProjectMemberRequestBody,
             PublishReleaseRequestBody,
             ListAuditLogsParams,
+            ListCloneSourcesParams,
             ListConfigFilesParams,
             ListDeploymentHeartbeatsParams,
             ListDeploymentSyncRecordsParams,
@@ -395,6 +401,17 @@ pub struct UpdateSavedVersionRequestBody {
 #[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
 pub struct RestoreSavedVersionRequestBody {
     pub base_version: Option<i64>,
+}
+
+#[derive(Debug, IntoParams, ToSchema)]
+#[into_params(parameter_in = Query)]
+pub struct ListCloneSourcesParams {
+    pub project_id: i64,
+    pub target_deployment_id: i64,
+    pub config_file_id: i64,
+    pub keyword: Option<String>,
+    pub limit: Option<i64>,
+    pub cursor: Option<i64>,
 }
 
 #[derive(Debug, IntoParams, ToSchema)]
