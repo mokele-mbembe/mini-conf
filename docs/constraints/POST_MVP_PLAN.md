@@ -116,6 +116,30 @@
 - 支持更灵活的分批发布
 - 与 Scope 能力结合
 
+### 4. 配置内容语法高亮与彩色 Diff
+
+当前状态：
+
+- Release 只读详情页和 Diff 页已经具备基础文本展示能力
+- 前端当前依赖只有 Vue / Element Plus / Pinia / Router，没有引入专门的语法高亮或 Diff 渲染库
+- 早期安全约束中曾以 Monaco 作为编辑器示例提到“编辑内容不直接作为 HTML 渲染”，但 MVP 前端实际未安装 Monaco，也未把 Monaco 作为当前交付验收项
+- 现有 Diff 页先用两列只读文本展示上一版 / 当前版本，并显示行数摘要
+
+后续目标：
+
+- 在 Release 详情页、Release Diff 页、preview-bundle 和 Draft 编辑页的只读预览区域支持 YAML / TOML 语法高亮
+- 在 Diff 页支持新增 / 删除 / 修改行的颜色区分，必要时支持行号和折叠未变更上下文
+- 敏感配置被脱敏时仍保持高亮和 Diff 结构稳定，不因为脱敏占位符破坏阅读体验
+
+实施建议：
+
+- 优先选择只读渲染方案，不急于把 Draft 编辑器整体替换成重型代码编辑器
+- 语法高亮可评估 `Shiki` 或 `highlight.js`；Release 详情这类只读页面更适合按需加载高亮器，避免继续放大主 bundle
+- Diff 颜色展示可评估 `diff` / `diff2html`，或基于后端已有 `before_content` / `after_content` 在前端生成 line diff 后自绘简单行级视图
+- 如果后续 Draft 编辑器也需要代码编辑体验，再单独评估 CodeMirror 6 / Monaco，不和只读 Release 视图绑定推进
+- 如果选择 Monaco，应优先封装成独立 `ConfigCodeViewer` / `ConfigCodeEditor`，使用 Vite worker 配置和动态导入控制 bundle 体积，再逐步替换 Draft 编辑器与只读 Release 视图
+- 加入 E2E/组件层检查：确认 YAML / TOML 内容可见、secret redaction 可见、首个发布版本不显示误导性删除行、普通变更能展示新增/删除颜色
+
 ## 4. 实际业务背景
 
 这个路线图主要来自你的 `coffee-legacy` 场景：
