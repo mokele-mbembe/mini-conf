@@ -356,6 +356,7 @@ pub struct ListDeploymentInstancesParams {
     pub environment_id: Option<i64>,
     pub keyword: Option<String>,
     pub status: Option<String>,
+    pub is_template: Option<bool>,
     pub page: Option<i64>,
     pub page_size: Option<i64>,
 }

@@ -938,3 +938,149 @@ async fn preview_bundle_prefers_draft_and_marks_missing_required() -> TestResult
 
     teardown(&database_url, &schema, pool).await
 }
+
+#[tokio::test]
+async fn list_deployment_instances_filters_by_is_template() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    let project_id = seed_project(&pool, "coffee-legacy", "Coffee Legacy").await?;
+    let prod_env =
+        seed_project_environment(&pool, project_id, "prod", "Production", "active", 10).await?;
+    let staging_env =
+        seed_project_environment(&pool, project_id, "staging", "Staging", "active", 20).await?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO deployment_instances (project_id, environment_id, deployment_key, name, is_template, status)
+        VALUES
+            ($1, $2, 'tmpl-a', 'Template A', true, 'inactive'),
+            ($1, $2, 'tmpl-b', 'Template B', true, 'inactive'),
+            ($1, $3, 'store-001', 'Store 001', false, 'active'),
+            ($1, $3, 'store-002', 'Store 002', false, 'inactive')
+        "#,
+    )
+    .bind(project_id)
+    .bind(prod_env)
+    .bind(staging_env)
+    .execute(&pool)
+    .await?;
+
+    let cookie = login(&app).await?;
+
+    // is_template=true: only templates
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/deployment-instances?project_id={project_id}&is_template=true"
+                ))
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: DeploymentInstanceListResponse = read_json(response).await?;
+    assert_eq!(payload.total, 2);
+    assert_eq!(payload.items.len(), 2);
+    assert!(payload.items.iter().all(|item| item.is_template));
+
+    // is_template=false: only non-templates
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/deployment-instances?project_id={project_id}&is_template=false"
+                ))
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: DeploymentInstanceListResponse = read_json(response).await?;
+    assert_eq!(payload.total, 2);
+    assert_eq!(payload.items.len(), 2);
+    assert!(payload.items.iter().all(|item| !item.is_template));
+
+    // no is_template: returns all 4
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/deployment-instances?project_id={project_id}"))
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: DeploymentInstanceListResponse = read_json(response).await?;
+    assert_eq!(payload.total, 4);
+    assert_eq!(payload.items.len(), 4);
+
+    // is_template combined with keyword
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/deployment-instances?project_id={project_id}&is_template=true&keyword=tmpl-a"
+                ))
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: DeploymentInstanceListResponse = read_json(response).await?;
+    assert_eq!(payload.total, 1);
+    assert_eq!(payload.items.len(), 1);
+    assert_eq!(payload.items[0].deployment_key, "tmpl-a");
+    assert!(payload.items[0].is_template);
+
+    // is_template combined with environment_id
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/deployment-instances?project_id={project_id}&is_template=false&environment_id={staging_env}"
+                ))
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: DeploymentInstanceListResponse = read_json(response).await?;
+    assert_eq!(payload.total, 2);
+    assert_eq!(payload.items.len(), 2);
+    assert!(
+        payload
+            .items
+            .iter()
+            .all(|item| !item.is_template && item.environment_id == staging_env)
+    );
+
+    // is_template combined with status
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/deployment-instances?project_id={project_id}&is_template=false&status=active"
+                ))
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: DeploymentInstanceListResponse = read_json(response).await?;
+    assert_eq!(payload.total, 1);
+    assert_eq!(payload.items.len(), 1);
+    assert_eq!(payload.items[0].deployment_key, "store-001");
+    assert!(!payload.items[0].is_template);
+    assert_eq!(payload.items[0].status, "active");
+
+    teardown(&database_url, &schema, pool).await
+}

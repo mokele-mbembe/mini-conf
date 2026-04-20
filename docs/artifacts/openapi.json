@@ -905,6 +905,14 @@
             }
           },
           {
+            "name": "is_template",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
             "name": "page",
             "in": "query",
             "required": false,
@@ -6023,6 +6031,12 @@
               "null"
             ],
             "format": "int64"
+          },
+          "is_template": {
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "keyword": {
             "type": [

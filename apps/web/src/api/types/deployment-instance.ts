@@ -26,6 +26,7 @@ export interface ListDeploymentInstancesParams {
   environment_id?: number;
   status?: DeploymentInstanceStatus;
   keyword?: string;
+  is_template?: boolean;
   page?: number;
   page_size?: number;
 }

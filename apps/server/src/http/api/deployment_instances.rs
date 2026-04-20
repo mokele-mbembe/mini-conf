@@ -27,6 +27,7 @@ pub(crate) struct ListDeploymentInstancesQuery {
     environment_id: Option<i64>,
     keyword: Option<String>,
     status: Option<String>,
+    is_template: Option<bool>,
     page: Option<i64>,
     page_size: Option<i64>,
 }
@@ -195,6 +196,7 @@ pub(crate) async fn list_deployment_instances(
                 OR di.deployment_key ILIKE '%' || $5 || '%'
                 OR di.name ILIKE '%' || $5 || '%'
           )
+          AND ($6::boolean IS NULL OR di.is_template = $6)
         "#,
     )
     .bind(auth.user_id)
@@ -202,6 +204,7 @@ pub(crate) async fn list_deployment_instances(
     .bind(query.environment_id)
     .bind(normalize_optional(query.status.clone()))
     .bind(normalize_optional(query.keyword.clone()))
+    .bind(query.is_template)
     .fetch_one(pool)
     .await
     .map_err(|_| ApiError::internal())?;
@@ -238,8 +241,9 @@ pub(crate) async fn list_deployment_instances(
                 OR di.deployment_key ILIKE '%' || $5 || '%'
                 OR di.name ILIKE '%' || $5 || '%'
         )
+          AND ($6::boolean IS NULL OR di.is_template = $6)
         ORDER BY di.project_id ASC, pe.code ASC, di.deployment_key ASC, di.id ASC
-        LIMIT $6 OFFSET $7
+        LIMIT $7 OFFSET $8
         "#,
     )
     .bind(auth.user_id)
@@ -247,6 +251,7 @@ pub(crate) async fn list_deployment_instances(
     .bind(query.environment_id)
     .bind(normalize_optional(query.status))
     .bind(normalize_optional(query.keyword))
+    .bind(query.is_template)
     .bind(page_size)
     .bind(offset)
     .fetch_all(pool)

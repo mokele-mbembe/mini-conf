@@ -158,6 +158,14 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "deployments.create": "新建部署实例",
     "deployments.empty": "暂无部署实例",
     "deployments.emptyNeedEnvironment": "请先创建项目环境，再新建部署实例",
+    "deployments.section.templates": "模板",
+    "deployments.section.templatesDesc":
+      "用于复制一套配置，不参与激活和 token 操作。",
+    "deployments.section.templatesEmpty": "暂无模板",
+    "deployments.section.instances": "部署实例",
+    "deployments.section.instancesDesc":
+      "实际客户端接入的实例，可激活、停用、重置 token。",
+    "deployments.section.instancesEmpty": "暂无部署实例",
     "deployments.emptyDescription": "暂无描述",
     "deployments.emptyTemplateSource": "无",
     "deployments.filter.keywordPlaceholder": "搜索名称或实例标识",
@@ -625,6 +633,14 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "deployments.empty": "No deployments yet",
     "deployments.emptyNeedEnvironment":
       "Create a project environment before creating deployments",
+    "deployments.section.templates": "Templates",
+    "deployments.section.templatesDesc":
+      "Used as clone sources for configuration. Not activated or issued tokens.",
+    "deployments.section.templatesEmpty": "No templates yet",
+    "deployments.section.instances": "Deployment Instances",
+    "deployments.section.instancesDesc":
+      "Client-facing instances that can be activated, deactivated, and issued tokens.",
+    "deployments.section.instancesEmpty": "No deployment instances yet",
     "deployments.emptyDescription": "No description",
     "deployments.emptyTemplateSource": "None",
     "deployments.filter.keywordPlaceholder": "Search name or deployment key",

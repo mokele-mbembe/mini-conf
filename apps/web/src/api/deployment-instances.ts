@@ -26,6 +26,9 @@ function buildDeploymentInstanceQuery(
   if (params?.keyword) {
     query.set("keyword", params.keyword);
   }
+  if (params?.is_template !== undefined) {
+    query.set("is_template", String(params.is_template));
+  }
   if (params?.page !== undefined) {
     query.set("page", String(params.page));
   }

@@ -36,25 +36,65 @@
 
       <ProjectTabs />
 
+      <!-- Top-level toolbar: create button + environment notice -->
+      <div class="deployment-instance-list-page__top-toolbar">
+        <el-button
+          v-if="isAdmin"
+          type="primary"
+          :disabled="activeEnvironmentCount === 0"
+          @click="openCreateDialog"
+        >
+          {{ t("deployments.create") }}
+        </el-button>
+      </div>
+
+      <el-alert
+        v-if="!environmentsLoading && activeEnvironmentCount === 0"
+        :title="t('deployments.emptyEnvironmentNotice')"
+        type="warning"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 16px"
+      >
+        <template #default>
+          <el-button
+            v-if="isAdmin"
+            link
+            type="primary"
+            @click="goToEnvironmentPage"
+          >
+            {{ t("deployments.goToEnvironmentManagement") }}
+          </el-button>
+        </template>
+      </el-alert>
+
+      <!-- ==================== Template Section ==================== -->
       <div class="deployment-instance-list-page__section">
+        <h3 class="deployment-instance-list-page__section-title">
+          {{ t("deployments.section.templates") }}
+        </h3>
+        <p class="deployment-instance-list-page__section-desc">
+          {{ t("deployments.section.templatesDesc") }}
+        </p>
+
         <div class="deployment-instance-list-page__toolbar">
           <div class="deployment-instance-list-page__filters">
             <el-input
-              v-model="keywordFilter"
+              v-model="templateList.keyword.value"
               :placeholder="t('deployments.filter.keywordPlaceholder')"
               clearable
               style="width: 220px"
-              @keyup.enter="handleSearch"
-              @clear="handleSearch"
+              @keyup.enter="templateList.search"
+              @clear="templateList.search"
             />
 
             <el-select
-              v-model="environmentFilter"
+              v-model="templateList.environmentId.value"
               :placeholder="t('deployments.filter.environmentPlaceholder')"
               clearable
               :loading="environmentsLoading"
               style="width: 220px"
-              @change="handleFilterChange"
+              @change="templateList.filterChange"
             >
               <el-option
                 :label="t('deployments.filter.allEnvironments')"
@@ -68,70 +108,36 @@
               />
             </el-select>
 
-            <el-select
-              v-model="statusFilter"
-              :placeholder="t('deployments.filter.allStatuses')"
-              clearable
-              style="width: 140px"
-              @change="handleFilterChange"
-            >
-              <el-option :label="t('deployments.filter.all')" value="" />
-              <el-option :label="t('status.active')" value="active" />
-              <el-option :label="t('status.inactive')" value="inactive" />
-            </el-select>
-
-            <el-button @click="handleSearch">
+            <el-button @click="templateList.search">
               {{ t("deployments.filter.search") }}
             </el-button>
 
-            <el-button text @click="resetFilters">
+            <el-button text @click="templateList.resetFilters">
               {{ t("deployments.filter.reset") }}
             </el-button>
           </div>
-
-          <el-button
-            v-if="isAdmin"
-            type="primary"
-            :disabled="activeEnvironmentCount === 0"
-            @click="openCreateDialog"
-          >
-            {{ t("deployments.create") }}
-          </el-button>
         </div>
 
-        <el-alert
-          v-if="!environmentsLoading && activeEnvironmentCount === 0"
-          :title="t('deployments.emptyEnvironmentNotice')"
-          type="warning"
-          :closable="false"
-          show-icon
-          style="margin-bottom: 16px"
-        >
-          <template #default>
-            <el-button
-              v-if="isAdmin"
-              link
-              type="primary"
-              @click="goToEnvironmentPage"
-            >
-              {{ t("deployments.goToEnvironmentManagement") }}
-            </el-button>
-          </template>
-        </el-alert>
-
         <ErrorState
-          v-if="listError"
+          v-if="templateList.error.value"
           :title="t('deployments.page.loadError')"
-          :subtitle="getErrorMessage(listError.code, listError.message)"
-          @retry="loadDeploymentInstances"
+          :subtitle="
+            getErrorMessage(
+              templateList.error.value.code,
+              templateList.error.value.message,
+            )
+          "
+          @retry="templateList.load"
         />
 
         <EmptyState
-          v-else-if="!listLoading && deployments.length === 0"
+          v-else-if="
+            !templateList.loading.value && templateList.items.value.length === 0
+          "
           :description="
             environments.length === 0
               ? t('deployments.emptyNeedEnvironment')
-              : t('deployments.empty')
+              : t('deployments.section.templatesEmpty')
           "
         >
           <el-button
@@ -141,21 +147,13 @@
           >
             {{ t("deployments.goToEnvironmentManagement") }}
           </el-button>
-          <el-button
-            v-else-if="isAdmin"
-            type="primary"
-            :disabled="activeEnvironmentCount === 0"
-            @click="openCreateDialog"
-          >
-            {{ t("deployments.create") }}
-          </el-button>
         </EmptyState>
 
         <template v-else>
           <div class="deployment-instance-list-page__table page-table-shell">
             <el-table
-              v-loading="listLoading"
-              :data="deployments"
+              v-loading="templateList.loading.value"
+              :data="templateList.items.value"
               stripe
               style="width: 100%"
             >
@@ -190,19 +188,200 @@
               />
 
               <el-table-column
-                :label="t('deployments.column.type')"
-                width="110"
-                align="center"
+                :label="t('deployments.column.description')"
+                min-width="180"
+                show-overflow-tooltip
               >
                 <template #default="{ row }">
-                  <el-tag v-if="row.is_template" size="small" type="warning">
-                    {{ t("deployments.type.template") }}
-                  </el-tag>
-                  <el-tag v-else size="small" type="success">
-                    {{ t("deployments.type.instance") }}
+                  {{ row.description || t("deployments.emptyDescription") }}
+                </template>
+              </el-table-column>
+
+              <el-table-column
+                :label="t('deployments.column.actions')"
+                width="220"
+                align="center"
+                fixed="right"
+              >
+                <template #default="{ row }">
+                  <div class="deployment-instance-list-page__actions">
+                    <el-button
+                      text
+                      type="primary"
+                      size="small"
+                      @click="openDetail(row)"
+                    >
+                      {{ t("deployments.action.view") }}
+                    </el-button>
+                    <el-button
+                      v-if="isAdmin"
+                      text
+                      type="primary"
+                      size="small"
+                      :disabled="activeEnvironmentCount === 0"
+                      @click="openCloneDialog(row)"
+                    >
+                      {{ t("deployments.action.cloneFromTemplate") }}
+                    </el-button>
+                  </div>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+
+          <div class="deployment-instance-list-page__pagination">
+            <el-pagination
+              v-model:current-page="templateList.page.value"
+              v-model:page-size="templateList.pageSize.value"
+              :page-sizes="[10, 20, 50, 100]"
+              :total="templateList.total.value"
+              layout="total, sizes, prev, pager, next"
+              background
+              @current-change="templateList.load"
+              @size-change="templateList.pageSizeChange"
+            />
+          </div>
+        </template>
+      </div>
+
+      <!-- ==================== Instance Section ==================== -->
+      <div class="deployment-instance-list-page__section">
+        <h3 class="deployment-instance-list-page__section-title">
+          {{ t("deployments.section.instances") }}
+        </h3>
+        <p class="deployment-instance-list-page__section-desc">
+          {{ t("deployments.section.instancesDesc") }}
+        </p>
+
+        <div class="deployment-instance-list-page__toolbar">
+          <div class="deployment-instance-list-page__filters">
+            <el-input
+              v-model="instanceList.keyword.value"
+              :placeholder="t('deployments.filter.keywordPlaceholder')"
+              clearable
+              style="width: 220px"
+              @keyup.enter="instanceList.search"
+              @clear="instanceList.search"
+            />
+
+            <el-select
+              v-model="instanceList.environmentId.value"
+              :placeholder="t('deployments.filter.environmentPlaceholder')"
+              clearable
+              :loading="environmentsLoading"
+              style="width: 220px"
+              @change="instanceList.filterChange"
+            >
+              <el-option
+                :label="t('deployments.filter.allEnvironments')"
+                value=""
+              />
+              <el-option
+                v-for="item in environments"
+                :key="item.id"
+                :label="`${item.name} (${item.code})`"
+                :value="String(item.id)"
+              />
+            </el-select>
+
+            <el-select
+              v-model="instanceList.status.value"
+              :placeholder="t('deployments.filter.allStatuses')"
+              clearable
+              style="width: 140px"
+              @change="instanceList.filterChange"
+            >
+              <el-option :label="t('deployments.filter.all')" value="" />
+              <el-option :label="t('status.active')" value="active" />
+              <el-option :label="t('status.inactive')" value="inactive" />
+            </el-select>
+
+            <el-button @click="instanceList.search">
+              {{ t("deployments.filter.search") }}
+            </el-button>
+
+            <el-button text @click="instanceList.resetFilters">
+              {{ t("deployments.filter.reset") }}
+            </el-button>
+          </div>
+        </div>
+
+        <ErrorState
+          v-if="instanceList.error.value"
+          :title="t('deployments.page.loadError')"
+          :subtitle="
+            getErrorMessage(
+              instanceList.error.value.code,
+              instanceList.error.value.message,
+            )
+          "
+          @retry="instanceList.load"
+        />
+
+        <EmptyState
+          v-else-if="
+            !instanceList.loading.value && instanceList.items.value.length === 0
+          "
+          :description="
+            environments.length === 0
+              ? t('deployments.emptyNeedEnvironment')
+              : t('deployments.section.instancesEmpty')
+          "
+        >
+          <el-button
+            v-if="isAdmin && environments.length === 0"
+            type="primary"
+            @click="goToEnvironmentPage"
+          >
+            {{ t("deployments.goToEnvironmentManagement") }}
+          </el-button>
+          <el-button
+            v-else-if="isAdmin"
+            type="primary"
+            :disabled="activeEnvironmentCount === 0"
+            @click="openCreateDialog"
+          >
+            {{ t("deployments.create") }}
+          </el-button>
+        </EmptyState>
+
+        <template v-else>
+          <div class="deployment-instance-list-page__table page-table-shell">
+            <el-table
+              v-loading="instanceList.loading.value"
+              :data="instanceList.items.value"
+              stripe
+              style="width: 100%"
+            >
+              <el-table-column
+                prop="environment_code"
+                :label="t('deployments.column.environment')"
+                min-width="180"
+              >
+                <template #default="{ row }">
+                  <el-tag size="small" type="info">
+                    {{ row.environment_name }} ({{ row.environment_code }})
                   </el-tag>
                 </template>
               </el-table-column>
+
+              <el-table-column
+                prop="deployment_key"
+                :label="t('deployments.column.deploymentKey')"
+                min-width="180"
+              >
+                <template #default="{ row }">
+                  <span class="deployment-instance-list-page__code">
+                    {{ row.deployment_key }}
+                  </span>
+                </template>
+              </el-table-column>
+
+              <el-table-column
+                prop="name"
+                :label="t('deployments.column.name')"
+                min-width="170"
+              />
 
               <el-table-column
                 :label="t('deployments.column.status')"
@@ -241,9 +420,7 @@
                       {{ t("deployments.action.view") }}
                     </el-button>
                     <el-button
-                      v-if="
-                        isAdmin && !row.is_template && row.status === 'inactive'
-                      "
+                      v-if="isAdmin && row.status === 'inactive'"
                       text
                       type="success"
                       size="small"
@@ -253,9 +430,7 @@
                       {{ t("deployments.action.activate") }}
                     </el-button>
                     <el-button
-                      v-if="
-                        isAdmin && !row.is_template && row.status === 'active'
-                      "
+                      v-if="isAdmin && row.status === 'active'"
                       text
                       type="warning"
                       size="small"
@@ -265,9 +440,7 @@
                       {{ t("deployments.action.deactivate") }}
                     </el-button>
                     <el-button
-                      v-if="
-                        isAdmin && !row.is_template && row.status === 'active'
-                      "
+                      v-if="isAdmin && row.status === 'active'"
                       text
                       type="primary"
                       size="small"
@@ -275,16 +448,6 @@
                       @click="handleResetToken(row)"
                     >
                       {{ t("deployments.action.resetToken") }}
-                    </el-button>
-                    <el-button
-                      v-if="isAdmin && row.is_template"
-                      text
-                      type="primary"
-                      size="small"
-                      :disabled="activeEnvironmentCount === 0"
-                      @click="openCloneDialog(row)"
-                    >
-                      {{ t("deployments.action.cloneFromTemplate") }}
                     </el-button>
                   </div>
                 </template>
@@ -294,14 +457,14 @@
 
           <div class="deployment-instance-list-page__pagination">
             <el-pagination
-              v-model:current-page="page"
-              v-model:page-size="pageSize"
+              v-model:current-page="instanceList.page.value"
+              v-model:page-size="instanceList.pageSize.value"
               :page-sizes="[10, 20, 50, 100]"
-              :total="total"
+              :total="instanceList.total.value"
               layout="total, sizes, prev, pager, next"
               background
-              @current-change="loadDeploymentInstances"
-              @size-change="handlePageSizeChange"
+              @current-change="instanceList.load"
+              @size-change="instanceList.pageSizeChange"
             />
           </div>
         </template>
@@ -330,11 +493,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useRoute, useRouter } from "vue-router";
 import { useProjectContext } from "@/modules/projects/composables/useProjectContext";
 import { useProjectEnvironments } from "@/modules/project-environments/composables/useProjectEnvironments";
+import { useDeploymentInstanceList } from "../composables/useDeploymentInstanceList";
 import ProjectTabs from "@/modules/projects/components/ProjectTabs.vue";
 import DeploymentInstanceCreateDialog from "../components/DeploymentInstanceCreateDialog.vue";
 import DeploymentInstanceCloneDialog from "../components/DeploymentInstanceCloneDialog.vue";
@@ -350,7 +514,6 @@ import * as deploymentInstancesApi from "@/api/deployment-instances";
 import { ApiRequestError } from "@/api/error";
 import { getErrorMessage } from "@/shared/constants/error-messages";
 import type {
-  DeploymentInstanceStatus,
   DeploymentInstanceSummary,
   DeploymentTokenResponse,
 } from "@/api/types/deployment-instance";
@@ -376,18 +539,21 @@ const {
   load: loadEnvironments,
 } = useProjectEnvironments(() => projectId.value);
 
-const deployments = ref<DeploymentInstanceSummary[]>([]);
-const listLoading = ref(false);
-const listError = ref<ApiRequestError | null>(null);
-const keywordFilter = ref("");
-const environmentFilter = ref("");
-const statusFilter = ref<DeploymentInstanceStatus | "">("");
-const page = ref(1);
-const pageSize = ref(20);
-const total = ref(0);
 const activeEnvironmentCount = computed(
   () => environments.value.filter((item) => item.status === "active").length,
 );
+
+const templateList = useDeploymentInstanceList({
+  getProjectId: () => projectId.value,
+  isTemplate: true,
+  withStatusFilter: false,
+});
+
+const instanceList = useDeploymentInstanceList({
+  getProjectId: () => projectId.value,
+  isTemplate: false,
+  withStatusFilter: true,
+});
 
 const dialogVisible = ref(false);
 const cloneDialogVisible = ref(false);
@@ -397,69 +563,15 @@ const tokenDialogMode = ref<"activate" | "reset">("activate");
 const tokenPayload = ref<DeploymentTokenResponse | null>(null);
 const actionTarget = ref<{ id: number; action: string } | null>(null);
 
-async function loadDeploymentInstances() {
-  listLoading.value = true;
-  listError.value = null;
-  try {
-    const res = await deploymentInstancesApi.listDeploymentInstances({
-      project_id: projectId.value,
-      keyword: keywordFilter.value.trim() || undefined,
-      environment_id: environmentFilter.value
-        ? Number(environmentFilter.value)
-        : undefined,
-      status: statusFilter.value || undefined,
-      page: page.value,
-      page_size: pageSize.value,
-    });
-    deployments.value = res.items;
-    total.value = res.total;
-    page.value = res.page;
-    pageSize.value = res.page_size;
-  } catch (err) {
-    if (err instanceof ApiRequestError) {
-      listError.value = err;
-    } else {
-      listError.value = new ApiRequestError(0, {
-        code: "unknown_error",
-        message: t("deployments.page.loadError"),
-      });
-    }
-  } finally {
-    listLoading.value = false;
-  }
-}
-
 async function loadAll() {
   const id = projectId.value;
   if (Number.isNaN(id)) return;
   await Promise.all([
     fetchProject(id),
     loadEnvironments(),
-    loadDeploymentInstances(),
+    templateList.load(),
+    instanceList.load(),
   ]);
-}
-
-function handleSearch() {
-  page.value = 1;
-  loadDeploymentInstances();
-}
-
-function handleFilterChange() {
-  page.value = 1;
-  loadDeploymentInstances();
-}
-
-function resetFilters() {
-  keywordFilter.value = "";
-  environmentFilter.value = "";
-  statusFilter.value = "";
-  page.value = 1;
-  loadDeploymentInstances();
-}
-
-function handlePageSizeChange() {
-  page.value = 1;
-  loadDeploymentInstances();
 }
 
 function openCreateDialog() {
@@ -487,10 +599,15 @@ function openTokenDialog(
   tokenDialogVisible.value = true;
 }
 
-function handleCreateSuccess() {
-  statusFilter.value = "";
-  page.value = 1;
-  loadDeploymentInstances();
+function handleCreateSuccess(item?: DeploymentInstanceSummary) {
+  if (item && item.is_template) {
+    templateList.page.value = 1;
+    templateList.load();
+  } else {
+    instanceList.status.value = "";
+    instanceList.page.value = 1;
+    instanceList.load();
+  }
 }
 
 function handleCloneSuccess(item: DeploymentInstanceSummary) {
@@ -516,7 +633,7 @@ async function handleActivate(row: DeploymentInstanceSummary) {
     );
     ElMessage.success(t("toast.deployments.activated"));
     openTokenDialog(payload, "activate");
-    await loadDeploymentInstances();
+    await instanceList.load();
   } catch (err) {
     if (err === "cancel" || err === "close") return;
     if (err instanceof ApiRequestError) {
@@ -539,7 +656,7 @@ async function handleDeactivate(row: DeploymentInstanceSummary) {
     actionTarget.value = { id: row.id, action: "deactivate" };
     await deploymentInstancesApi.deactivateDeploymentInstance(row.id);
     ElMessage.success(t("toast.deployments.deactivated"));
-    await loadDeploymentInstances();
+    await instanceList.load();
   } catch (err) {
     if (err === "cancel" || err === "close") return;
     if (err instanceof ApiRequestError) {
@@ -563,7 +680,7 @@ async function handleResetToken(row: DeploymentInstanceSummary) {
     const payload = await deploymentInstancesApi.resetDeploymentToken(row.id);
     ElMessage.success(t("toast.deployments.tokenReset"));
     openTokenDialog(payload, "reset");
-    await loadDeploymentInstances();
+    await instanceList.load();
   } catch (err) {
     if (err === "cancel" || err === "close") return;
     if (err instanceof ApiRequestError) {
@@ -593,22 +710,6 @@ function openDetail(row: DeploymentInstanceSummary) {
   });
 }
 
-// Keyword debounce: auto-search 300ms after the user stops typing.
-let keywordDebounceTimer: ReturnType<typeof globalThis.setTimeout> | null =
-  null;
-
-watch(keywordFilter, () => {
-  if (keywordDebounceTimer) globalThis.clearTimeout(keywordDebounceTimer);
-  keywordDebounceTimer = globalThis.setTimeout(() => {
-    page.value = 1;
-    loadDeploymentInstances();
-  }, 300);
-});
-
-onUnmounted(() => {
-  if (keywordDebounceTimer) globalThis.clearTimeout(keywordDebounceTimer);
-});
-
 onMounted(loadAll);
 
 watch(
@@ -626,8 +727,27 @@ watch(
   margin-bottom: var(--spacing-md);
 }
 
-.deployment-instance-list-page__section {
+.deployment-instance-list-page__top-toolbar {
+  display: flex;
+  justify-content: flex-end;
   margin-top: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.deployment-instance-list-page__section {
+  margin-top: var(--spacing-lg);
+}
+
+.deployment-instance-list-page__section-title {
+  margin: 0 0 4px 0;
+  font-size: 1.1em;
+  font-weight: 600;
+}
+
+.deployment-instance-list-page__section-desc {
+  margin: 0 0 var(--spacing-md) 0;
+  font-size: 0.9em;
+  color: var(--el-text-color-secondary);
 }
 
 .deployment-instance-list-page__toolbar {

@@ -700,3 +700,106 @@ test("release detail and diff: publish draft → view detail → view diff", asy
     timeout: 10_000,
   });
 });
+
+// ---------------------------------------------------------------------------
+// Deployment list split: template section vs instance section
+// ---------------------------------------------------------------------------
+
+test("deployment list page: templates and instances in separate sections", async ({
+  page,
+}) => {
+  const suffix = Date.now().toString();
+  await login(page);
+
+  const projectId = await createProject(page, suffix);
+
+  // Create environment via API
+  const envResponse = await page.request.post(
+    `/api/projects/${projectId}/environments`,
+    { data: { code: `e2e-env-${suffix}`, name: `E2E Env ${suffix}` } },
+  );
+  expect(envResponse.ok()).toBeTruthy();
+  const env = (await envResponse.json()) as { id: number };
+
+  // Create a template via API
+  const tmplResponse = await page.request.post("/api/deployment-instances", {
+    data: {
+      project_id: projectId,
+      environment_id: env.id,
+      deployment_key: `tmpl-${suffix}`,
+      name: `Template ${suffix}`,
+      is_template: true,
+    },
+  });
+  expect(tmplResponse.ok()).toBeTruthy();
+
+  // Create a normal instance via API
+  const instResponse = await page.request.post("/api/deployment-instances", {
+    data: {
+      project_id: projectId,
+      environment_id: env.id,
+      deployment_key: `inst-${suffix}`,
+      name: `Instance ${suffix}`,
+      is_template: false,
+    },
+  });
+  expect(instResponse.ok()).toBeTruthy();
+
+  // Navigate to deployments page
+  await page.goto(`/projects/${projectId}/deployments`);
+
+  // Wait for both sections to be visible
+  const sections = page.locator(
+    ".deployment-instance-list-page__section-title",
+  );
+  await expect(sections).toHaveCount(2, { timeout: 10_000 });
+
+  // Template section: should show the template, not the instance
+  const templateSection = page
+    .locator(".deployment-instance-list-page__section")
+    .first();
+  await expect(templateSection).toContainText(`tmpl-${suffix}`);
+  await expect(templateSection).not.toContainText(`inst-${suffix}`);
+
+  // Template row should have "创建实例" button and no "激活" button
+  const templateRow = templateSection.locator(".el-table__row", {
+    hasText: `tmpl-${suffix}`,
+  });
+  await expect(templateRow).toBeVisible();
+  await expect(
+    templateRow.getByRole("button", { name: "创建实例" }),
+  ).toBeVisible();
+  await expect(
+    templateRow.getByRole("button", { name: "激活" }),
+  ).not.toBeVisible();
+
+  // Instance section: should show the instance, not the template
+  const instanceSection = page
+    .locator(".deployment-instance-list-page__section")
+    .nth(1);
+  await expect(instanceSection).toContainText(`inst-${suffix}`);
+  await expect(instanceSection).not.toContainText(`tmpl-${suffix}`);
+
+  // Instance row should have "激活" button and no "创建实例" button
+  const instanceRow = instanceSection.locator(".el-table__row", {
+    hasText: `inst-${suffix}`,
+  });
+  await expect(instanceRow).toBeVisible();
+  await expect(instanceRow.getByRole("button", { name: "激活" })).toBeVisible();
+  await expect(
+    instanceRow.getByRole("button", { name: "创建实例" }),
+  ).not.toBeVisible();
+
+  // Template section should only have the environment filter; page-size selects
+  // live outside the filter toolbar and are intentionally ignored here.
+  const templateFilters = templateSection.locator(
+    ".deployment-instance-list-page__filters .el-select",
+  );
+  await expect(templateFilters).toHaveCount(1);
+
+  // Instance section should have environment + status filters.
+  const instanceFilters = instanceSection.locator(
+    ".deployment-instance-list-page__filters .el-select",
+  );
+  await expect(instanceFilters).toHaveCount(2);
+});
