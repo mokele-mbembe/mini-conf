@@ -1,9 +1,7 @@
 <template>
   <div class="deployment-instance-list-page page-container">
-    <LoadingState v-if="projectLoading" />
-
     <NotFoundState
-      v-else-if="projectError && projectError.status === 404"
+      v-if="projectError && projectError.status === 404"
       :title="t('project.notFound.title')"
       :subtitle="t('project.notFound.subtitle')"
     />
@@ -19,15 +17,22 @@
       @retry="loadAll"
     />
 
-    <template v-else-if="project">
-      <PageHeader
-        :title="project.name"
-        :subtitle="project.description ?? undefined"
-      >
-        <template #actions>
-          <StatusBadge :status="project.status" />
-        </template>
-      </PageHeader>
+    <template v-else>
+      <template v-if="project">
+        <PageHeader
+          :title="project.name"
+          :subtitle="project.description ?? undefined"
+        >
+          <template #actions>
+            <StatusBadge :status="project.status" />
+          </template>
+        </PageHeader>
+      </template>
+      <template v-else-if="projectLoading">
+        <div class="deployment-instance-list-page__header-skeleton">
+          <el-skeleton :rows="1" animated />
+        </div>
+      </template>
 
       <ProjectTabs />
 
@@ -47,6 +52,7 @@
               v-model="environmentFilter"
               :placeholder="t('deployments.filter.environmentPlaceholder')"
               clearable
+              :loading="environmentsLoading"
               style="width: 220px"
               @change="handleFilterChange"
             >
@@ -94,7 +100,7 @@
         </div>
 
         <el-alert
-          v-if="activeEnvironmentCount === 0"
+          v-if="!environmentsLoading && activeEnvironmentCount === 0"
           :title="t('deployments.emptyEnvironmentNotice')"
           type="warning"
           :closable="false"
@@ -113,17 +119,15 @@
           </template>
         </el-alert>
 
-        <LoadingState v-if="listLoading" />
-
         <ErrorState
-          v-else-if="listError"
+          v-if="listError"
           :title="t('deployments.page.loadError')"
           :subtitle="getErrorMessage(listError.code, listError.message)"
           @retry="loadDeploymentInstances"
         />
 
         <EmptyState
-          v-else-if="deployments.length === 0"
+          v-else-if="!listLoading && deployments.length === 0"
           :description="
             environments.length === 0
               ? t('deployments.emptyNeedEnvironment')
@@ -149,7 +153,12 @@
 
         <template v-else>
           <div class="deployment-instance-list-page__table page-table-shell">
-            <el-table :data="deployments" stripe style="width: 100%">
+            <el-table
+              v-loading="listLoading"
+              :data="deployments"
+              stripe
+              style="width: 100%"
+            >
               <el-table-column
                 prop="environment_code"
                 :label="t('deployments.column.environment')"
@@ -321,24 +330,23 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useRoute, useRouter } from "vue-router";
 import { useProjectContext } from "@/modules/projects/composables/useProjectContext";
+import { useProjectEnvironments } from "@/modules/project-environments/composables/useProjectEnvironments";
 import ProjectTabs from "@/modules/projects/components/ProjectTabs.vue";
 import DeploymentInstanceCreateDialog from "../components/DeploymentInstanceCreateDialog.vue";
 import DeploymentInstanceCloneDialog from "../components/DeploymentInstanceCloneDialog.vue";
 import DeploymentTokenDialog from "../components/DeploymentTokenDialog.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import StatusBadge from "@/shared/components/StatusBadge.vue";
-import LoadingState from "@/shared/states/LoadingState.vue";
 import EmptyState from "@/shared/states/EmptyState.vue";
 import ErrorState from "@/shared/states/ErrorState.vue";
 import ForbiddenState from "@/shared/states/ForbiddenState.vue";
 import NotFoundState from "@/shared/states/NotFoundState.vue";
 import { ROUTE_NAMES } from "@/shared/constants/routes";
 import * as deploymentInstancesApi from "@/api/deployment-instances";
-import * as projectEnvironmentsApi from "@/api/project-environments";
 import { ApiRequestError } from "@/api/error";
 import { getErrorMessage } from "@/shared/constants/error-messages";
 import type {
@@ -346,7 +354,6 @@ import type {
   DeploymentInstanceSummary,
   DeploymentTokenResponse,
 } from "@/api/types/deployment-instance";
-import type { ProjectEnvironmentSummary } from "@/api/types/project-environment";
 import { useI18nText } from "@/shared/i18n";
 
 const route = useRoute();
@@ -363,8 +370,13 @@ const {
 const projectId = computed(() => Number(route.params.projectId));
 const isAdmin = computed(() => project.value?.current_user_role === "admin");
 
+const {
+  environments,
+  loading: environmentsLoading,
+  load: loadEnvironments,
+} = useProjectEnvironments(() => projectId.value);
+
 const deployments = ref<DeploymentInstanceSummary[]>([]);
-const environments = ref<ProjectEnvironmentSummary[]>([]);
 const listLoading = ref(false);
 const listError = ref<ApiRequestError | null>(null);
 const keywordFilter = ref("");
@@ -417,26 +429,14 @@ async function loadDeploymentInstances() {
   }
 }
 
-async function loadEnvironments() {
-  try {
-    const res = await projectEnvironmentsApi.listProjectEnvironments(
-      projectId.value,
-    );
-    environments.value = [...res.items].sort((a, b) => {
-      if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
-      return a.code.localeCompare(b.code);
-    });
-  } catch {
-    environments.value = [];
-  }
-}
-
 async function loadAll() {
   const id = projectId.value;
   if (Number.isNaN(id)) return;
-  await fetchProject(id);
-  await loadEnvironments();
-  await loadDeploymentInstances();
+  await Promise.all([
+    fetchProject(id),
+    loadEnvironments(),
+    loadDeploymentInstances(),
+  ]);
 }
 
 function handleSearch() {
@@ -593,6 +593,22 @@ function openDetail(row: DeploymentInstanceSummary) {
   });
 }
 
+// Keyword debounce: auto-search 300ms after the user stops typing.
+let keywordDebounceTimer: ReturnType<typeof globalThis.setTimeout> | null =
+  null;
+
+watch(keywordFilter, () => {
+  if (keywordDebounceTimer) globalThis.clearTimeout(keywordDebounceTimer);
+  keywordDebounceTimer = globalThis.setTimeout(() => {
+    page.value = 1;
+    loadDeploymentInstances();
+  }, 300);
+});
+
+onUnmounted(() => {
+  if (keywordDebounceTimer) globalThis.clearTimeout(keywordDebounceTimer);
+});
+
 onMounted(loadAll);
 
 watch(
@@ -604,6 +620,10 @@ watch(
 <style scoped>
 .deployment-instance-list-page {
   width: 100%;
+}
+
+.deployment-instance-list-page__header-skeleton {
+  margin-bottom: var(--spacing-md);
 }
 
 .deployment-instance-list-page__section {

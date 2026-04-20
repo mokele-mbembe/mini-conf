@@ -12,6 +12,24 @@
 
 ## 1.1 最近完成
 
+2026-04-20 本轮已完成部署实例页前端加载优化与缓存/竞态收口：
+
+- 路由页面已改为懒加载，降低管理台主包首屏压力
+- `DeploymentInstanceListPage` 首屏加载已从串行请求改为并行请求
+- 部署实例列表页已拆分 header skeleton、环境筛选 loading 和表格局部 loading，减少整页阻塞感
+- 新增 `useProjectEnvironments` composable，统一项目环境列表加载、排序与 30 秒 TTL 缓存
+- `DeploymentInstanceCreateDialog` 与 `DeploymentInstanceCloneDialog` 已复用项目环境缓存，不再重复拉取环境列表
+- `useProjectContext` 已改为模块级 stale-while-revalidate 缓存，并补 `_requestSeq` 防止跨项目快速切换时旧请求覆盖新页面
+- 已修复缓存优化过程中暴露的三个问题：readonly ref 写入、环境缓存绑定初始 `projectId`、项目详情异步响应竞态
+- 部署实例列表 keyword 搜索已补 300ms debounce，减少连续输入时的重复请求
+
+本轮本地验证结果：
+
+- `pnpm --dir apps/web typecheck` 通过
+- `pnpm --dir apps/web exec eslint . --ext .vue,.ts,.tsx` 通过
+- `pnpm --dir apps/web build` 通过
+- Vite 生产构建已完成页面级拆包；当前仍保留 `index` 主 chunk 体积 warning，但不阻塞本地与 CI 构建通过
+
 2026-04-10 本轮已完成后端权限与审计主线收口，并补完后端补强批次的主路径：
 
 - 新增 `project_members` 与 `audit_logs` 迁移，并补历史项目给活动用户 `admin` 的成员回填

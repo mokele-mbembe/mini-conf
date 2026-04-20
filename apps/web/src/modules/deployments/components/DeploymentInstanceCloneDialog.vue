@@ -101,11 +101,10 @@ import { computed, reactive, ref, watch } from "vue";
 import type { FormInstance, FormRules } from "element-plus";
 import { ElMessage } from "element-plus";
 import * as deploymentInstancesApi from "@/api/deployment-instances";
-import * as projectEnvironmentsApi from "@/api/project-environments";
+import { useProjectEnvironments } from "@/modules/project-environments/composables/useProjectEnvironments";
 import { ApiRequestError } from "@/api/error";
 import { getErrorMessage } from "@/shared/constants/error-messages";
 import type { DeploymentInstanceSummary } from "@/api/types/deployment-instance";
-import type { ProjectEnvironmentSummary } from "@/api/types/project-environment";
 import { useI18nText } from "@/shared/i18n";
 
 const props = defineProps<{
@@ -122,7 +121,9 @@ const visible = defineModel<boolean>("visible", { default: false });
 const { t } = useI18nText();
 const formRef = ref<FormInstance>();
 const submitting = ref(false);
-const environments = ref<ProjectEnvironmentSummary[]>([]);
+const { environments, load: loadEnvs } = useProjectEnvironments(
+  () => props.projectId,
+);
 const activeEnvironments = computed(() =>
   environments.value.filter((item) => item.status === "active"),
 );
@@ -173,18 +174,8 @@ watch(
   visible,
   async (value) => {
     if (!value) return;
-    try {
-      const res = await projectEnvironmentsApi.listProjectEnvironments(
-        props.projectId,
-      );
-      environments.value = [...res.items].sort((a, b) => {
-        if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
-        return a.code.localeCompare(b.code);
-      });
-      form.environment_id = activeEnvironments.value[0]?.id;
-    } catch {
-      environments.value = [];
-    }
+    await loadEnvs();
+    form.environment_id = activeEnvironments.value[0]?.id;
   },
   { immediate: true },
 );

@@ -3,18 +3,27 @@ import { ROUTE_NAMES, ROUTE_PATHS } from "@/shared/constants/routes";
 
 import AuthLayout from "@/app/layouts/AuthLayout.vue";
 import AppShell from "@/app/layouts/AppShell.vue";
-
-import LoginPage from "@/modules/auth/pages/LoginPage.vue";
-import ProjectListPage from "@/modules/projects/pages/ProjectListPage.vue";
-import ProjectOverviewPage from "@/modules/projects/pages/ProjectOverviewPage.vue";
 import ProjectSectionPlaceholderPage from "@/modules/projects/pages/ProjectSectionPlaceholderPage.vue";
-import ConfigFileListPage from "@/modules/config-files/pages/ConfigFileListPage.vue";
-import ProjectEnvironmentListPage from "@/modules/project-environments/pages/ProjectEnvironmentListPage.vue";
-import DeploymentInstanceListPage from "@/modules/deployments/pages/DeploymentInstanceListPage.vue";
-import DeploymentInstanceDetailPage from "@/modules/deployments/pages/DeploymentInstanceDetailPage.vue";
-import DeploymentPreviewPage from "@/modules/deployments/pages/DeploymentPreviewPage.vue";
-import DraftEditorPage from "@/modules/drafts/pages/DraftEditorPage.vue";
-import ReleaseListPage from "@/modules/releases/pages/ReleaseListPage.vue";
+
+const LoginPage = () => import("@/modules/auth/pages/LoginPage.vue");
+const ProjectListPage = () =>
+  import("@/modules/projects/pages/ProjectListPage.vue");
+const ProjectOverviewPage = () =>
+  import("@/modules/projects/pages/ProjectOverviewPage.vue");
+const ConfigFileListPage = () =>
+  import("@/modules/config-files/pages/ConfigFileListPage.vue");
+const ProjectEnvironmentListPage = () =>
+  import("@/modules/project-environments/pages/ProjectEnvironmentListPage.vue");
+const DeploymentInstanceListPage = () =>
+  import("@/modules/deployments/pages/DeploymentInstanceListPage.vue");
+const DeploymentInstanceDetailPage = () =>
+  import("@/modules/deployments/pages/DeploymentInstanceDetailPage.vue");
+const DeploymentPreviewPage = () =>
+  import("@/modules/deployments/pages/DeploymentPreviewPage.vue");
+const DraftEditorPage = () =>
+  import("@/modules/drafts/pages/DraftEditorPage.vue");
+const ReleaseListPage = () =>
+  import("@/modules/releases/pages/ReleaseListPage.vue");
 
 export const routes: RouteRecordRaw[] = [
   {
