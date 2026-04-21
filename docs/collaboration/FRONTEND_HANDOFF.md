@@ -234,8 +234,9 @@
 - `diff` 固定和上一版比较，不支持任意两版自由比较
 - secret 配置在管理端 `release detail / diff` 中会返回脱敏内容
 - 发布前如果必选配置缺失，会阻塞当前这次单配置发布
-- 当前前端已有 Release 列表；Release 详情 / Diff 独立页面仍需补实现
-- Release 详情页应以不可编辑文本框回看 `content`，并显眼展示发布账号和发布时间
+- 当前前端已有 Release 列表、Release 详情和 Release Diff 独立页面
+- Release 详情页以不可编辑文本框回看 `content`，并显眼展示发布账号 ID、发布时间、revision、配置和实例上下文
+- Post-MVP 可把只读文本框升级为 Monaco 只读高亮，把 Diff 页升级为带颜色的 DiffEditor
 
 ### 5.8 审计 / 同步 / 心跳
 
@@ -268,8 +269,8 @@
 - token reset 没有灰度切换窗口，旧 token 立即失效。
 - activate 也会生成或覆盖默认 token，并且明文 token 只在响应里返回一次。
 - 当前 deployment 没有 `archived` 状态；未启用和已停用统一显示为 `inactive`。
-- 如果要提供“归档后默认隐藏、归档弹窗可找回、恢复为 inactive”，应新增 `is_archived` 软归档维度，不要把 `archived` 加回 `status`。
-- 如果要释放 `deployment_key`，应通过产品层 delete 完成：底层保留 tombstone row 和 `deployment_uid`，但 deleted 实例不可恢复且默认不可见。
+- “归档后默认隐藏、归档抽屉可找回、恢复为 inactive”已经通过 `is_archived` 软归档维度落地，没有把 `archived` 加回 `status`。
+- 释放 `deployment_key` 通过产品层 permanent delete 完成：底层保留 tombstone row 和 `deployment_uid`，deleted 实例不可恢复且默认不可见。
 - `process_key` 已退出 MVP 后端主路径；前端只使用 `config` / `config_file_id`。
 - `config-bundle` 只返回已有发布的配置，不会给未发布配置补空对象。
 
@@ -283,8 +284,8 @@
   当前 `GET /api/releases/:id/diff` 已实现。
 - 早期与中间阶段文档里提到的 `schema_name / schema_version / schema validator` 主路径语义已经过时。
   当前 MVP 口径已收口为“基础格式合法性校验”，不再把 schema 视作当前对外能力。
-- 早期文档里把部署实例状态写成 `active / inactive / archived` 的说法与当前实现和新规划都不一致。
-  当前 deployment 运行态只采用 `active / inactive`；如需归档 / 删除，需要按 `0010` 的 `deployment_uid + is_archived + deleted_at` 模型推进。
+- 早期文档里把部署实例状态写成 `active / inactive / archived` 的说法与当前实现不一致。
+  当前 deployment 运行态只采用 `active / inactive`；归档 / 删除已经按 `0010` 的 `deployment_uid + is_archived + deleted_at` 模型落地。
 - 早期文档和讨论中的 `process_key` 只作为历史澄清背景保留，不应出现在前端新代码或新请求中。
 
 如果前端发现蓝图和 OpenAPI / 当前后端行为冲突，以当前实现和这份交接文档为准，再回头补文档统一。
@@ -330,7 +331,7 @@
 这些问题不会影响后端接口使用，但会影响页面体验，需要产品或你来定：
 
 1. 首版是否就按角色隐藏按钮，还是先全部展示后依赖后端拦截。
-2. 项目 / 配置文件的 archived 资源在列表里默认是否展示；deployment 是否按 `is_archived + deleted_at` 模型新增归档 / 删除。
+2. 项目 / 配置文件的 archived 资源在列表里默认是否展示。
 3. 项目详情是页内 tabs、左侧导航，还是独立路由拆页。
 4. 发布确认是抽屉、弹窗，还是独立页面。
 5. preview-bundle 更偏“工程工具页”还是“业务可读页”。
@@ -339,24 +340,23 @@
 8. 审计页是否只给 `admin`，以及是否需要事件类型筛选器。
 9. 配置工作台是否继续保留在 Draft 编辑页内，还是升级为独立三栏工作台路由。
 10. Release 详情页恢复到 Current Draft 后是否自动跳转编辑页，还是停留在只读详情页。
-11. 已归档部署实例入口采用弹窗、抽屉还是独立路由。
-12. deleted 历史实例在 Release / audit 页面展示为“已删除于 ...”还是更短的状态标签。
+11. deleted 历史实例在 Release / audit 页面展示为“已删除于 ...”还是更短的状态标签。
 
 ## 11. 建议的前端第一阶段实现顺序
 
 建议这样排：
 
-1. Release 详情 / Diff 前端页
-2. 部署实例列表拆分模板 / 普通实例两个区块
-3. deployment archive 生命周期
-4. 项目成员
-5. sync records / heartbeats
-6. audit logs
+1. 项目成员
+2. sync records / heartbeats
+3. audit logs
+4. 咖啡中间件 demo 管理端辅助入口
+5. Release 详情 / Diff 体验增强
+6. 前端组件测试基线
 
 原因：
 
-- 这样能尽快打通“项目 -> 配置 -> 实例 -> Draft -> 发布”的主路径
-- 成员、审计、运维页可以在主流程之后接入
+- “项目 -> 配置 -> 实例 -> Draft -> 发布 -> Release 回看 / Diff -> 归档删除”主路径已经能跑通
+- 下一批应补 demo 观察面、权限管理和可维护性，让真实演示与后续使用更稳
 
 ## 12. 对前端最有价值的真值文件
 

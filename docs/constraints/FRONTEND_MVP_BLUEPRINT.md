@@ -197,10 +197,16 @@
 依赖接口：
 
 - `GET /api/deployment-instances?project_id=:projectId&page=1&page_size=20`
+- `GET /api/deployment-instances?project_id=:projectId&is_template=true`
+- `GET /api/deployment-instances?project_id=:projectId&is_template=false`
+- `GET /api/deployment-instances?project_id=:projectId&visibility_filter=archived`
 - `GET /api/projects/:projectId/environments`
 - `POST /api/deployment-instances`
 - `GET /api/deployment-instances/:id`
 - `PUT /api/deployment-instances/:id`
+- `DELETE /api/deployment-instances/:id`
+- `POST /api/deployment-instances/:id/archive`
+- `POST /api/deployment-instances/:id/restore`
 - `POST /api/deployment-instances/:id/activate`
 - `POST /api/deployment-instances/:id/deactivate`
 
@@ -219,8 +225,8 @@
 
 关键交互：
 
-- 列表应拆成“模板”和“部署实例”两个区块，避免模板与真实实例混排
-- 首版可在前端基于 `is_template` 对同一接口响应分组；如数量继续增长，再考虑后端增加 `is_template` 查询参数
+- 列表已拆成“模板”和“部署实例”两个区块，避免模板与真实实例混排
+- 前端分别用 `is_template=true/false` 请求两个列表，各自分页、搜索和 loading
 - 支持筛选 `environment_id` / `status`
 - 列表使用分页响应中的 `items / total / page / page_size`
 - 环境通过受控下拉选择，不再允许自由文本输入
@@ -228,13 +234,15 @@
 - 新建实例默认为 `inactive`
 - 激活实例时展示一次性 token；停用后旧 token 应立即失效
 - `PUT` 只允许修改 `environment_id / deployment_key / name / description`
+- 已归档实例默认不在普通列表展示，通过“已归档实例”抽屉查看
+- inactive 普通实例可归档；归档后只能恢复为 `inactive`
+- 已归档实例可永久删除；删除前要求输入 `deployment_key`，删除后释放该 key
 
-后续归档需求：
+归档 / 删除模型：
 
 - 当前部署实例状态仍只有 `active / inactive`
-- 如需归档后默认隐藏，应新增 `is_archived` 软归档维度，不应把 `archived` 加回 `status`
-- 已归档实例恢复后只能回到 `inactive`，不能直接恢复为 `active`
-- 如需释放 `deployment_key`，应通过严格确认后的产品层 delete 完成
+- 归档使用 `is_archived` 软归档维度，不把 `archived` 加回 `status`
+- deleted 实例不可恢复，默认不可见
 - delete 后底层保留 tombstone row 和 `deployment_uid`，用于审计和历史页面区分同 key 不同实体
 
 失败提示：
@@ -340,14 +348,16 @@
 
 依赖接口：
 
-- 当前后端已提供：
-  - `GET /api/draft-saved-versions?deployment_instance_id=&config_file_id=`
-  - `GET /api/draft-saved-versions/:id`
-  - `POST /api/draft-saved-versions/:id/restore`
-  - `PATCH /api/draft-saved-versions/:id`
-  - `DELETE /api/draft-saved-versions/:id`
-- 当前仍未提供：
-  - `POST /api/draft-saved-versions`
+- `GET /api/draft-saved-versions?deployment_instance_id=&config_file_id=`
+- `GET /api/draft-saved-versions/:id`
+- `POST /api/draft-saved-versions/:id/restore`
+- `PATCH /api/draft-saved-versions/:id`
+- `DELETE /api/draft-saved-versions/:id`
+
+说明：
+
+- Saved Version 不通过独立 `POST` 创建；保存 Current Draft 时由后端自动生成
+- 与最近一条 Saved Version 内容相同的保存不会重复生成历史记录
 
 加载态 / 空状态 / 缺权限状态：
 
@@ -475,7 +485,9 @@
 当前状态：
 
 - Release 列表已实现
-- Release 详情 / Diff 前端路由仍需从占位页补为真实页面
+- Release 详情页已实现只读内容回看、发布信息、配置 / 实例上下文和跳转 Diff
+- Release Diff 页已实现当前 release 与上一版 release 的只读对比
+- Post-MVP 可引入 Monaco 只读高亮和带颜色的 DiffEditor，提升长配置阅读体验
 
 ## 15. Diff 对比页
 

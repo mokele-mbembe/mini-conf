@@ -334,19 +334,19 @@ store-001 · 当前实例
 
 ## Q13: 推荐实施顺序是什么？
 
-建议分三批：
+原建议分三批推进，当前均已落地：
 
-1. **Release 只读回看页**
+1. **Release 只读回看页**（已完成）
    - 风险最低
    - 后端接口已有
    - 能立即补齐发布历史体验
 
-2. **部署实例列表拆成模板 / 普通实例两个区块**
-   - 首版可前端完成
-   - 不改后端模型
+2. **部署实例列表拆成模板 / 普通实例两个区块**（已完成）
+   - 已采用后端 `is_template=true/false` 查询参数分别请求
+   - 两个列表各自分页、搜索和 loading
    - 直接改善查找成本
 
-3. **Deployment archive + tombstone delete 生命周期**
+3. **Deployment archive + tombstone delete 生命周期**（已完成）
    - 增加 `deployment_uid`
    - 增加 `is_archived / archived_* / deleted_*`
    - 改唯一键为 `deleted_at IS NULL` partial unique
@@ -358,10 +358,10 @@ store-001 · 当前实例
 ## 当前结论
 
 - Draft / preview-bundle / publish 主链路已经基本闭环。
-- Release 仍缺前端只读详情 / Diff 页面。
-- 模板和普通实例应在前端拆成两个列表区块。
-- Deployment archive 不应建成 `status = archived`。
-- 推荐 `deployment_uid + is_archived + deleted_at`：
+- Release 只读详情 / Diff 页面已落地，后续可增强语法高亮和 diff 颜色展示。
+- 模板和普通实例已经拆成两个列表区块，并分别请求后端分页数据。
+- Deployment archive 没有建成 `status = archived`。
+- 已采用 `deployment_uid + is_archived + deleted_at`：
   - archive 可恢复，不释放 `deployment_key`
   - delete 不可恢复，释放 `deployment_key`
   - tombstone row 保留历史解释能力

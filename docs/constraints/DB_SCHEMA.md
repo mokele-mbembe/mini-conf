@@ -120,7 +120,7 @@
 - `status` varchar(32) not null default 'active'
 - `created_at` timestamptz not null default now()
 - `updated_at` timestamptz not null default now()
-- unique (`project_id`, `environment_id`, `deployment_key`)
+- partial unique (`project_id`, `environment_id`, `deployment_key`) where `deleted_at is null`
 
 说明：
 
@@ -131,12 +131,12 @@
 - 管理端创建实例时默认写入 `inactive`；激活后才允许 Open API 消费
 - `inactive` 同时表达“未启用”和“已停用”，历史由审计日志表达，不再引入 `archived`
 
-后续软归档 / 删除改造建议见 `product-qa/0010`：
+软归档 / 删除模型见 `product-qa/0010`：
 
-- 不建议把 `archived` 加回 `status`
-- 增加不可复用内部身份 `deployment_uid uuid`
-- 增加 `is_archived / archived_at / archived_by / archive_reason`
-- 增加 `deleted_at / deleted_by / delete_reason`
+- 不把 `archived` 加回 `status`
+- `deployment_uid uuid` 是不可复用内部身份
+- `is_archived / archived_at / archived_by / archive_reason` 表达软归档
+- `deleted_at / deleted_by / delete_reason` 表达不可恢复 tombstone 删除
 - `archive` 可恢复，不释放 `deployment_key`
 - `delete` 是产品层删除，不可恢复，释放 `deployment_key`
 - 底层保留 tombstone row，不物理删除 `deployment_instances` 行

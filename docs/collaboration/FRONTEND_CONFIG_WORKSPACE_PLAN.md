@@ -347,16 +347,20 @@
 - `GET /api/releases/:id/diff`
 - `POST /api/releases/publish`
 
-### 8.2 建议新增接口
+### 8.2 Saved Versions 接口（已落地）
 
 - `GET /api/draft-saved-versions?deployment_id=&config_file_id=`
-- `POST /api/draft-saved-versions`
 - `GET /api/draft-saved-versions/:id`
 - `POST /api/draft-saved-versions/:id/restore`
 - `PATCH /api/draft-saved-versions/:id`
 - `DELETE /api/draft-saved-versions/:id`
 
-### 8.3 Saved Version 数据字段建议
+说明：
+
+- Saved Version 不通过独立 `POST` 手动创建；保存 Current Draft 时后端自动生成历史保存版本
+- 如果最新 Saved Version 与当前保存内容完全相同，后端不会重复生成一条历史记录
+
+### 8.3 Saved Version 数据字段
 
 - `id`
 - `deployment_instance_id`
@@ -475,26 +479,32 @@ Preview 页每行建议提供：
 
 ## 13. 实施顺序
 
-### 阶段 1
+### 阶段 1（已完成）
 
 - 现有 Draft 编辑页继续承载 Current Draft 编辑、配置切换、Saved Versions 历史面板和发布入口
 - 补 Release 只读详情页与 Diff 页
 - Release 详情页提供不可编辑内容框、发布账号、恢复到 Current Draft
 
-### 阶段 2
+### 阶段 2（已完成）
 
 - 将部署实例列表拆成“模板”和“部署实例”两个区块
 - 模板区主操作聚焦“创建实例”
 - 普通实例区主操作聚焦详情、激活、停用、token reset、预览和发布
 
-### 阶段 3
+### 阶段 3（已完成）
 
-- 如确认需要隐藏和释放 key，引入 deployment archive + tombstone delete 生命周期
+- 已引入 deployment archive + tombstone delete 生命周期
 - 新增 `deployment_uid` 作为内部不可复用实体身份
 - 默认列表排除 archived 和 deleted
 - 通过已归档入口查看和恢复，恢复后状态为 `inactive`
 - delete 后不可恢复并释放 `deployment_key`；历史页面通过 tombstone row 和 `deployment_uid` 区分同 key 旧实体
 - 补后端 API、OpenAPI、前端交互和 E2E / 集成测试
+
+### 下一阶段建议
+
+- 补项目成员页、sync records、heartbeats、audit logs 页面，让 demo 和真实运维可观察
+- Release 详情 / Diff 升级为 Monaco 只读语法高亮和带颜色 diff
+- 为高状态密度组件补前端单元 / 组件测试
 
 ## 14. 验收标准
 

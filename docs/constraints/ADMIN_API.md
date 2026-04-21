@@ -310,11 +310,11 @@
 - 部署实例创建后默认 `inactive`
 - 响应返回 `environment_id`、`environment_code`、`environment_name`
 
-后续归档 / 删除改造建议：
+归档 / 删除模型：
 
 - 不把 `archived` 加入 `status`
-- 增加 `deployment_uid` 作为内部不可复用实体身份
-- 增加 `is_archived` 和 `deleted_at` 两个独立维度
+- `deployment_uid` 是内部不可复用实体身份
+- `is_archived` 和 `deleted_at` 是两个独立维度
 - `GET /api/deployment-instances` 默认排除 archived 和 deleted
 - `visibility_filter=current | archived | all` 用于查询未删除实例
 - archived 实例可恢复，不释放 `deployment_key`
@@ -322,7 +322,7 @@
 - 删除不物理删除 `deployment_instances` 行，底层保留 tombstone 用于审计和历史 Release / sync / heartbeat 解释
 - audit detail 中的 `deployment_key` 只作为当时快照，真实实体区分依赖 `deployment_uid`
 
-建议新增接口：
+已新增接口：
 
 - `POST /api/deployment-instances/:id/archive`
 - `POST /api/deployment-instances/:id/restore`

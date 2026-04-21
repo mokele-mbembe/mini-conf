@@ -12,15 +12,27 @@
 
 ## 1.1 最近完成
 
+2026-04-21 本轮完成 Release 回看、部署实例分区、归档 / 删除生命周期闭环，并提交 `c7563f1 Add deployment archive and deletion lifecycle`：
+
+- Release 详情页和 Diff 页已从占位页补为真实页面，可从发布历史进入只读内容回看和上一版差异回看
+- Release 详情 / Diff 已接入后端脱敏返回，页面以只读文本框展示内容，并显式展示发布时间、revision、发布人 ID、配置和实例上下文
+- 部署实例列表已拆成“模板”和“部署实例”两个区块，前端分别请求 `is_template=true/false`，各自拥有分页、搜索、loading 和空态
+- 部署实例归档 / 恢复 / 永久删除已落地：
+  - `status` 仍只表达运行态 `active | inactive`
+  - `is_archived` 表达软归档，归档后默认列表隐藏，可在“已归档实例”抽屉中恢复
+  - `deleted_at` 表达不可恢复 tombstone 删除，删除后释放 `deployment_key`
+  - `deployment_uid` 作为底层稳定实体身份，用于区分同 key 不同生命期
+- 前端已补“已归档实例”抽屉、详情页归档提示、恢复和永久删除确认；永久删除前要求输入 `deployment_key`
+- 后端已补 `visibility_filter=current|archived|all`、archive / restore / delete API、并发状态防护、OpenAPI 导出和集成测试
+- Draft clone / publish / preview / activate / token reset 等工作流已对 archived / deleted 实例补 guard
+- 本轮验证已通过 `just ci-local-full`，其中后端 DB 集成测试 277 条、Playwright E2E 8 条均通过
+
 2026-04-20 本轮完成 Draft / preview-bundle / publish 主路径文档复核，并补充后续体验改造规划：
 
 - 当前前端已基本打通 `Current Draft -> preview-bundle -> publish -> release history` 主闭环
 - Saved Versions 后端和前端历史面板均已接入，保存 Current Draft 后会生成历史保存版本
 - 单配置 clone 已改为专用 clone-sources 查询，支持可用来源元数据、远程搜索、分页加载和 E2E 覆盖
-- 当前明确剩余体验缺口：
-  - Release 详情 / Diff 前端路由仍是占位页，缺少不可编辑文本框回看当前 release 内容的页面
-  - 部署实例列表仍把模板和普通实例混排，后续应拆成“模板”和“部署实例”两个区块
-  - deployment archive / delete 目前不在现有模型里；新规划采用 `deployment_uid + is_archived + deleted_at`，归档可恢复且不释放 key，删除不可恢复但释放 `deployment_key`
+- 当时识别的 Release 详情 / Diff、模板与普通实例拆分、deployment archive / delete 缺口，已在 2026-04-21 批次落地
 - 新增产品澄清 `docs/constraints/product-qa/0010-release-readonly-template-split-and-deployment-archive.md`
 
 2026-04-20 本轮已完成 Saved Versions 后端初版落地，并补了对应的后端测试骨架：
@@ -256,36 +268,36 @@
 - [x] 单配置 clone 交互
 - [x] preview-bundle 预览页
 - [x] release history 列表
-- [ ] release 详情 / diff 前端页面
-- [ ] 部署实例列表拆分模板 / 普通实例区块
-- [ ] deployment archive 生命周期
+- [x] release 详情 / diff 前端页面
+- [x] 部署实例列表拆分模板 / 普通实例区块
+- [x] deployment archive / tombstone delete 生命周期
 
 ## 4. 当前阶段剩余工作
 
 推荐顺序：
 
-1. Release 只读详情 / Diff 前端页面
-2. 部署实例列表拆成模板 / 普通实例两个区块
-3. deployment archive + tombstone delete 生命周期设计与实现
-4. 咖啡中间件 demo 程序
+1. 咖啡中间件 demo 程序和 demo seed / 手工演示脚本
+2. 项目成员页、sync records、heartbeats、audit logs 等管理辅助页面
+3. Release 详情 / Diff 的 Post-MVP 体验增强：语法高亮、彩色 diff、复制和跳转体验
+4. 前端单元 / 组件测试基线，优先覆盖高状态密度组件
 5. `sqlx-check` 恢复为强制检查的时机评估
 6. 黑盒与覆盖率基线的持续补量
 
 理由：
 
 - 后端主路径、项目级权限、审计日志、配置标识收口、部署实例生命周期和开放接口活跃态约束已经完成
-- Draft / preview-bundle / publish 主路径前端已经基本闭环
-- 当前更大的风险已从“核心链路缺失”转向“历史回看、实例查找、归档 / 删除生命周期和 demo 真实链路体验”
+- Draft / preview-bundle / publish、Release 回看 / Diff、模板拆分、归档 / 删除主路径前端已经闭环
+- 当前更大的风险已从“核心链路缺失”转向“demo 真实链路、运维可见性、测试颗粒度和体验细化”
 - alpha 黑盒已覆盖成员权限、审计查询、模板 clone、二次发布 diff 和 token 失效回归
-- 前端 E2E 已覆盖部署生命周期、Saved Versions 和 clone-sources 主要交互
+- 前端 E2E 已覆盖部署生命周期、Saved Versions、clone-sources、Release detail / diff、模板拆分和归档删除主要交互
 
 前端下一批推荐顺序：
 
-1. Release 只读详情页：不可编辑内容框、发布账号、恢复到 Current Draft、跳转 Diff
-2. Release Diff 页：展示当前 release 与上一版 release 的只读对比
-3. 部署实例列表拆分为“模板”和“部署实例”两个区块
-4. deployment archive / delete：按 `deployment_uid + is_archived + deleted_at` 语义做后端模型、前端归档弹窗、恢复和删除操作
-5. 项目成员页与审计 / 同步 / 心跳页面
+1. 项目成员页：成员列表、添加成员、角色调整、最后 admin 保护错误提示
+2. sync records / heartbeats 页面：按实例和配置筛选，服务 demo 时能解释客户端拉取与上报行为
+3. audit logs 页面：按事件类型和项目资源筛选，辅助解释归档 / 删除 / 发布等关键操作
+4. Release 详情 / Diff 增强：引入 Monaco 只读高亮和 diff 颜色展示
+5. 前端组件测试基线：优先覆盖 ArchivedInstancesDrawer、ReleaseDetailPage、ReleaseDiffPage 和 Draft 历史面板
 
 ## 5. 下一个会话建议先跑的命令
 
@@ -317,9 +329,7 @@ PLAYWRIGHT_BASE_URL=http://127.0.0.1:4173 pnpm --dir apps/web test:e2e
 如果要在本地复现 CI 基线，再跑：
 
 ```bash
-just lint
-just openapi-check
-just test
+just ci-local-full
 ```
 
 如果要继续动数据库主路径，再补：

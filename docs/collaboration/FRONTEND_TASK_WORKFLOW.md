@@ -14,15 +14,17 @@
 
 ## 2. 当前已落地状态
 
-截至当前仓库状态，前端已经不再是“空仓”：
+截至当前仓库状态，前端已经越过初始 scaffold 阶段，管理台核心配置链路已经能闭环运行：
 
 - `apps/web` 已初始化
-- 已有登录页、项目列表页、项目详情骨架页
+- 已有登录页、项目列表页、项目详情页、配置文件页、部署实例列表 / 详情页
+- 已有 Draft 编辑、Saved Versions、单配置 clone、preview-bundle、publish、Release 列表 / 详情 / Diff
+- 部署实例列表已拆分模板和普通实例，归档 / 恢复 / 永久删除主路径已接入
 - 已有本地联调说明：`FRONTEND_PAGE_TESTING`
 - 已有前端 build check
-- 已有最小 Playwright smoke E2E
+- 已有覆盖核心管理链路的 Playwright smoke E2E
 
-因此后续前端工作不再是“从 0 起项目”，而是“在已有 scaffold 上继续按模块推进”。
+因此后续前端工作不再是“补核心链路”，而是“围绕 demo、运维可见性、权限管理和体验增强继续补齐”。
 
 ## 3. 开工前必读
 
@@ -172,12 +174,12 @@ Codex 负责：
 
 基于当前 scaffold 和页面现状，后续继续推进时，建议优先顺序是：
 
-1. API 类型与 client：deployment list 分页、activate、deactivate、sync/heartbeat `config_file_id`
-2. 部署实例列表 / 详情 / 生命周期操作
-3. Draft 编辑页
-4. Preview / Publish / Release 历史 / Diff
-5. 项目成员页
-6. sync records / heartbeats / audit logs 页面
+1. 咖啡中间件 demo：demo seed、客户端程序或脚本、从模板复制店铺配置的演示路径
+2. 项目成员页：成员列表、添加成员、角色调整、最后 admin 保护错误提示
+3. sync records / heartbeats 页面：让 demo 中的配置拉取、应用和心跳上报可被管理端观察
+4. audit logs 页面：按项目和事件类型查看关键操作，支撑发布、归档、删除等追溯
+5. Release 详情 / Diff 体验增强：Monaco 只读语法高亮、彩色 diff、复制和跳转体验
+6. 前端单元 / 组件测试基线：覆盖高状态密度组件和错误态分支
 
 继续推进时仍然要遵守：
 
