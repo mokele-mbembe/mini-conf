@@ -905,6 +905,14 @@
             }
           },
           {
+            "name": "visibility_filter",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "is_template",
             "in": "query",
             "required": false,
@@ -1253,6 +1261,104 @@
             "session_auth": []
           }
         ]
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "delete_deployment_instance",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Deployment instance ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteDeploymentInstanceRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Deployment instance deleted"
+          },
+          "400": {
+            "description": "Invalid request body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or expired admin session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Deployment instance not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Deployment instance cannot be deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database bootstrap disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_auth": []
+          }
+        ]
       }
     },
     "/api/deployment-instances/{id}/activate": {
@@ -1306,6 +1412,113 @@
           },
           "409": {
             "description": "Deployment instance cannot be activated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database bootstrap disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_auth": []
+          }
+        ]
+      }
+    },
+    "/api/deployment-instances/{id}/archive": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "archive_deployment_instance",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Deployment instance ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveDeploymentInstanceRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Deployment instance archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentInstanceSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or expired admin session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Deployment instance not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Deployment instance cannot be archived",
             "content": {
               "application/json": {
                 "schema": {
@@ -1570,6 +1783,93 @@
           },
           "404": {
             "description": "Deployment instance not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database bootstrap disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_auth": []
+          }
+        ]
+      }
+    },
+    "/api/deployment-instances/{id}/restore": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "restore_deployment_instance",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Deployment instance ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deployment instance restored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentInstanceSummary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or expired admin session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Deployment instance not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Deployment instance cannot be restored",
             "content": {
               "application/json": {
                 "schema": {
@@ -4802,6 +5102,17 @@
   },
   "components": {
     "schemas": {
+      "ArchiveDeploymentInstanceRequestBody": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "AuditLogListResponse": {
         "type": "object",
         "required": [
@@ -5340,6 +5651,17 @@
           }
         }
       },
+      "DeleteDeploymentInstanceRequestBody": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "DeploymentBundlePreviewResponse": {
         "type": "object",
         "required": [
@@ -5474,6 +5796,7 @@
         "type": "object",
         "required": [
           "id",
+          "deployment_uid",
           "project_id",
           "environment_id",
           "environment_code",
@@ -5481,10 +5804,52 @@
           "deployment_key",
           "name",
           "is_template",
-          "status"
+          "status",
+          "is_archived"
         ],
         "properties": {
+          "archive_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "archived_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "archived_by": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "delete_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "deleted_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "deleted_by": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
           "deployment_key": {
+            "type": "string"
+          },
+          "deployment_uid": {
             "type": "string"
           },
           "description": {
@@ -5506,6 +5871,9 @@
           "id": {
             "type": "integer",
             "format": "int64"
+          },
+          "is_archived": {
+            "type": "boolean"
           },
           "is_template": {
             "type": "boolean"
@@ -6066,6 +6434,12 @@
             "format": "int64"
           },
           "status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "visibility_filter": {
             "type": [
               "string",
               "null"

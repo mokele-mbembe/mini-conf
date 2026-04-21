@@ -803,3 +803,112 @@ test("deployment list page: templates and instances in separate sections", async
   );
   await expect(instanceFilters).toHaveCount(2);
 });
+
+test("deployment archive drawer: archive → restore → permanently delete → reuse key", async ({
+  page,
+}) => {
+  const suffix = Date.now().toString();
+  const deploymentKey = `archive-${suffix}`;
+  const deploymentName = `Archive Target ${suffix}`;
+
+  await login(page);
+  const projectId = await createProject(page, suffix);
+
+  const envResponse = await page.request.post(
+    `/api/projects/${projectId}/environments`,
+    { data: { code: `archive-env-${suffix}`, name: `Archive Env ${suffix}` } },
+  );
+  expect(envResponse.ok()).toBeTruthy();
+  const env = (await envResponse.json()) as { id: number };
+
+  const deploymentResponse = await page.request.post(
+    "/api/deployment-instances",
+    {
+      data: {
+        project_id: projectId,
+        environment_id: env.id,
+        deployment_key: deploymentKey,
+        name: deploymentName,
+        is_template: false,
+      },
+    },
+  );
+  expect(deploymentResponse.ok()).toBeTruthy();
+
+  await page.goto(`/projects/${projectId}/deployments`);
+
+  const instanceSection = page
+    .locator(".deployment-instance-list-page__section")
+    .nth(1);
+  const row = instanceSection.locator(".el-table__row", {
+    hasText: deploymentKey,
+  });
+  await expect(row).toBeVisible({ timeout: 10_000 });
+  await expect(row).toContainText("未启用");
+
+  await row.getByRole("button", { name: "归档" }).click();
+  const archiveConfirm = page.getByRole("dialog", { name: "归档部署实例" });
+  await expect(archiveConfirm).toContainText("确认归档部署实例");
+  await archiveConfirm.getByRole("button", { name: "OK" }).click();
+  await expect(row).not.toBeVisible({ timeout: 10_000 });
+
+  await page.getByRole("button", { name: "已归档实例" }).click();
+  const drawer = page.getByRole("dialog", { name: "已归档实例" });
+  await expect(drawer).toBeVisible({ timeout: 10_000 });
+
+  const archivedRow = drawer.locator(".el-table__row", {
+    hasText: deploymentKey,
+  });
+  await expect(archivedRow).toBeVisible({ timeout: 10_000 });
+  await archivedRow.getByRole("button", { name: "恢复" }).click();
+  const restoreConfirm = page.getByRole("dialog", { name: "恢复部署实例" });
+  await expect(restoreConfirm).toContainText("确认恢复部署实例");
+  await restoreConfirm.getByRole("button", { name: "OK" }).click();
+  await expect(archivedRow).not.toBeVisible({ timeout: 10_000 });
+
+  await page.keyboard.press("Escape");
+  await expect(drawer).not.toBeVisible({ timeout: 10_000 });
+  await expect(row).toBeVisible({ timeout: 10_000 });
+  await expect(row).toContainText("未启用");
+
+  await row.getByRole("button", { name: "归档" }).click();
+  await page
+    .getByRole("dialog", { name: "归档部署实例" })
+    .getByRole("button", { name: "OK" })
+    .click();
+  await expect(row).not.toBeVisible({ timeout: 10_000 });
+
+  await page.getByRole("button", { name: "已归档实例" }).click();
+  const deleteDrawer = page.getByRole("dialog", { name: "已归档实例" });
+  const deleteRow = deleteDrawer.locator(".el-table__row", {
+    hasText: deploymentKey,
+  });
+  await expect(deleteRow).toBeVisible({ timeout: 10_000 });
+
+  await deleteRow.getByRole("button", { name: "永久删除" }).click();
+  const deletePrompt = page.getByRole("dialog", {
+    name: "永久删除部署实例",
+  });
+  await expect(deletePrompt).toContainText("此操作不可撤销");
+  await deletePrompt.getByRole("textbox").fill(deploymentKey);
+  await deletePrompt.getByRole("button", { name: "永久删除" }).click();
+  await expect(deleteRow).not.toBeVisible({ timeout: 10_000 });
+
+  const reusedResponse = await page.request.post("/api/deployment-instances", {
+    data: {
+      project_id: projectId,
+      environment_id: env.id,
+      deployment_key: deploymentKey,
+      name: `Reused ${deploymentName}`,
+      is_template: false,
+    },
+  });
+  expect(reusedResponse.ok()).toBeTruthy();
+
+  await page.goto(`/projects/${projectId}/deployments`);
+  const reusedRow = instanceSection.locator(".el-table__row", {
+    hasText: `Reused ${deploymentName}`,
+  });
+  await expect(reusedRow).toBeVisible({ timeout: 10_000 });
+  await expect(reusedRow).toContainText(deploymentKey);
+});

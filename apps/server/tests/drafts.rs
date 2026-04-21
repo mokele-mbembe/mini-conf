@@ -965,3 +965,90 @@ async fn deleting_draft_does_not_delete_saved_versions() -> TestResult {
 
     teardown(&database_url, &schema, pool).await
 }
+
+#[tokio::test]
+async fn clone_draft_rejects_archived_target_deployment() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+    let (project_id, config_file_id, source_deployment_id) =
+        seed_project_config_deployment(&pool).await?;
+    let target_deployment_id = seed_second_deployment(&pool, project_id, "store-002").await?;
+
+    // Archive the target deployment (must be inactive first).
+    sqlx::query("UPDATE deployment_instances SET status = 'inactive' WHERE id = $1")
+        .bind(target_deployment_id)
+        .execute(&pool)
+        .await?;
+    sqlx::query("UPDATE deployment_instances SET is_archived = TRUE WHERE id = $1")
+        .bind(target_deployment_id)
+        .execute(&pool)
+        .await?;
+
+    let cookie = login(&app).await?;
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/drafts/{target_deployment_id}/{config_file_id}/clone"
+                ))
+                .header(header::COOKIE, &cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(format!(
+                    r#"{{"source_deployment_instance_id":{source_deployment_id},"source_kind":"draft"}}"#
+                )))?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let payload: ErrorResponse = read_json(response).await?;
+    assert_eq!(payload.code, "deployment_instance_archived");
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn clone_draft_rejects_deleted_target_deployment() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+    let (project_id, config_file_id, source_deployment_id) =
+        seed_project_config_deployment(&pool).await?;
+    let target_deployment_id = seed_second_deployment(&pool, project_id, "store-002").await?;
+
+    // Tombstone-delete the target deployment directly in the DB.
+    sqlx::query(
+        r#"
+        UPDATE deployment_instances
+        SET status = 'inactive', is_archived = TRUE,
+            deleted_at = NOW(), deleted_by = (SELECT id FROM users WHERE username = 'admin' LIMIT 1)
+        WHERE id = $1
+        "#,
+    )
+    .bind(target_deployment_id)
+    .execute(&pool)
+    .await?;
+
+    let cookie = login(&app).await?;
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/drafts/{target_deployment_id}/{config_file_id}/clone"
+                ))
+                .header(header::COOKIE, &cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(format!(
+                    r#"{{"source_deployment_instance_id":{source_deployment_id},"source_kind":"draft"}}"#
+                )))?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let payload: ErrorResponse = read_json(response).await?;
+    assert_eq!(payload.code, "deployment_instance_deleted");
+
+    teardown(&database_url, &schema, pool).await
+}

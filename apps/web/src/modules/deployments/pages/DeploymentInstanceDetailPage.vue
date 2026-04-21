@@ -70,6 +70,33 @@
             >
               {{ t("deployments.action.cloneFromTemplate") }}
             </el-button>
+            <el-button
+              v-if="canArchive"
+              type="warning"
+              size="small"
+              :loading="actionLoading === 'archive'"
+              @click="handleArchive"
+            >
+              {{ t("deployments.action.archive") }}
+            </el-button>
+            <el-button
+              v-if="canRestore"
+              type="primary"
+              size="small"
+              :loading="actionLoading === 'restore'"
+              @click="handleRestore"
+            >
+              {{ t("deployments.action.restore") }}
+            </el-button>
+            <el-button
+              v-if="canPermanentDelete"
+              type="danger"
+              size="small"
+              :loading="actionLoading === 'delete'"
+              @click="handleDelete"
+            >
+              {{ t("deployments.action.permanentDelete") }}
+            </el-button>
             <StatusBadge :status="deployment.status" />
           </div>
         </template>
@@ -102,7 +129,16 @@
           @retry="loadDeploymentInstance"
         />
 
-        <template v-else-if="deployment">
+        <el-alert
+          v-if="deployment?.is_archived"
+          type="warning"
+          :title="t('deployments.notice.archived')"
+          :closable="false"
+          show-icon
+          style="margin-bottom: var(--spacing-md)"
+        />
+
+        <template v-if="deployment">
           <div class="deployment-instance-detail-page__summary">
             <div>
               <div class="deployment-instance-detail-page__eyebrow">
@@ -119,6 +155,9 @@
               </el-tag>
               <el-tag v-else size="small" type="success">
                 {{ t("deployments.type.instance") }}
+              </el-tag>
+              <el-tag v-if="deployment.is_archived" size="small" type="info">
+                {{ t("deployments.badge.archived") }}
               </el-tag>
               <StatusBadge :status="deployment.status" />
             </div>
@@ -332,7 +371,11 @@ const deploymentId = computed(() => Number(route.params.deploymentId));
 const isAdmin = computed(() => project.value?.current_user_role === "admin");
 const canEditDraft = computed(() => {
   const role = project.value?.current_user_role;
-  return role === "admin" || role === "editor";
+  return (
+    (role === "admin" || role === "editor") &&
+    deployment.value !== null &&
+    !deployment.value.is_archived
+  );
 });
 
 const deployment = ref<DeploymentInstanceSummary | null>(null);
@@ -341,9 +384,15 @@ const detailError = ref<ApiRequestError | null>(null);
 const configFiles = ref<ConfigFileSummary[]>([]);
 const configListLoading = ref(false);
 const configListError = ref<ApiRequestError | null>(null);
-const actionLoading = ref<"activate" | "deactivate" | "reset-token" | null>(
-  null,
-);
+type DeploymentActionLoading =
+  | "activate"
+  | "deactivate"
+  | "reset-token"
+  | "archive"
+  | "restore"
+  | "delete";
+
+const actionLoading = ref<DeploymentActionLoading | null>(null);
 const tokenDialogVisible = ref(false);
 const tokenDialogMode = ref<"activate" | "reset">("activate");
 const tokenPayload = ref<DeploymentTokenResponse | null>(null);
@@ -369,7 +418,9 @@ const canActivate = computed(() => {
   }
 
   return (
-    !deployment.value.is_template && deployment.value.status === "inactive"
+    !deployment.value.is_template &&
+    !deployment.value.is_archived &&
+    deployment.value.status === "inactive"
   );
 });
 const canDeactivate = computed(() => {
@@ -377,18 +428,41 @@ const canDeactivate = computed(() => {
     return false;
   }
 
-  return !deployment.value.is_template && deployment.value.status === "active";
+  return (
+    !deployment.value.is_template &&
+    !deployment.value.is_archived &&
+    deployment.value.status === "active"
+  );
 });
 const canResetToken = computed(() => canDeactivate.value);
 const canPreview = computed(
-  () => canEditDraft.value && deployment.value !== null,
+  () =>
+    canEditDraft.value &&
+    deployment.value !== null &&
+    !deployment.value.is_archived,
 );
+const canArchive = computed(() => {
+  if (!deployment.value || !isAdmin.value) return false;
+  return (
+    !deployment.value.is_template &&
+    !deployment.value.is_archived &&
+    deployment.value.status === "inactive"
+  );
+});
+const canRestore = computed(() => {
+  if (!deployment.value || !isAdmin.value) return false;
+  return !deployment.value.is_template && deployment.value.is_archived;
+});
+const canPermanentDelete = computed(() => {
+  if (!deployment.value || !isAdmin.value) return false;
+  return !deployment.value.is_template && deployment.value.is_archived;
+});
 const canCloneFromTemplate = computed(() => {
   if (!deployment.value || !isAdmin.value) {
     return false;
   }
 
-  return deployment.value.is_template;
+  return deployment.value.is_template && !deployment.value.is_archived;
 });
 const templateSourceLabel = computed(() => {
   if (!deployment.value) {
@@ -560,6 +634,92 @@ function backToList() {
     name: ROUTE_NAMES.DEPLOYMENT_LIST,
     params: { projectId: route.params.projectId },
   });
+}
+
+async function handleArchive() {
+  if (!deployment.value) return;
+
+  try {
+    await ElMessageBox.confirm(
+      t("deployments.dialog.archiveConfirm", { name: deployment.value.name }),
+      t("deployments.dialog.archiveTitle"),
+      { type: "warning" },
+    );
+    actionLoading.value = "archive";
+    await deploymentInstancesApi.archiveDeploymentInstance(deployment.value.id);
+    ElMessage.success(t("toast.deployments.archived"));
+    await loadDeploymentInstance();
+  } catch (err) {
+    if (err === "cancel" || err === "close") return;
+    if (err instanceof ApiRequestError) {
+      ElMessage.error(getErrorMessage(err.code, err.message));
+    } else {
+      ElMessage.error(t("toast.operationFailed"));
+    }
+  } finally {
+    actionLoading.value = null;
+  }
+}
+
+async function handleRestore() {
+  if (!deployment.value) return;
+
+  try {
+    await ElMessageBox.confirm(
+      t("deployments.dialog.restoreConfirm", { name: deployment.value.name }),
+      t("deployments.dialog.restoreTitle"),
+      { type: "warning" },
+    );
+    actionLoading.value = "restore";
+    await deploymentInstancesApi.restoreDeploymentInstance(deployment.value.id);
+    ElMessage.success(t("toast.deployments.restored"));
+    await loadDeploymentInstance();
+  } catch (err) {
+    if (err === "cancel" || err === "close") return;
+    if (err instanceof ApiRequestError) {
+      ElMessage.error(getErrorMessage(err.code, err.message));
+    } else {
+      ElMessage.error(t("toast.operationFailed"));
+    }
+  } finally {
+    actionLoading.value = null;
+  }
+}
+
+async function handleDelete() {
+  if (!deployment.value) return;
+  const deploymentKey = deployment.value.deployment_key;
+  const deploymentId = deployment.value.id;
+
+  try {
+    await ElMessageBox.prompt(
+      t("deployments.dialog.deletePrompt", { key: deploymentKey }),
+      t("deployments.dialog.deleteTitle"),
+      {
+        type: "error",
+        inputPlaceholder: t("deployments.dialog.deleteInputPlaceholder"),
+        inputPattern: new RegExp(
+          `^${deploymentKey.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+        ),
+        inputErrorMessage: t("deployments.dialog.deleteKeyMismatch"),
+        confirmButtonText: t("deployments.action.permanentDelete"),
+        cancelButtonText: t("common.cancel"),
+      },
+    );
+    actionLoading.value = "delete";
+    await deploymentInstancesApi.deleteDeploymentInstance(deploymentId);
+    ElMessage.success(t("toast.deployments.deleted"));
+    backToList();
+  } catch (err) {
+    if (err === "cancel" || err === "close") return;
+    if (err instanceof ApiRequestError) {
+      ElMessage.error(getErrorMessage(err.code, err.message));
+    } else {
+      ElMessage.error(t("toast.operationFailed"));
+    }
+  } finally {
+    actionLoading.value = null;
+  }
 }
 
 function openCloneDialog() {

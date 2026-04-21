@@ -2,6 +2,7 @@ export type DeploymentInstanceStatus = "active" | "inactive";
 
 export interface DeploymentInstanceSummary {
   id: number;
+  deployment_uid: string;
   project_id: number;
   environment_id: number;
   environment_code: string;
@@ -12,6 +13,13 @@ export interface DeploymentInstanceSummary {
   is_template: boolean;
   template_source_id: number | null;
   status: DeploymentInstanceStatus;
+  is_archived: boolean;
+  archived_at: string | null;
+  archived_by: number | null;
+  archive_reason: string | null;
+  deleted_at: string | null;
+  deleted_by: number | null;
+  delete_reason: string | null;
 }
 
 export interface DeploymentInstanceListResponse {
@@ -27,6 +35,7 @@ export interface ListDeploymentInstancesParams {
   status?: DeploymentInstanceStatus;
   keyword?: string;
   is_template?: boolean;
+  visibility_filter?: "current" | "archived" | "all";
   page?: number;
   page_size?: number;
 }
@@ -60,6 +69,14 @@ export interface DeploymentTokenResponse {
   credential_name: string;
   token_preview: string;
   token: string;
+}
+
+export interface ArchiveDeploymentInstanceRequest {
+  reason?: string | null;
+}
+
+export interface DeleteDeploymentInstanceRequest {
+  reason?: string | null;
 }
 
 export interface ConfigBundleDeployment {

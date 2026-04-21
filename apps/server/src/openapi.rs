@@ -63,6 +63,9 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
         crate::http::api::deployment_instances::create_deployment_instance,
         crate::http::api::deployment_instances::get_deployment_instance,
         crate::http::api::deployment_instances::update_deployment_instance,
+        crate::http::api::deployment_instances::delete_deployment_instance,
+        crate::http::api::deployment_instances::archive_deployment_instance,
+        crate::http::api::deployment_instances::restore_deployment_instance,
         crate::http::api::deployment_instances::clone_deployment_instance,
         crate::http::api::deployment_instances::preview_deployment_bundle,
         crate::http::api::deployment_instances::reset_deployment_token,
@@ -152,6 +155,8 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
             UpdateDraftRequestBody,
             CloneDraftRequestBody,
             UpdateDeploymentInstanceRequestBody,
+            ArchiveDeploymentInstanceRequestBody,
+            DeleteDeploymentInstanceRequestBody,
             UpdateConfigFileRequestBody,
             CreateProjectMemberRequestBody,
             CreateProjectEnvironmentRequestBody,
@@ -256,6 +261,16 @@ pub struct UpdateDeploymentInstanceRequestBody {
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
+pub struct ArchiveDeploymentInstanceRequestBody {
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
+pub struct DeleteDeploymentInstanceRequestBody {
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
 pub struct CreateProjectEnvironmentRequestBody {
     pub code: String,
     pub name: String,
@@ -356,6 +371,7 @@ pub struct ListDeploymentInstancesParams {
     pub environment_id: Option<i64>,
     pub keyword: Option<String>,
     pub status: Option<String>,
+    pub visibility_filter: Option<String>,
     pub is_template: Option<bool>,
     pub page: Option<i64>,
     pub page_size: Option<i64>,

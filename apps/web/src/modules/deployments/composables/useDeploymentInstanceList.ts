@@ -10,6 +10,7 @@ export interface UseDeploymentInstanceListOptions {
   getProjectId: () => number;
   isTemplate: boolean;
   withStatusFilter: boolean;
+  visibilityFilter?: "current" | "archived" | "all";
 }
 
 export function useDeploymentInstanceList(
@@ -41,6 +42,7 @@ export function useDeploymentInstanceList(
           : undefined,
         status:
           options.withStatusFilter && status.value ? status.value : undefined,
+        visibility_filter: options.visibilityFilter,
         page: page.value,
         page_size: pageSize.value,
       });

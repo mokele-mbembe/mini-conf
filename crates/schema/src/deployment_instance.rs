@@ -5,6 +5,7 @@ use utoipa::ToSchema;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct DeploymentInstanceSummary {
     pub id: i64,
+    pub deployment_uid: String,
     pub project_id: i64,
     pub environment_id: i64,
     pub environment_code: String,
@@ -15,6 +16,13 @@ pub struct DeploymentInstanceSummary {
     pub is_template: bool,
     pub template_source_id: Option<i64>,
     pub status: String,
+    pub is_archived: bool,
+    pub archived_at: Option<String>,
+    pub archived_by: Option<i64>,
+    pub archive_reason: Option<String>,
+    pub deleted_at: Option<String>,
+    pub deleted_by: Option<i64>,
+    pub delete_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -66,6 +74,7 @@ mod tests {
         let value = serde_json::to_value(DeploymentInstanceListResponse {
             items: vec![DeploymentInstanceSummary {
                 id: 1,
+                deployment_uid: "4f6f2c18-e0c8-46ca-9754-2911e7bc0ba8".to_owned(),
                 project_id: 7,
                 environment_id: 3,
                 environment_code: "prod".to_owned(),
@@ -76,6 +85,13 @@ mod tests {
                 is_template: false,
                 template_source_id: None,
                 status: "active".to_owned(),
+                is_archived: false,
+                archived_at: None,
+                archived_by: None,
+                archive_reason: None,
+                deleted_at: None,
+                deleted_by: None,
+                delete_reason: None,
             }],
             total: 1,
             page: 1,
@@ -89,6 +105,7 @@ mod tests {
                 "items": [
                     {
                         "id": 1,
+                        "deployment_uid": "4f6f2c18-e0c8-46ca-9754-2911e7bc0ba8",
                         "project_id": 7,
                         "environment_id": 3,
                         "environment_code": "prod",
@@ -98,7 +115,14 @@ mod tests {
                         "description": "Hangzhou store 001",
                         "is_template": false,
                         "template_source_id": null,
-                        "status": "active"
+                        "status": "active",
+                        "is_archived": false,
+                        "archived_at": null,
+                        "archived_by": null,
+                        "archive_reason": null,
+                        "deleted_at": null,
+                        "deleted_by": null,
+                        "delete_reason": null
                     }
                 ],
                 "total": 1,

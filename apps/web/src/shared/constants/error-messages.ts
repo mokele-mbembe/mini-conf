@@ -28,6 +28,14 @@ export const ERROR_MESSAGES: Record<string, string> = {
     "error.deployment_instance_template_deactivate_forbidden",
   deployment_instance_deactivate_conflict:
     "error.deployment_instance_deactivate_conflict",
+  deployment_instance_archived: "error.deployment_instance_archived",
+  deployment_instance_deleted: "error.deployment_instance_deleted",
+  deployment_instance_archive_conflict:
+    "error.deployment_instance_archive_conflict",
+  deployment_instance_restore_conflict:
+    "error.deployment_instance_restore_conflict",
+  deployment_instance_delete_conflict:
+    "error.deployment_instance_delete_conflict",
   deployment_not_found: "error.deployment_instance_not_found",
   draft_not_found: "error.draft_not_found",
   draft_version_conflict: "error.draft_version_conflict",

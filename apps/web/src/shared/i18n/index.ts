@@ -166,6 +166,10 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "deployments.section.instancesDesc":
       "实际客户端接入的实例，可激活、停用、重置 token。",
     "deployments.section.instancesEmpty": "暂无部署实例",
+    "deployments.section.archived": "已归档实例",
+    "deployments.section.archivedDesc":
+      "已归档实例不参与日常管理，可恢复或永久删除。永久删除后实例标识可被复用。",
+    "deployments.section.archivedEmpty": "暂无已归档实例",
     "deployments.emptyDescription": "暂无描述",
     "deployments.emptyTemplateSource": "无",
     "deployments.filter.keywordPlaceholder": "搜索名称或实例标识",
@@ -185,6 +189,8 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "deployments.column.status": "状态",
     "deployments.column.description": "描述",
     "deployments.column.actions": "操作",
+    "deployments.column.archivedAt": "归档时间",
+    "deployments.column.archiveReason": "归档原因",
     "deployments.type.template": "模板",
     "deployments.type.instance": "实例",
     "deployments.action.view": "查看",
@@ -194,6 +200,10 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "deployments.action.cloneFromTemplate": "创建实例",
     "deployments.action.previewBundle": "预览配置包",
     "deployments.action.editDraft": "编辑 Draft",
+    "deployments.action.archive": "归档",
+    "deployments.action.restore": "恢复",
+    "deployments.action.permanentDelete": "永久删除",
+    "deployments.action.viewArchived": "已归档实例",
     "deployments.dialog.createTitle": "新建部署实例",
     "deployments.dialog.inactiveNotice":
       "创建后状态默认为未启用，客户端暂不可消费；后续可由管理员激活并生成访问凭证。",
@@ -206,6 +216,17 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "deployments.dialog.resetTokenTitle": "重置访问凭证",
     "deployments.dialog.resetTokenConfirm":
       "确认重置部署实例 {name} 的默认访问凭证吗？旧 token 会立即失效。",
+    "deployments.dialog.archiveTitle": "归档部署实例",
+    "deployments.dialog.archiveConfirm":
+      "确认归档部署实例 {name} 吗？归档后实例将不再出现在默认列表，可在“已归档实例”中查看、恢复或永久删除。",
+    "deployments.dialog.restoreTitle": "恢复部署实例",
+    "deployments.dialog.restoreConfirm":
+      "确认恢复部署实例 {name} 吗？恢复后将以“未启用”状态重新出现在实例列表。",
+    "deployments.dialog.deleteTitle": "永久删除部署实例",
+    "deployments.dialog.deletePrompt":
+      "此操作不可撤销。永久删除后实例数据将被标记为已删除，但实例标识可被复用。请输入实例标识 {key} 确认删除。",
+    "deployments.dialog.deleteInputPlaceholder": "输入实例标识以确认",
+    "deployments.dialog.deleteKeyMismatch": "输入的实例标识不匹配",
     "deployments.tokenDialog.activateTitle": "激活成功，已生成访问凭证",
     "deployments.tokenDialog.resetTitle": "访问凭证已重置",
     "deployments.tokenDialog.notice":
@@ -225,6 +246,9 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "deployments.form.templateHint": "模板只作为复制来源，不直接给客户端消费。",
     "deployments.form.description": "描述",
     "deployments.form.descriptionPlaceholder": "可选描述",
+    "deployments.notice.archived":
+      "该实例已归档，仅只读查看。如需继续使用请先恢复。",
+    "deployments.badge.archived": "已归档",
     "deployments.detail.title": "部署实例详情",
     "deployments.detail.back": "返回部署实例列表",
     "deployments.detail.loadError": "加载部署实例详情失败",
@@ -406,6 +430,9 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "toast.deployments.tokenReset": "访问凭证已重置",
     "toast.deployments.tokenCopied": "明文 token 已复制",
     "toast.deployments.cloned": "已从模板创建实例，当前状态为未启用",
+    "toast.deployments.archived": "部署实例已归档",
+    "toast.deployments.restored": "部署实例已恢复，当前状态为未启用",
+    "toast.deployments.deleted": "部署实例已永久删除",
     "toast.drafts.saved": "Draft 已保存",
     "toast.drafts.discarded": "Draft 已丢弃",
     "toast.drafts.restoredFromRelease": "已从最新 Release 恢复 Draft",
@@ -452,6 +479,14 @@ const messages: Record<AppLocale, Record<string, string>> = {
       "模板实例不能停用",
     "error.deployment_instance_deactivate_conflict":
       "部署实例必须处于启用状态才能停用",
+    "error.deployment_instance_archived": "部署实例已归档，无法执行此操作",
+    "error.deployment_instance_deleted": "部署实例已被永久删除",
+    "error.deployment_instance_archive_conflict":
+      "部署实例必须处于未启用状态才能归档",
+    "error.deployment_instance_restore_conflict":
+      "部署实例当前状态无法恢复，请刷新后重试",
+    "error.deployment_instance_delete_conflict":
+      "部署实例必须处于已归档且未启用状态才能永久删除",
     "error.draft_not_found": "当前实例下还没有这份 Draft",
     "error.draft_version_conflict": "草稿已被他人更新，请刷新后重试",
     "error.draft_validation_failed": "Draft 格式或内容校验失败",
@@ -641,6 +676,10 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "deployments.section.instancesDesc":
       "Client-facing instances that can be activated, deactivated, and issued tokens.",
     "deployments.section.instancesEmpty": "No deployment instances yet",
+    "deployments.section.archived": "Archived Instances",
+    "deployments.section.archivedDesc":
+      "Archived instances are excluded from everyday management. They can be restored or permanently deleted. The deployment key becomes reusable after a permanent delete.",
+    "deployments.section.archivedEmpty": "No archived instances",
     "deployments.emptyDescription": "No description",
     "deployments.emptyTemplateSource": "None",
     "deployments.filter.keywordPlaceholder": "Search name or deployment key",
@@ -660,6 +699,8 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "deployments.column.status": "Status",
     "deployments.column.description": "Description",
     "deployments.column.actions": "Actions",
+    "deployments.column.archivedAt": "Archived At",
+    "deployments.column.archiveReason": "Archive Reason",
     "deployments.type.template": "Template",
     "deployments.type.instance": "Instance",
     "deployments.action.view": "View",
@@ -669,6 +710,10 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "deployments.action.cloneFromTemplate": "Create Instance",
     "deployments.action.previewBundle": "Preview Bundle",
     "deployments.action.editDraft": "Edit Draft",
+    "deployments.action.archive": "Archive",
+    "deployments.action.restore": "Restore",
+    "deployments.action.permanentDelete": "Permanently Delete",
+    "deployments.action.viewArchived": "Archived Instances",
     "deployments.dialog.createTitle": "Create Deployment",
     "deployments.dialog.inactiveNotice":
       "New deployments start inactive and cannot be consumed by clients until an admin activates them and issues a token.",
@@ -681,6 +726,18 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "deployments.dialog.resetTokenTitle": "Reset access token",
     "deployments.dialog.resetTokenConfirm":
       "Reset the default access token for deployment {name}? The previous token will become invalid immediately.",
+    "deployments.dialog.archiveTitle": "Archive deployment",
+    "deployments.dialog.archiveConfirm":
+      "Archive deployment {name}? It will no longer appear in the default list but can be viewed, restored, or permanently deleted from the Archived Instances drawer.",
+    "deployments.dialog.restoreTitle": "Restore deployment",
+    "deployments.dialog.restoreConfirm":
+      "Restore deployment {name}? It will reappear in the instance list with an inactive status.",
+    "deployments.dialog.deleteTitle": "Permanently delete deployment",
+    "deployments.dialog.deletePrompt":
+      "This cannot be undone. The instance record will be tombstoned and the deployment key will become reusable. Enter the deployment key {key} to confirm.",
+    "deployments.dialog.deleteInputPlaceholder":
+      "Type the deployment key to confirm",
+    "deployments.dialog.deleteKeyMismatch": "The deployment key does not match",
     "deployments.tokenDialog.activateTitle":
       "Deployment activated and token issued",
     "deployments.tokenDialog.resetTitle": "Access token rotated",
@@ -702,6 +759,9 @@ const messages: Record<AppLocale, Record<string, string>> = {
       "Templates are clone sources and are not consumed by clients directly.",
     "deployments.form.description": "Description",
     "deployments.form.descriptionPlaceholder": "Optional description",
+    "deployments.notice.archived":
+      "This instance is archived and read-only. Restore it first to make changes.",
+    "deployments.badge.archived": "Archived",
     "deployments.detail.title": "Deployment Details",
     "deployments.detail.back": "Back to deployments",
     "deployments.detail.loadError": "Failed to load deployment details",
@@ -898,6 +958,9 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "toast.deployments.tokenCopied": "Plain token copied",
     "toast.deployments.cloned":
       "Instance created from template with inactive status",
+    "toast.deployments.archived": "Deployment archived",
+    "toast.deployments.restored": "Deployment restored with inactive status",
+    "toast.deployments.deleted": "Deployment permanently deleted",
     "toast.drafts.saved": "Draft saved",
     "toast.drafts.discarded": "Draft discarded",
     "toast.drafts.restoredFromRelease": "Draft restored from latest Release",
@@ -956,6 +1019,16 @@ const messages: Record<AppLocale, Record<string, string>> = {
       "Template deployments cannot be deactivated",
     "error.deployment_instance_deactivate_conflict":
       "The deployment must be active before deactivation",
+    "error.deployment_instance_archived":
+      "This deployment is archived and cannot be modified",
+    "error.deployment_instance_deleted":
+      "This deployment has been permanently deleted",
+    "error.deployment_instance_archive_conflict":
+      "The deployment must be inactive before archiving",
+    "error.deployment_instance_restore_conflict":
+      "The deployment state changed concurrently. Refresh and try again.",
+    "error.deployment_instance_delete_conflict":
+      "The deployment must be archived and inactive before it can be permanently deleted",
     "error.draft_not_found": "No Draft exists for this config yet",
     "error.draft_version_conflict":
       "The Draft was updated by someone else. Refresh and try again.",

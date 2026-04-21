@@ -27,9 +27,17 @@ pub(crate) struct ListDeploymentInstancesQuery {
     environment_id: Option<i64>,
     keyword: Option<String>,
     status: Option<String>,
+    visibility_filter: Option<String>,
     is_template: Option<bool>,
     page: Option<i64>,
     page_size: Option<i64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DeploymentVisibilityFilter {
+    Current,
+    Archived,
+    All,
 }
 
 #[derive(Debug, Deserialize)]
@@ -78,6 +86,26 @@ pub(crate) struct CloneDeploymentInstanceRequest {
     clone_source: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct ArchiveDeploymentInstanceRequest {
+    reason: Option<String>,
+}
+
+#[derive(Debug)]
+struct ValidatedArchiveDeploymentInstanceRequest {
+    reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct DeleteDeploymentInstanceRequest {
+    reason: Option<String>,
+}
+
+#[derive(Debug)]
+struct ValidatedDeleteDeploymentInstanceRequest {
+    reason: Option<String>,
+}
+
 #[derive(Debug)]
 struct ValidatedCloneDeploymentInstanceRequest {
     deployment_key: String,
@@ -90,13 +118,18 @@ struct ValidatedCloneDeploymentInstanceRequest {
 struct TemplateDeploymentContext {
     project_id: i64,
     is_template: bool,
+    is_archived: bool,
+    deleted_at: Option<String>,
 }
 
 #[derive(Debug)]
 struct DeploymentLifecycleContext {
     project_id: i64,
+    deployment_uid: String,
     is_template: bool,
     status: String,
+    is_archived: bool,
+    deleted_at: Option<String>,
 }
 
 #[derive(Debug)]
@@ -123,7 +156,17 @@ pub fn router() -> Router<AppState> {
         )
         .route(
             "/deployment-instances/{id}",
-            get(get_deployment_instance).put(update_deployment_instance),
+            get(get_deployment_instance)
+                .put(update_deployment_instance)
+                .delete(delete_deployment_instance),
+        )
+        .route(
+            "/deployment-instances/{id}/archive",
+            post(archive_deployment_instance),
+        )
+        .route(
+            "/deployment-instances/{id}/restore",
+            post(restore_deployment_instance),
         )
         .route(
             "/deployment-instances/{id}/clone",
@@ -177,6 +220,7 @@ pub(crate) async fn list_deployment_instances(
     let auth = authenticate_user(pool, &headers).await?;
     let (page, page_size) = validate_page(query.page, query.page_size)?;
     let offset = (page - 1) * page_size;
+    let visibility_filter = parse_visibility_filter(query.visibility_filter.as_deref())?;
 
     let total = sqlx::query_scalar::<_, i64>(
         r#"
@@ -191,6 +235,12 @@ pub(crate) async fn list_deployment_instances(
         WHERE ($2::bigint IS NULL OR di.project_id = $2)
           AND ($3::bigint IS NULL OR di.environment_id = $3)
           AND ($4::varchar IS NULL OR di.status = $4)
+            AND di.deleted_at IS NULL
+            AND (
+                ($7::varchar = 'current' AND di.is_archived = FALSE)
+                OR ($7::varchar = 'archived' AND di.is_archived = TRUE)
+                OR ($7::varchar = 'all')
+            )
           AND (
                 $5::varchar IS NULL
                 OR di.deployment_key ILIKE '%' || $5 || '%'
@@ -205,6 +255,7 @@ pub(crate) async fn list_deployment_instances(
     .bind(normalize_optional(query.status.clone()))
     .bind(normalize_optional(query.keyword.clone()))
     .bind(query.is_template)
+    .bind(visibility_filter.as_str())
     .fetch_one(pool)
     .await
     .map_err(|_| ApiError::internal())?;
@@ -213,6 +264,7 @@ pub(crate) async fn list_deployment_instances(
         r#"
         SELECT
             di.id,
+            btrim(di.deployment_uid::text) AS deployment_uid,
             di.project_id,
             di.environment_id,
             pe.code AS environment_code,
@@ -222,7 +274,14 @@ pub(crate) async fn list_deployment_instances(
             di.description,
             di.is_template,
             di.template_source_id,
-            di.status
+            di.status,
+            di.is_archived,
+            to_char(di.archived_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS archived_at,
+            di.archived_by,
+            di.archive_reason,
+            to_char(di.deleted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS deleted_at,
+            di.deleted_by,
+            di.delete_reason
         FROM deployment_instances di
         JOIN project_environments pe
           ON pe.project_id = di.project_id
@@ -236,6 +295,12 @@ pub(crate) async fn list_deployment_instances(
                 $4::varchar IS NULL
                 OR di.status = $4
           )
+            AND di.deleted_at IS NULL
+            AND (
+                ($7::varchar = 'current' AND di.is_archived = FALSE)
+                OR ($7::varchar = 'archived' AND di.is_archived = TRUE)
+                OR ($7::varchar = 'all')
+            )
           AND (
                 $5::varchar IS NULL
                 OR di.deployment_key ILIKE '%' || $5 || '%'
@@ -243,7 +308,7 @@ pub(crate) async fn list_deployment_instances(
         )
           AND ($6::boolean IS NULL OR di.is_template = $6)
         ORDER BY di.project_id ASC, pe.code ASC, di.deployment_key ASC, di.id ASC
-        LIMIT $7 OFFSET $8
+        LIMIT $8 OFFSET $9
         "#,
     )
     .bind(auth.user_id)
@@ -252,6 +317,7 @@ pub(crate) async fn list_deployment_instances(
     .bind(normalize_optional(query.status))
     .bind(normalize_optional(query.keyword))
     .bind(query.is_template)
+    .bind(visibility_filter.as_str())
     .bind(page_size)
     .bind(offset)
     .fetch_all(pool)
@@ -324,6 +390,7 @@ pub(crate) async fn create_deployment_instance(
     let row = sqlx::query(
         r#"
         INSERT INTO deployment_instances (
+            deployment_uid,
             project_id,
             environment_id,
             deployment_key,
@@ -332,9 +399,10 @@ pub(crate) async fn create_deployment_instance(
             is_template,
             status
         )
-        VALUES ($1, $2, $3, $4, $5, $6, 'inactive')
+        VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, 'inactive')
         RETURNING
             id,
+            btrim(deployment_uid::text) AS deployment_uid,
             project_id,
             environment_id,
             $7::varchar AS environment_code,
@@ -344,7 +412,14 @@ pub(crate) async fn create_deployment_instance(
             description,
             is_template,
             template_source_id,
-            status
+            status,
+            is_archived,
+            to_char(archived_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS archived_at,
+            archived_by,
+            archive_reason,
+            to_char(deleted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS deleted_at,
+            deleted_by,
+            delete_reason
         "#,
     )
     .bind(payload.project_id)
@@ -370,6 +445,7 @@ pub(crate) async fn create_deployment_instance(
             resource_id: summary.id.to_string(),
             detail: Some(serde_json::json!({
                 "deployment_instance_id": summary.id,
+                "deployment_uid": summary.deployment_uid,
                 "changed_fields": ["environment_id", "deployment_key", "name", "description", "is_template"]
             })),
         },
@@ -416,6 +492,7 @@ pub(crate) async fn get_deployment_instance(
         r#"
         SELECT
             di.id,
+            btrim(di.deployment_uid::text) AS deployment_uid,
             di.project_id,
             di.environment_id,
             pe.code AS environment_code,
@@ -425,7 +502,14 @@ pub(crate) async fn get_deployment_instance(
             di.description,
             di.is_template,
             di.template_source_id,
-            di.status
+            di.status,
+            di.is_archived,
+            to_char(di.archived_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS archived_at,
+            di.archived_by,
+            di.archive_reason,
+            to_char(di.deleted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS deleted_at,
+            di.deleted_by,
+            di.delete_reason
         FROM deployment_instances di
         JOIN project_environments pe
           ON pe.project_id = di.project_id
@@ -434,6 +518,7 @@ pub(crate) async fn get_deployment_instance(
           ON pm.project_id = di.project_id
          AND pm.user_id = $2
         WHERE di.id = $1
+          AND di.deleted_at IS NULL
         LIMIT 1
         "#,
     )
@@ -491,35 +576,19 @@ pub(crate) async fn update_deployment_instance(
     };
 
     let auth = authenticate_user(pool, &headers).await?;
-    let existing_project_id = sqlx::query_scalar::<_, i64>(
-        r#"
-        SELECT project_id
-        FROM deployment_instances
-        WHERE id = $1
-        LIMIT 1
-        "#,
-    )
-    .bind(id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|_| ApiError::internal())?
-    .ok_or_else(|| {
-        ApiError::not_found_with(
-            "deployment_instance_not_found",
-            "deployment instance not found",
-        )
-    })?;
+    let context = load_deployment_context(pool, id).await?;
     require_project_role(
         pool,
         auth.user_id,
-        existing_project_id,
+        context.project_id,
         ProjectRole::Admin,
         "deployment_instance_not_found",
         "deployment instance not found",
     )
     .await?;
+    ensure_not_archived_or_deleted(&context)?;
     let environment =
-        load_project_environment_for_assignment(pool, existing_project_id, payload.environment_id)
+        load_project_environment_for_assignment(pool, context.project_id, payload.environment_id)
             .await?;
     if environment.status != "active" {
         return Err(ApiError::conflict(
@@ -539,8 +608,10 @@ pub(crate) async fn update_deployment_instance(
             description = $5,
             updated_at = NOW()
         WHERE id = $1
+          AND deleted_at IS NULL
         RETURNING
             id,
+            btrim(deployment_uid::text) AS deployment_uid,
             project_id,
             environment_id,
             $6::varchar AS environment_code,
@@ -550,7 +621,14 @@ pub(crate) async fn update_deployment_instance(
             description,
             is_template,
             template_source_id,
-            status
+            status,
+            is_archived,
+            to_char(archived_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS archived_at,
+            archived_by,
+            archive_reason,
+            to_char(deleted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS deleted_at,
+            deleted_by,
+            delete_reason
         "#,
     )
     .bind(id)
@@ -581,6 +659,7 @@ pub(crate) async fn update_deployment_instance(
             resource_id: summary.id.to_string(),
             detail: Some(serde_json::json!({
                 "deployment_instance_id": summary.id,
+                "deployment_uid": summary.deployment_uid,
                 "changed_fields": ["environment_id", "deployment_key", "name", "description"]
             })),
         },
@@ -647,6 +726,18 @@ pub(crate) async fn clone_deployment_instance(
             "deployment instance is not a template",
         ));
     }
+    if template.deleted_at.is_some() {
+        return Err(ApiError::conflict(
+            "deployment_instance_deleted",
+            "deployment instance has been deleted",
+        ));
+    }
+    if template.is_archived {
+        return Err(ApiError::conflict(
+            "deployment_instance_archived",
+            "deployment instance is archived",
+        ));
+    }
 
     let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
     let environment =
@@ -661,6 +752,7 @@ pub(crate) async fn clone_deployment_instance(
     let row = sqlx::query(
         r#"
         INSERT INTO deployment_instances (
+            deployment_uid,
             project_id,
             environment_id,
             deployment_key,
@@ -670,9 +762,10 @@ pub(crate) async fn clone_deployment_instance(
             template_source_id,
             status
         )
-        VALUES ($1, $2, $3, $4, $5, FALSE, $6, 'inactive')
+        VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, FALSE, $6, 'inactive')
         RETURNING
             id,
+            btrim(deployment_uid::text) AS deployment_uid,
             project_id,
             environment_id,
             $7::varchar AS environment_code,
@@ -682,7 +775,14 @@ pub(crate) async fn clone_deployment_instance(
             description,
             is_template,
             template_source_id,
-            status
+            status,
+            is_archived,
+            to_char(archived_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS archived_at,
+            archived_by,
+            archive_reason,
+            to_char(deleted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS deleted_at,
+            deleted_by,
+            delete_reason
         "#,
     )
     .bind(template.project_id)
@@ -709,6 +809,7 @@ pub(crate) async fn clone_deployment_instance(
             resource_id: cloned.id.to_string(),
             detail: Some(serde_json::json!({
                 "deployment_instance_id": cloned.id,
+                "deployment_uid": cloned.deployment_uid,
                 "source_deployment_instance_id": id,
                 "source_kind": "draft"
             })),
@@ -751,17 +852,19 @@ pub(crate) async fn preview_deployment_bundle(
         ));
     };
 
-    let context = load_preview_context(pool, id).await?;
+    let lifecycle = load_deployment_context(pool, id).await?;
     let auth = authenticate_user(pool, &headers).await?;
     require_project_role(
         pool,
         auth.user_id,
-        context.project_id,
+        lifecycle.project_id,
         ProjectRole::Editor,
         "deployment_instance_not_found",
         "deployment instance not found",
     )
     .await?;
+    ensure_not_archived_or_deleted(&lifecycle)?;
+    let context = load_preview_context(pool, id).await?;
     let rows = sqlx::query(
         r#"
         SELECT
@@ -936,6 +1039,7 @@ pub(crate) async fn reset_deployment_token(
         "deployment instance not found",
     )
     .await?;
+    ensure_not_archived_or_deleted(&context)?;
     if context.is_template {
         return Err(ApiError::conflict(
             "deployment_instance_template_token_forbidden",
@@ -1019,6 +1123,7 @@ pub(crate) async fn activate_deployment_instance(
         "deployment instance not found",
     )
     .await?;
+    ensure_not_archived_or_deleted(&context)?;
     if context.is_template {
         return Err(ApiError::conflict(
             "deployment_instance_template_activate_forbidden",
@@ -1117,6 +1222,7 @@ pub(crate) async fn deactivate_deployment_instance(
         "deployment instance not found",
     )
     .await?;
+    ensure_not_archived_or_deleted(&context)?;
     if context.is_template {
         return Err(ApiError::conflict(
             "deployment_instance_template_deactivate_forbidden",
@@ -1173,6 +1279,422 @@ pub(crate) async fn deactivate_deployment_instance(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/deployment-instances/{id}/archive",
+    tag = "admin",
+    params(
+        ("id" = i64, Path, description = "Deployment instance ID")
+    ),
+    request_body = crate::openapi::ArchiveDeploymentInstanceRequestBody,
+    security(
+        ("session_auth" = [])
+    ),
+    responses(
+        (status = 200, description = "Deployment instance archived", body = DeploymentInstanceSummary),
+        (status = 400, description = "Invalid request body", body = crate::error::ErrorResponse),
+        (status = 401, description = "Missing or expired admin session", body = crate::error::ErrorResponse),
+        (status = 404, description = "Deployment instance not found", body = crate::error::ErrorResponse),
+        (status = 409, description = "Deployment instance cannot be archived", body = crate::error::ErrorResponse),
+        (status = 503, description = "Database bootstrap disabled", body = crate::error::ErrorResponse),
+        (status = 500, description = "Internal server error", body = crate::error::ErrorResponse),
+    )
+)]
+pub(crate) async fn archive_deployment_instance(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    headers: HeaderMap,
+    payload: Option<Json<ArchiveDeploymentInstanceRequest>>,
+) -> Result<Json<DeploymentInstanceSummary>, ApiError> {
+    let payload = payload
+        .map(|Json(payload)| payload.validate())
+        .unwrap_or(ValidatedArchiveDeploymentInstanceRequest { reason: None });
+
+    let Some(pool) = state.db_pool() else {
+        return Err(ApiError::service_unavailable(
+            "database_unavailable",
+            "Database bootstrap is disabled",
+        ));
+    };
+
+    let auth = authenticate_user(pool, &headers).await?;
+    let context = load_deployment_context(pool, id).await?;
+    require_project_role(
+        pool,
+        auth.user_id,
+        context.project_id,
+        ProjectRole::Admin,
+        "deployment_instance_not_found",
+        "deployment instance not found",
+    )
+    .await?;
+    if context.deleted_at.is_some() {
+        return Err(ApiError::conflict(
+            "deployment_instance_deleted",
+            "deployment instance has been deleted",
+        ));
+    }
+    if context.is_archived {
+        return Err(ApiError::conflict(
+            "deployment_instance_archive_conflict",
+            "deployment instance is already archived",
+        ));
+    }
+    if context.status != "inactive" {
+        return Err(ApiError::conflict(
+            "deployment_instance_archive_conflict",
+            "deployment instance must be inactive before archive",
+        ));
+    }
+
+    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let row = sqlx::query(
+        r#"
+        UPDATE deployment_instances di
+        SET
+            is_archived = TRUE,
+            archived_at = NOW(),
+            archived_by = $2,
+            archive_reason = $3,
+            updated_at = NOW()
+        FROM project_environments pe
+        WHERE di.id = $1
+          AND di.deleted_at IS NULL
+          AND di.is_archived = FALSE
+          AND di.status = 'inactive'
+          AND pe.project_id = di.project_id
+          AND pe.id = di.environment_id
+        RETURNING
+            di.id,
+            btrim(di.deployment_uid::text) AS deployment_uid,
+            di.project_id,
+            di.environment_id,
+            pe.code AS environment_code,
+            pe.name AS environment_name,
+            di.deployment_key,
+            di.name,
+            di.description,
+            di.is_template,
+            di.template_source_id,
+            di.status,
+            di.is_archived,
+            to_char(di.archived_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS archived_at,
+            di.archived_by,
+            di.archive_reason,
+            to_char(di.deleted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS deleted_at,
+            di.deleted_by,
+            di.delete_reason
+        "#,
+    )
+    .bind(id)
+    .bind(auth.user_id)
+    .bind(payload.reason)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| ApiError::internal())?
+    .ok_or_else(|| {
+        ApiError::conflict(
+            "deployment_instance_archive_conflict",
+            "deployment instance could not be archived due to a concurrent state change",
+        )
+    })?;
+
+    let summary = map_deployment_row(row);
+    write_audit_log(
+        &mut *tx,
+        AuditLogEntry {
+            project_id: Some(summary.project_id),
+            user_id: Some(auth.user_id),
+            action: "deployment_instance.archived",
+            resource_type: "deployment_instance",
+            resource_id: summary.id.to_string(),
+            detail: Some(serde_json::json!({
+                "deployment_instance_id": summary.id,
+                "deployment_uid": summary.deployment_uid,
+                "archive_reason": summary.archive_reason,
+            })),
+        },
+    )
+    .await?;
+    tx.commit().await.map_err(|_| ApiError::internal())?;
+
+    Ok(Json(summary))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/deployment-instances/{id}/restore",
+    tag = "admin",
+    params(
+        ("id" = i64, Path, description = "Deployment instance ID")
+    ),
+    security(
+        ("session_auth" = [])
+    ),
+    responses(
+        (status = 200, description = "Deployment instance restored", body = DeploymentInstanceSummary),
+        (status = 401, description = "Missing or expired admin session", body = crate::error::ErrorResponse),
+        (status = 404, description = "Deployment instance not found", body = crate::error::ErrorResponse),
+        (status = 409, description = "Deployment instance cannot be restored", body = crate::error::ErrorResponse),
+        (status = 503, description = "Database bootstrap disabled", body = crate::error::ErrorResponse),
+        (status = 500, description = "Internal server error", body = crate::error::ErrorResponse),
+    )
+)]
+pub(crate) async fn restore_deployment_instance(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    headers: HeaderMap,
+) -> Result<Json<DeploymentInstanceSummary>, ApiError> {
+    let Some(pool) = state.db_pool() else {
+        return Err(ApiError::service_unavailable(
+            "database_unavailable",
+            "Database bootstrap is disabled",
+        ));
+    };
+
+    let auth = authenticate_user(pool, &headers).await?;
+    let context = load_deployment_context(pool, id).await?;
+    require_project_role(
+        pool,
+        auth.user_id,
+        context.project_id,
+        ProjectRole::Admin,
+        "deployment_instance_not_found",
+        "deployment instance not found",
+    )
+    .await?;
+    if context.deleted_at.is_some() {
+        return Err(ApiError::conflict(
+            "deployment_instance_deleted",
+            "deployment instance has been deleted",
+        ));
+    }
+    if !context.is_archived {
+        return Err(ApiError::conflict(
+            "deployment_instance_restore_conflict",
+            "deployment instance is not archived",
+        ));
+    }
+
+    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let row = sqlx::query(
+        r#"
+        UPDATE deployment_instances di
+        SET
+            is_archived = FALSE,
+            archived_at = NULL,
+            archived_by = NULL,
+            archive_reason = NULL,
+            status = 'inactive',
+            updated_at = NOW()
+        FROM project_environments pe
+        WHERE di.id = $1
+          AND di.deleted_at IS NULL
+          AND di.is_archived = TRUE
+          AND pe.project_id = di.project_id
+          AND pe.id = di.environment_id
+        RETURNING
+            di.id,
+            btrim(di.deployment_uid::text) AS deployment_uid,
+            di.project_id,
+            di.environment_id,
+            pe.code AS environment_code,
+            pe.name AS environment_name,
+            di.deployment_key,
+            di.name,
+            di.description,
+            di.is_template,
+            di.template_source_id,
+            di.status,
+            di.is_archived,
+            to_char(di.archived_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS archived_at,
+            di.archived_by,
+            di.archive_reason,
+            to_char(di.deleted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS deleted_at,
+            di.deleted_by,
+            di.delete_reason
+        "#,
+    )
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| ApiError::internal())?
+    .ok_or_else(|| {
+        ApiError::conflict(
+            "deployment_instance_restore_conflict",
+            "deployment instance could not be restored due to a concurrent state change",
+        )
+    })?;
+
+    let summary = map_deployment_row(row);
+    write_audit_log(
+        &mut *tx,
+        AuditLogEntry {
+            project_id: Some(summary.project_id),
+            user_id: Some(auth.user_id),
+            action: "deployment_instance.restored",
+            resource_type: "deployment_instance",
+            resource_id: summary.id.to_string(),
+            detail: Some(serde_json::json!({
+                "deployment_instance_id": summary.id,
+                "deployment_uid": summary.deployment_uid,
+            })),
+        },
+    )
+    .await?;
+    tx.commit().await.map_err(|_| ApiError::internal())?;
+
+    Ok(Json(summary))
+}
+
+#[utoipa::path(
+    delete,
+    path = "/api/deployment-instances/{id}",
+    tag = "admin",
+    params(
+        ("id" = i64, Path, description = "Deployment instance ID")
+    ),
+    request_body = crate::openapi::DeleteDeploymentInstanceRequestBody,
+    security(
+        ("session_auth" = [])
+    ),
+    responses(
+        (status = 204, description = "Deployment instance deleted"),
+        (status = 400, description = "Invalid request body", body = crate::error::ErrorResponse),
+        (status = 401, description = "Missing or expired admin session", body = crate::error::ErrorResponse),
+        (status = 404, description = "Deployment instance not found", body = crate::error::ErrorResponse),
+        (status = 409, description = "Deployment instance cannot be deleted", body = crate::error::ErrorResponse),
+        (status = 503, description = "Database bootstrap disabled", body = crate::error::ErrorResponse),
+        (status = 500, description = "Internal server error", body = crate::error::ErrorResponse),
+    )
+)]
+pub(crate) async fn delete_deployment_instance(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    headers: HeaderMap,
+    payload: Option<Json<DeleteDeploymentInstanceRequest>>,
+) -> Result<StatusCode, ApiError> {
+    let payload = payload
+        .map(|Json(payload)| payload.validate())
+        .unwrap_or(ValidatedDeleteDeploymentInstanceRequest { reason: None });
+    let delete_reason = payload.reason;
+
+    let Some(pool) = state.db_pool() else {
+        return Err(ApiError::service_unavailable(
+            "database_unavailable",
+            "Database bootstrap is disabled",
+        ));
+    };
+
+    let auth = authenticate_user(pool, &headers).await?;
+    let context = load_deployment_context(pool, id).await?;
+    require_project_role(
+        pool,
+        auth.user_id,
+        context.project_id,
+        ProjectRole::Admin,
+        "deployment_instance_not_found",
+        "deployment instance not found",
+    )
+    .await?;
+    if context.deleted_at.is_some() {
+        return Err(ApiError::conflict(
+            "deployment_instance_deleted",
+            "deployment instance has been deleted",
+        ));
+    }
+    if !context.is_archived || context.status != "inactive" {
+        return Err(ApiError::conflict(
+            "deployment_instance_delete_conflict",
+            "deployment instance must be archived and inactive before delete",
+        ));
+    }
+
+    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let tombstone_result = sqlx::query(
+        r#"
+        UPDATE deployment_instances
+        SET
+            deleted_at = NOW(),
+            deleted_by = $2,
+            delete_reason = $3,
+            updated_at = NOW()
+        WHERE id = $1
+          AND deleted_at IS NULL
+          AND is_archived = TRUE
+          AND status = 'inactive'
+        "#,
+    )
+    .bind(id)
+    .bind(auth.user_id)
+    .bind(delete_reason.clone())
+    .execute(&mut *tx)
+    .await
+    .map_err(|_| ApiError::internal())?;
+    if tombstone_result.rows_affected() == 0 {
+        return Err(ApiError::conflict(
+            "deployment_instance_delete_conflict",
+            "deployment instance could not be deleted due to a concurrent state change",
+        ));
+    }
+
+    sqlx::query(
+        r#"
+        UPDATE deployment_credentials
+        SET status = 'inactive', updated_at = NOW()
+        WHERE deployment_instance_id = $1
+        "#,
+    )
+    .bind(id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|_| ApiError::internal())?;
+
+    sqlx::query(
+        r#"
+        DELETE FROM drafts
+        WHERE deployment_instance_id = $1
+        "#,
+    )
+    .bind(id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|_| ApiError::internal())?;
+
+    sqlx::query(
+        r#"
+        UPDATE draft_saved_versions
+        SET deleted_at = COALESCE(deleted_at, NOW()), updated_at = NOW()
+        WHERE deployment_instance_id = $1
+          AND deleted_at IS NULL
+        "#,
+    )
+    .bind(id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|_| ApiError::internal())?;
+
+    write_audit_log(
+        &mut *tx,
+        AuditLogEntry {
+            project_id: Some(context.project_id),
+            user_id: Some(auth.user_id),
+            action: "deployment_instance.deleted",
+            resource_type: "deployment_instance",
+            resource_id: id.to_string(),
+            detail: Some(serde_json::json!({
+                "deployment_instance_id": id,
+                "deployment_uid": context.deployment_uid,
+                "delete_reason": delete_reason,
+            })),
+        },
+    )
+    .await?;
+    tx.commit().await.map_err(|_| ApiError::internal())?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
 impl CreateDeploymentInstanceRequest {
     fn validate(self) -> Result<ValidatedCreateDeploymentInstanceRequest, ApiError> {
         Ok(ValidatedCreateDeploymentInstanceRequest {
@@ -1210,9 +1732,66 @@ impl CloneDeploymentInstanceRequest {
     }
 }
 
+impl ArchiveDeploymentInstanceRequest {
+    fn validate(self) -> ValidatedArchiveDeploymentInstanceRequest {
+        ValidatedArchiveDeploymentInstanceRequest {
+            reason: normalize_optional(self.reason),
+        }
+    }
+}
+
+impl DeleteDeploymentInstanceRequest {
+    fn validate(self) -> ValidatedDeleteDeploymentInstanceRequest {
+        ValidatedDeleteDeploymentInstanceRequest {
+            reason: normalize_optional(self.reason),
+        }
+    }
+}
+
+impl DeploymentVisibilityFilter {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Current => "current",
+            Self::Archived => "archived",
+            Self::All => "all",
+        }
+    }
+}
+
+fn parse_visibility_filter(value: Option<&str>) -> Result<DeploymentVisibilityFilter, ApiError> {
+    match value.map(str::trim).filter(|v| !v.is_empty()) {
+        None => Ok(DeploymentVisibilityFilter::Current),
+        Some("current") => Ok(DeploymentVisibilityFilter::Current),
+        Some("archived") => Ok(DeploymentVisibilityFilter::Archived),
+        Some("all") => Ok(DeploymentVisibilityFilter::All),
+        Some(_) => Err(ApiError::bad_request(
+            "invalid_request",
+            "visibility_filter must be one of: current, archived, all",
+        )),
+    }
+}
+
+fn ensure_not_archived_or_deleted(context: &DeploymentLifecycleContext) -> Result<(), ApiError> {
+    if context.deleted_at.is_some() {
+        return Err(ApiError::conflict(
+            "deployment_instance_deleted",
+            "deployment instance has been deleted",
+        ));
+    }
+    if context.is_archived {
+        return Err(ApiError::conflict(
+            "deployment_instance_archived",
+            "deployment instance is archived",
+        ));
+    }
+
+    Ok(())
+}
+
 fn map_deployment_row(row: sqlx::postgres::PgRow) -> DeploymentInstanceSummary {
     DeploymentInstanceSummary {
         id: row.get("id"),
+        deployment_uid: row.get("deployment_uid"),
         project_id: row.get("project_id"),
         environment_id: row.get("environment_id"),
         environment_code: row.get("environment_code"),
@@ -1223,6 +1802,13 @@ fn map_deployment_row(row: sqlx::postgres::PgRow) -> DeploymentInstanceSummary {
         is_template: row.get("is_template"),
         template_source_id: row.get("template_source_id"),
         status: row.get("status"),
+        is_archived: row.get("is_archived"),
+        archived_at: row.get("archived_at"),
+        archived_by: row.get("archived_by"),
+        archive_reason: row.get("archive_reason"),
+        deleted_at: row.get("deleted_at"),
+        deleted_by: row.get("deleted_by"),
+        delete_reason: row.get("delete_reason"),
     }
 }
 
@@ -1230,6 +1816,7 @@ fn map_deployment_write_error(error: SqlxError) -> ApiError {
     if let SqlxError::Database(database_error) = &error {
         if database_error.constraint().is_some_and(|constraint| {
             constraint.starts_with("deployment_instances_project_id_environment")
+                || constraint == "deployment_instances_live_key_unique"
         }) {
             return ApiError::conflict(
                 "deployment_key_conflict",
@@ -1293,7 +1880,7 @@ async fn load_template_context(
 ) -> Result<TemplateDeploymentContext, ApiError> {
     let row = sqlx::query(
         r#"
-        SELECT project_id, is_template
+        SELECT project_id, is_template, is_archived, to_char(deleted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS deleted_at
         FROM deployment_instances
         WHERE id = $1
         LIMIT 1
@@ -1313,6 +1900,8 @@ async fn load_template_context(
     Ok(TemplateDeploymentContext {
         project_id: row.get("project_id"),
         is_template: row.get("is_template"),
+        is_archived: row.get("is_archived"),
+        deleted_at: row.get("deleted_at"),
     })
 }
 
@@ -1322,7 +1911,13 @@ async fn load_deployment_context(
 ) -> Result<DeploymentLifecycleContext, ApiError> {
     let row = sqlx::query(
         r#"
-        SELECT project_id, is_template, status
+        SELECT
+            project_id,
+            btrim(deployment_uid::text) AS deployment_uid,
+            is_template,
+            status,
+            is_archived,
+            to_char(deleted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS deleted_at
         FROM deployment_instances
         WHERE id = $1
         LIMIT 1
@@ -1341,8 +1936,11 @@ async fn load_deployment_context(
 
     Ok(DeploymentLifecycleContext {
         project_id: row.get("project_id"),
+        deployment_uid: row.get("deployment_uid"),
         is_template: row.get("is_template"),
         status: row.get("status"),
+        is_archived: row.get("is_archived"),
+        deleted_at: row.get("deleted_at"),
     })
 }
 
@@ -1565,5 +2163,238 @@ fn validate_clone_source(value: Option<String>) -> Result<String, ApiError> {
             "invalid_request",
             "invalid deployment clone source",
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        ArchiveDeploymentInstanceRequest, CloneDeploymentInstanceRequest,
+        CreateDeploymentInstanceRequest, DeleteDeploymentInstanceRequest,
+        DeploymentLifecycleContext, DeploymentVisibilityFilter, UpdateDeploymentInstanceRequest,
+        ensure_not_archived_or_deleted, invalid_body_message, normalize_optional,
+        parse_visibility_filter, required, required_i64, validate_clone_source, validate_page,
+    };
+
+    fn error_code(error: crate::error::ApiError) -> String {
+        error.into_body().code
+    }
+
+    fn live_context() -> DeploymentLifecycleContext {
+        DeploymentLifecycleContext {
+            project_id: 7,
+            deployment_uid: "11111111-1111-1111-1111-111111111111".to_owned(),
+            is_template: false,
+            status: "inactive".to_owned(),
+            is_archived: false,
+            deleted_at: None,
+        }
+    }
+
+    #[test]
+    fn visibility_filter_defaults_and_accepts_known_values() {
+        assert_eq!(
+            parse_visibility_filter(None),
+            Ok(DeploymentVisibilityFilter::Current)
+        );
+        assert_eq!(
+            parse_visibility_filter(Some("   ")),
+            Ok(DeploymentVisibilityFilter::Current)
+        );
+        assert_eq!(
+            parse_visibility_filter(Some("current")),
+            Ok(DeploymentVisibilityFilter::Current)
+        );
+        assert_eq!(
+            parse_visibility_filter(Some("archived")),
+            Ok(DeploymentVisibilityFilter::Archived)
+        );
+        assert_eq!(
+            parse_visibility_filter(Some("all")),
+            Ok(DeploymentVisibilityFilter::All)
+        );
+        assert_eq!(DeploymentVisibilityFilter::Archived.as_str(), "archived");
+    }
+
+    #[test]
+    fn visibility_filter_rejects_unknown_values() {
+        let result = parse_visibility_filter(Some("deleted"));
+
+        let error = result.map_err(error_code).err();
+        assert_eq!(error, Some("invalid_request".to_owned()));
+    }
+
+    #[test]
+    fn archive_and_delete_requests_trim_optional_reasons() {
+        let archive = ArchiveDeploymentInstanceRequest {
+            reason: Some("  seasonal cleanup  ".to_owned()),
+        }
+        .validate();
+        let delete = DeleteDeploymentInstanceRequest {
+            reason: Some("  ".to_owned()),
+        }
+        .validate();
+
+        assert_eq!(archive.reason, Some("seasonal cleanup".to_owned()));
+        assert_eq!(delete.reason, None);
+    }
+
+    #[test]
+    fn ensure_not_archived_or_deleted_accepts_live_context() {
+        assert_eq!(ensure_not_archived_or_deleted(&live_context()), Ok(()));
+    }
+
+    #[test]
+    fn ensure_not_archived_or_deleted_rejects_archived_context() {
+        let mut context = live_context();
+        context.is_archived = true;
+
+        assert_eq!(
+            ensure_not_archived_or_deleted(&context).map_err(error_code),
+            Err("deployment_instance_archived".to_owned())
+        );
+    }
+
+    #[test]
+    fn ensure_not_archived_or_deleted_rejects_deleted_context() {
+        let mut context = live_context();
+        context.deleted_at = Some("2026-04-21T00:00:00Z".to_owned());
+
+        assert_eq!(
+            ensure_not_archived_or_deleted(&context).map_err(error_code),
+            Err("deployment_instance_deleted".to_owned())
+        );
+    }
+
+    #[test]
+    fn create_request_validation_trims_fields_and_defaults_template_flag() {
+        let validated = CreateDeploymentInstanceRequest {
+            project_id: Some(1),
+            environment_id: Some(2),
+            deployment_key: Some("  store-001  ".to_owned()),
+            name: Some("  Store 001  ".to_owned()),
+            description: Some("  Hangzhou  ".to_owned()),
+            is_template: None,
+        }
+        .validate();
+
+        assert_eq!(
+            validated.map(|value| value.deployment_key),
+            Ok("store-001".to_owned())
+        );
+    }
+
+    #[test]
+    fn create_request_validation_rejects_missing_required_fields() {
+        let result = CreateDeploymentInstanceRequest {
+            project_id: None,
+            environment_id: Some(2),
+            deployment_key: Some("store-001".to_owned()),
+            name: Some("Store 001".to_owned()),
+            description: None,
+            is_template: Some(false),
+        }
+        .validate();
+
+        let error = result.map_err(error_code).err();
+        assert_eq!(error, Some("invalid_request".to_owned()));
+    }
+
+    #[test]
+    fn update_request_validation_trims_description() {
+        let validated = UpdateDeploymentInstanceRequest {
+            environment_id: Some(2),
+            deployment_key: Some("  store-002  ".to_owned()),
+            name: Some("  Store 002  ".to_owned()),
+            description: Some("  ".to_owned()),
+        }
+        .validate();
+
+        assert_eq!(validated.map(|value| value.description), Ok(None));
+    }
+
+    #[test]
+    fn clone_request_validation_requires_draft_source() {
+        let validated = CloneDeploymentInstanceRequest {
+            deployment_key: Some(" store-003 ".to_owned()),
+            name: Some(" Store 003 ".to_owned()),
+            environment_id: Some(2),
+            description: None,
+            clone_source: Some("draft".to_owned()),
+        }
+        .validate();
+
+        assert_eq!(
+            validated.map(|value| value.name),
+            Ok("Store 003".to_owned())
+        );
+
+        let invalid = CloneDeploymentInstanceRequest {
+            deployment_key: Some("store-004".to_owned()),
+            name: Some("Store 004".to_owned()),
+            environment_id: Some(2),
+            description: None,
+            clone_source: Some("latest_release".to_owned()),
+        }
+        .validate();
+
+        let error = invalid.map_err(error_code).err();
+        assert_eq!(error, Some("invalid_request".to_owned()));
+    }
+
+    #[test]
+    fn pagination_validation_accepts_defaults_and_rejects_out_of_range_values() {
+        assert_eq!(validate_page(None, None), Ok((1, 20)));
+        assert_eq!(validate_page(Some(2), Some(100)), Ok((2, 100)));
+        assert_eq!(
+            validate_page(Some(0), Some(20)).map_err(error_code),
+            Err("invalid_request".to_owned())
+        );
+        assert_eq!(
+            validate_page(Some(1), Some(101)).map_err(error_code),
+            Err("invalid_request".to_owned())
+        );
+    }
+
+    #[test]
+    fn scalar_validation_helpers_normalize_and_report_missing_fields() {
+        assert_eq!(
+            normalize_optional(Some("  store  ".to_owned())),
+            Some("store".to_owned())
+        );
+        assert_eq!(normalize_optional(Some("  ".to_owned())), None);
+        assert_eq!(
+            required(Some("  value  ".to_owned()), "name"),
+            Ok("value".to_owned())
+        );
+        assert_eq!(
+            required(None, "name").map_err(error_code),
+            Err("invalid_request".to_owned())
+        );
+        assert_eq!(required_i64(Some(42), "project_id"), Ok(42));
+        assert_eq!(
+            required_i64(None, "project_id").map_err(error_code),
+            Err("invalid_request".to_owned())
+        );
+        assert_eq!(
+            invalid_body_message("clone_source"),
+            "missing required body field: clone_source"
+        );
+    }
+
+    #[test]
+    fn clone_source_validation_rejects_blank_or_unknown_values() {
+        assert_eq!(
+            validate_clone_source(Some(" draft ".to_owned())),
+            Ok("draft".to_owned())
+        );
+        assert_eq!(
+            validate_clone_source(Some(" ".to_owned())).map_err(error_code),
+            Err("invalid_request".to_owned())
+        );
+        assert_eq!(
+            validate_clone_source(Some("release".to_owned())).map_err(error_code),
+            Err("invalid_request".to_owned())
+        );
     }
 }

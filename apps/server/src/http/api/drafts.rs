@@ -46,6 +46,8 @@ struct ValidatedCloneDraftRequest {
 struct DraftContext {
     project_id: i64,
     format: String,
+    is_archived: bool,
+    deleted_at: Option<String>,
 }
 
 #[derive(Debug)]
@@ -109,6 +111,7 @@ pub(crate) async fn get_draft(
         "deployment instance not found",
     )
     .await?;
+    ensure_deployment_writable_for_draft(&context)?;
 
     let row = sqlx::query(
         r#"
@@ -177,6 +180,7 @@ pub(crate) async fn delete_draft(
         "deployment instance not found",
     )
     .await?;
+    ensure_deployment_writable_for_draft(&context)?;
 
     let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
 
@@ -273,6 +277,7 @@ pub(crate) async fn put_draft(
         "deployment instance not found",
     )
     .await?;
+    ensure_deployment_writable_for_draft(&context)?;
     validate_draft_payload(&payload, &context)?;
 
     let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
@@ -512,6 +517,7 @@ pub(crate) async fn clone_draft(
         "deployment instance not found",
     )
     .await?;
+    ensure_deployment_writable_for_draft(&context)?;
     ensure_same_project(
         pool,
         context.project_id,
@@ -594,9 +600,12 @@ async fn load_draft_context(
     deployment_id: i64,
     config_file_id: i64,
 ) -> Result<DraftContext, ApiError> {
-    let deployment_project_id: i64 = sqlx::query_scalar(
+    let deployment_row = sqlx::query(
         r#"
-        SELECT project_id
+        SELECT
+            project_id,
+            is_archived,
+            to_char(deleted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS deleted_at
         FROM deployment_instances
         WHERE id = $1
         LIMIT 1
@@ -612,6 +621,8 @@ async fn load_draft_context(
             "deployment instance not found",
         )
     })?;
+
+    let deployment_project_id: i64 = deployment_row.get("project_id");
 
     let row = sqlx::query(
         r#"
@@ -638,6 +649,8 @@ async fn load_draft_context(
     Ok(DraftContext {
         project_id: config_project_id,
         format: row.get("format"),
+        is_archived: deployment_row.get("is_archived"),
+        deleted_at: deployment_row.get("deleted_at"),
     })
 }
 
@@ -647,9 +660,12 @@ async fn ensure_same_project(
     source_deployment_id: i64,
     target_deployment_id: i64,
 ) -> Result<(), ApiError> {
-    let source_project_id: i64 = sqlx::query_scalar(
+    let source_row = sqlx::query(
         r#"
-        SELECT project_id
+        SELECT
+            project_id,
+            is_archived,
+            to_char(deleted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS deleted_at
         FROM deployment_instances
         WHERE id = $1
         LIMIT 1
@@ -666,6 +682,8 @@ async fn ensure_same_project(
         )
     })?;
 
+    let source_project_id: i64 = source_row.get("project_id");
+
     if source_project_id != project_id {
         return Err(ApiError::forbidden(
             "draft_clone_cross_project_forbidden",
@@ -673,8 +691,40 @@ async fn ensure_same_project(
         ));
     }
 
+    let source_deleted_at: Option<String> = source_row.get("deleted_at");
+    if source_deleted_at.is_some() {
+        return Err(ApiError::conflict(
+            "deployment_instance_deleted",
+            "deployment instance has been deleted",
+        ));
+    }
+    let source_is_archived: bool = source_row.get("is_archived");
+    if source_is_archived {
+        return Err(ApiError::conflict(
+            "deployment_instance_archived",
+            "deployment instance is archived",
+        ));
+    }
+
     if source_deployment_id == target_deployment_id {
         return Ok(());
+    }
+
+    Ok(())
+}
+
+fn ensure_deployment_writable_for_draft(context: &DraftContext) -> Result<(), ApiError> {
+    if context.deleted_at.is_some() {
+        return Err(ApiError::conflict(
+            "deployment_instance_deleted",
+            "deployment instance has been deleted",
+        ));
+    }
+    if context.is_archived {
+        return Err(ApiError::conflict(
+            "deployment_instance_archived",
+            "deployment instance is archived",
+        ));
     }
 
     Ok(())

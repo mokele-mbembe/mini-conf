@@ -91,6 +91,44 @@ pub(crate) async fn list_clone_sources(
     )
     .await?;
 
+    let target = sqlx::query(
+        r#"
+        SELECT
+            is_archived,
+            to_char(deleted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS deleted_at
+        FROM deployment_instances
+        WHERE id = $1
+          AND project_id = $2
+        LIMIT 1
+        "#,
+    )
+    .bind(query.target_deployment_id)
+    .bind(query.project_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| ApiError::internal())?
+    .ok_or_else(|| {
+        ApiError::not_found_with(
+            "deployment_instance_not_found",
+            "deployment instance not found",
+        )
+    })?;
+
+    let target_deleted_at: Option<String> = target.get("deleted_at");
+    if target_deleted_at.is_some() {
+        return Err(ApiError::conflict(
+            "deployment_instance_deleted",
+            "deployment instance has been deleted",
+        ));
+    }
+    let target_is_archived: bool = target.get("is_archived");
+    if target_is_archived {
+        return Err(ApiError::conflict(
+            "deployment_instance_archived",
+            "deployment instance is archived",
+        ));
+    }
+
     let limit = validate_limit(query.limit)?;
     let keyword = normalize_optional(query.keyword);
     let cursor = query.cursor.unwrap_or(0);
@@ -123,6 +161,8 @@ pub(crate) async fn list_clone_sources(
          AND pe.id = di.environment_id
         WHERE di.project_id = $1
           AND di.id != $2
+                    AND di.deleted_at IS NULL
+                    AND di.is_archived = FALSE
           AND di.id > $3
           AND (
                 $5::varchar IS NULL

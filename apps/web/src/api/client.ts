@@ -78,7 +78,10 @@ export const client = {
     });
   },
 
-  delete<T>(path: string): Promise<T> {
-    return request<T>(path, { method: "DELETE" });
+  delete<T>(path: string, body?: unknown): Promise<T> {
+    return request<T>(path, {
+      method: "DELETE",
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
   },
 };

@@ -304,6 +304,15 @@
               {{ t("deployments.filter.reset") }}
             </el-button>
           </div>
+
+          <el-button
+            v-if="isAdmin"
+            text
+            type="info"
+            @click="archivedDrawerVisible = true"
+          >
+            {{ t("deployments.action.viewArchived") }}
+          </el-button>
         </div>
 
         <ErrorState
@@ -449,6 +458,16 @@
                     >
                       {{ t("deployments.action.resetToken") }}
                     </el-button>
+                    <el-button
+                      v-if="canArchiveRow(row)"
+                      text
+                      type="warning"
+                      size="small"
+                      :loading="isActionLoading(row.id, 'archive')"
+                      @click="handleArchive(row)"
+                    >
+                      {{ t("deployments.action.archive") }}
+                    </el-button>
                   </div>
                 </template>
               </el-table-column>
@@ -489,6 +508,13 @@
       :payload="tokenPayload"
       :mode="tokenDialogMode"
     />
+
+    <ArchivedInstancesDrawer
+      v-model:visible="archivedDrawerVisible"
+      :project-id="projectId"
+      @restored="handleArchivedDrawerRestored"
+      @deleted="instanceList.load"
+    />
   </div>
 </template>
 
@@ -503,6 +529,7 @@ import ProjectTabs from "@/modules/projects/components/ProjectTabs.vue";
 import DeploymentInstanceCreateDialog from "../components/DeploymentInstanceCreateDialog.vue";
 import DeploymentInstanceCloneDialog from "../components/DeploymentInstanceCloneDialog.vue";
 import DeploymentTokenDialog from "../components/DeploymentTokenDialog.vue";
+import ArchivedInstancesDrawer from "../components/ArchivedInstancesDrawer.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import StatusBadge from "@/shared/components/StatusBadge.vue";
 import EmptyState from "@/shared/states/EmptyState.vue";
@@ -588,6 +615,15 @@ function openCloneDialog(row: DeploymentInstanceSummary) {
 
 function isActionLoading(id: number, action: string) {
   return actionTarget.value?.id === id && actionTarget.value.action === action;
+}
+
+function canArchiveRow(row: DeploymentInstanceSummary) {
+  return (
+    isAdmin.value &&
+    !row.is_template &&
+    !row.is_archived &&
+    row.status === "inactive"
+  );
 }
 
 function openTokenDialog(
@@ -691,6 +727,36 @@ async function handleResetToken(row: DeploymentInstanceSummary) {
   } finally {
     actionTarget.value = null;
   }
+}
+
+const archivedDrawerVisible = ref(false);
+
+async function handleArchive(row: DeploymentInstanceSummary) {
+  try {
+    await ElMessageBox.confirm(
+      t("deployments.dialog.archiveConfirm", { name: row.name }),
+      t("deployments.dialog.archiveTitle"),
+      { type: "warning" },
+    );
+    actionTarget.value = { id: row.id, action: "archive" };
+    await deploymentInstancesApi.archiveDeploymentInstance(row.id);
+    ElMessage.success(t("toast.deployments.archived"));
+    await instanceList.load();
+  } catch (err) {
+    if (err === "cancel" || err === "close") return;
+    if (err instanceof ApiRequestError) {
+      ElMessage.error(getErrorMessage(err.code, err.message));
+    } else {
+      ElMessage.error(t("toast.operationFailed"));
+    }
+  } finally {
+    actionTarget.value = null;
+  }
+}
+
+function handleArchivedDrawerRestored() {
+  instanceList.page.value = 1;
+  instanceList.load();
 }
 
 function goToEnvironmentPage() {

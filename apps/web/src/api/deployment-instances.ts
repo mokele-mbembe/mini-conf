@@ -1,7 +1,9 @@
 import { client } from "./client";
 import type {
+  ArchiveDeploymentInstanceRequest,
   CloneDeploymentInstanceRequest,
   CreateDeploymentInstanceRequest,
+  DeleteDeploymentInstanceRequest,
   DeploymentInstanceListResponse,
   DeploymentInstanceSummary,
   DeploymentBundlePreviewResponse,
@@ -28,6 +30,9 @@ function buildDeploymentInstanceQuery(
   }
   if (params?.is_template !== undefined) {
     query.set("is_template", String(params.is_template));
+  }
+  if (params?.visibility_filter) {
+    query.set("visibility_filter", params.visibility_filter);
   }
   if (params?.page !== undefined) {
     query.set("page", String(params.page));
@@ -105,4 +110,29 @@ export function previewDeploymentBundle(
   return client.get<DeploymentBundlePreviewResponse>(
     `/deployment-instances/${id}/preview-bundle`,
   );
+}
+
+export function archiveDeploymentInstance(
+  id: number,
+  body?: ArchiveDeploymentInstanceRequest,
+): Promise<DeploymentInstanceSummary> {
+  return client.post<DeploymentInstanceSummary>(
+    `/deployment-instances/${id}/archive`,
+    body ?? {},
+  );
+}
+
+export function restoreDeploymentInstance(
+  id: number,
+): Promise<DeploymentInstanceSummary> {
+  return client.post<DeploymentInstanceSummary>(
+    `/deployment-instances/${id}/restore`,
+  );
+}
+
+export function deleteDeploymentInstance(
+  id: number,
+  body?: DeleteDeploymentInstanceRequest,
+): Promise<void> {
+  return client.delete<void>(`/deployment-instances/${id}`, body ?? {});
 }

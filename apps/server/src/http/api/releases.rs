@@ -46,6 +46,8 @@ struct ValidatedPublishReleaseRequest {
 struct ReleasePublishContext {
     format: String,
     is_template: bool,
+    is_archived: bool,
+    deleted_at: Option<String>,
 }
 
 #[derive(Debug)]
@@ -196,6 +198,18 @@ pub(crate) async fn publish_release(
         return Err(ApiError::conflict(
             "deployment_instance_template_publish_forbidden",
             "template deployment instances cannot publish releases",
+        ));
+    }
+    if context.deleted_at.is_some() {
+        return Err(ApiError::conflict(
+            "deployment_instance_deleted",
+            "deployment instance has been deleted",
+        ));
+    }
+    if context.is_archived {
+        return Err(ApiError::conflict(
+            "deployment_instance_archived",
+            "deployment instance is archived",
         ));
     }
     ensure_required_configs_present(pool, payload.project_id, payload.deployment_instance_id)
@@ -488,7 +502,11 @@ async fn load_publish_context(
 
     let deployment_row = sqlx::query(
         r#"
-        SELECT project_id, is_template
+        SELECT
+            project_id,
+            is_template,
+            is_archived,
+            to_char(deleted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS deleted_at
         FROM deployment_instances
         WHERE id = $1
         LIMIT 1
@@ -537,6 +555,8 @@ async fn load_publish_context(
     Ok(ReleasePublishContext {
         format: row.get("format"),
         is_template: deployment_row.get("is_template"),
+        is_archived: deployment_row.get("is_archived"),
+        deleted_at: deployment_row.get("deleted_at"),
     })
 }
 
