@@ -281,3 +281,73 @@ dev-web:
 
 db-reset-dev:
   @if [ -f scripts/db-reset-dev.sh ]; then bash scripts/db-reset-dev.sh; else echo "Skipping db reset: scripts/db-reset-dev.sh not found"; fi
+
+# ---------------------------------------------------------------------------
+# Coffee Demo
+# ---------------------------------------------------------------------------
+
+# Drop and recreate the demo schema, run migrations, seed fixtures, write current-run.json.
+demo-coffee-reset:
+  @if [ ! -f Cargo.toml ]; then \
+    echo "Skipping demo-coffee-reset: Cargo workspace not initialized"; \
+  elif ! command -v psql >/dev/null 2>&1; then \
+    echo "psql is required for demo-coffee-reset (PostgreSQL client tools)" >&2; \
+    exit 1; \
+  elif ! command -v sqlx >/dev/null 2>&1; then \
+    echo "sqlx CLI is required for demo-coffee-reset" >&2; \
+    exit 1; \
+  else \
+    bash scripts/demo-coffee-reset.sh; \
+  fi
+
+# Start the server pointing at the isolated coffee demo schema.
+run-server-local-demo-coffee:
+  @if [ ! -f Cargo.toml ]; then \
+    echo "Skipping run-server-local-demo-coffee: Cargo workspace not initialized"; \
+  elif [ ! -f demo/coffee/generated/current-run.json ]; then \
+    echo "Coffee demo not initialised — run: just demo-coffee-reset" >&2; \
+    exit 1; \
+  else \
+    demo_url="$$(python3 -c "import json,sys; d=json.load(open('demo/coffee/generated/current-run.json')); print(d['database_url'])")"; \
+    DATABASE_URL="$${demo_url}" cargo run --bin server; \
+  fi
+
+# Start config-center backend, admin UI, simulated business backends, control API, and monitor UI.
+demo-coffee-up:
+  @if [ ! -f Cargo.toml ]; then \
+    echo "Skipping demo-coffee-up: Cargo workspace not initialized"; \
+  elif [ ! -f apps/web/package.json ]; then \
+    echo "Skipping demo-coffee-up: frontend workspace not initialized"; \
+  else \
+    bash scripts/demo-coffee-up.sh; \
+  fi
+
+# Smoke-test an already running coffee demo stack.
+demo-coffee-smoke:
+  @if [ ! -f demo/coffee/generated/current-run.json ]; then \
+    echo "Coffee demo not initialised — start it first with: DEMO_COFFEE_RESET=1 just demo-coffee-up" >&2; \
+    exit 1; \
+  else \
+    bash scripts/demo-coffee-smoke.sh; \
+  fi
+
+# Fast static checks for demo code, without starting the full demo stack.
+demo-coffee-check:
+  @bash -n scripts/demo-coffee-reset.sh scripts/demo-coffee-up.sh scripts/demo-coffee-smoke.sh
+  @python3 -m py_compile scripts/demo-coffee-access-app.py
+  @cargo fmt --all --check
+  @cargo check --bin demo-coffee-seed
+  @pnpm --dir demo/coffee/monitor exec tsc --noEmit
+  @pnpm --dir demo/coffee/monitor build
+
+# Tear down the demo schema (idempotent, safe to call anytime).
+demo-coffee-down:
+  @if ! command -v psql >/dev/null 2>&1; then \
+    echo "psql is required for demo-coffee-down" >&2; \
+    exit 1; \
+  else \
+    source scripts/local-db-env.sh; \
+    base_url="$${DATABASE_URL%%\?*}"; \
+    psql "$${base_url}" -c "DROP SCHEMA IF EXISTS mini_conf_demo_coffee CASCADE;" -q && \
+    echo "Schema mini_conf_demo_coffee dropped."; \
+  fi

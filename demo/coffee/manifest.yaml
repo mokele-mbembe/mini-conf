@@ -1,0 +1,180 @@
+## Coffee Demo — Central Manifest
+## Single source of truth for the coffee-middleware end-to-end demo.
+## Run: just demo-coffee-reset
+
+meta:
+  demo_name: coffee
+  schema: mini_conf_demo_coffee
+  seed_tag: coffee-demo-v1
+  description: >
+    Simulates a real config-center integration: old client uses backend_url + SN
+    to bootstrap, pulls config-bundle, applies it, reports sync/heartbeat.
+    Admin observes the full publish → pull → apply lifecycle.
+
+admin:
+  username: admin
+  password: admin123456
+
+project:
+  code: coffee-middleware-demo
+  name: Coffee Middleware Demo
+  description: >
+    End-to-end demo project for config-center onboarding.
+    Demonstrates template cloning, multi-backend SN routing,
+    publish → pull → apply → heartbeat lifecycle.
+
+environments:
+  - code: dev
+    name: Development
+    sort_order: 10
+  - code: prod
+    name: Production
+    sort_order: 20
+
+config_files:
+  - code: coffee-main
+    name: Coffee Main
+    format: toml
+    sensitivity: normal
+    is_required: true
+    description: Primary store runtime settings.
+  - code: store-flags
+    name: Store Feature Flags
+    format: toml
+    sensitivity: normal
+    is_required: false
+    description: Optional per-store feature toggles.
+  - code: store-secret
+    name: Store Secret
+    format: toml
+    sensitivity: secret
+    secret_paths:
+      - "$.credentials.api_key"
+      - "$.credentials.webhook_secret"
+    is_required: false
+    description: Secret store credentials; redacted on management reads.
+
+template:
+  deployment_key: tpl-coffee-store-basic
+  name: Template Coffee Store Basic
+  description: Canonical template for cloning new store deployments.
+  environment: prod
+
+instances:
+  - deployment_key: a-prod-store-001
+    name: Backend-A Prod Store 001
+    description: Primary active instance; exercises the happy-path lifecycle.
+    environment: prod
+    status: active
+    template_source: tpl-coffee-store-basic
+    backend: backend-a
+    sn: SN001
+
+  - deployment_key: a-prod-store-002
+    name: Backend-A Prod Store 002
+    description: Inactive instance; demonstrates lifecycle gating on open API.
+    environment: prod
+    status: inactive
+    template_source: tpl-coffee-store-basic
+    backend: backend-a
+    sn: SN002
+
+  - deployment_key: b-prod-store-001
+    name: Backend-B Prod Store 001
+    description: Different backend; shows SN001 can repeat across backends.
+    environment: prod
+    status: active
+    template_source: tpl-coffee-store-basic
+    backend: backend-b
+    sn: SN001
+
+credentials:
+  - instance: a-prod-store-001
+    name: default
+    token: mc_demo_coffee_a_prod_001
+  - instance: a-prod-store-002
+    name: default
+    token: mc_demo_coffee_a_prod_002
+  - instance: b-prod-store-001
+    name: default
+    token: mc_demo_coffee_b_prod_001
+
+## SN routing — what demo-coffee-backend uses to answer bootstrap requests.
+## GET /api/bootstrap/config-center?sn=SN001  (on backend-a port 19001)
+##   -> deployment_key: a-prod-store-001
+sn_routing:
+  backend-a:
+    SN001: a-prod-store-001
+    SN002: a-prod-store-002
+  backend-b:
+    SN001: b-prod-store-001
+
+## Initial release content written by the seed binary.
+initial_releases:
+  - instance: a-prod-store-001
+    config: coffee-main
+    revision: "20260421.0001"
+    change_summary: "Initial coffee-main release for a-prod-store-001"
+    content: |
+      [runtime]
+      log_level = "info"
+      poll_interval_seconds = 30
+
+      [feature]
+      enable_hot_reload = false
+      recommendation_banner = ""
+
+  - instance: a-prod-store-001
+    config: store-flags
+    revision: "20260421.0002"
+    change_summary: "Initial store-flags for a-prod-store-001"
+    content: |
+      [flags]
+      loyalty_program = true
+      digital_menu = false
+
+  - instance: b-prod-store-001
+    config: coffee-main
+    revision: "20260421.0003"
+    change_summary: "Initial coffee-main for b-prod-store-001"
+    content: |
+      [runtime]
+      log_level = "warn"
+      poll_interval_seconds = 60
+
+      [feature]
+      enable_hot_reload = false
+      recommendation_banner = ""
+
+## Draft left ready for the demo "publish a change" step.
+demo_draft:
+  instance: a-prod-store-001
+  config: coffee-main
+  content: |
+    [runtime]
+    log_level = "info"
+    poll_interval_seconds = 10
+
+    [feature]
+    enable_hot_reload = true
+    recommendation_banner = "spring latte"
+
+## Simulated backends (used by demo-coffee-backend binary).
+backends:
+  backend-a:
+    host: 127.0.0.1
+    port: 19001
+  backend-b:
+    host: 127.0.0.1
+    port: 19002
+
+## Simulated clients (used by demo-coffee-client binary).
+clients:
+  - id: store-a-prod-001
+    backend: backend-a
+    sn: SN001
+    local_config: clients/store-a-prod-001.local.toml
+  - id: store-a-prod-002
+    backend: backend-a
+    sn: SN002
+    local_config: clients/store-a-prod-002.local.toml

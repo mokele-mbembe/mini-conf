@@ -1,0 +1,6 @@
+# Store a-prod-store-002 local client config
+# Used by demo-coffee-client when started for backend-a / SN002.
+# Note: a-prod-store-002 is inactive, so the open API will reject bundle requests.
+backend_url = "http://127.0.0.1:19001"
+sn = "SN002"
+poll_interval_seconds = 5

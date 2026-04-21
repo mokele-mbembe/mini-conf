@@ -40,6 +40,11 @@ yarn-error.log*
 .cache/
 .tmp/
 tmp/
+__pycache__/
+*.pyc
+demo/coffee/generated/*
+!demo/coffee/generated/.gitkeep
+demo/coffee/monitor/dist/
 
 # Perf artifacts
 target/perf/

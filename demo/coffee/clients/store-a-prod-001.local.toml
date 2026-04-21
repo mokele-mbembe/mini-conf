@@ -1,0 +1,5 @@
+# Store a-prod-store-001 local client config
+# Used by demo-coffee-client when started for backend-a / SN001.
+backend_url = "http://127.0.0.1:19001"
+sn = "SN001"
+poll_interval_seconds = 5
