@@ -376,6 +376,41 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn create_project_requires_initial_admin_user_id() {
+        let app = test_app();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/projects")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        r#"{"code":"coffee-legacy","name":"Coffee Legacy"}"#,
+                    ))
+                    .expect("request should build"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should be readable");
+        let payload: ErrorResponse =
+            serde_json::from_slice(&body).expect("payload should be valid json");
+
+        assert_eq!(
+            payload,
+            ErrorResponse {
+                code: "invalid_request".to_owned(),
+                message: "missing required body field: initial_admin_user_id".to_owned(),
+            }
+        );
+    }
+
+    #[tokio::test]
     async fn update_project_requires_required_body_fields() {
         let app = test_app();
 

@@ -1,3 +1,5 @@
+pub(crate) mod admin_projects;
+pub(crate) mod admin_users;
 pub(crate) mod audit_logs;
 pub(crate) mod auth;
 pub(crate) mod clone_sources;
@@ -18,6 +20,8 @@ use axum::Router;
 
 pub fn router() -> Router<crate::state::AppState> {
     Router::new()
+        .merge(admin_projects::router())
+        .merge(admin_users::router())
         .merge(audit_logs::router())
         .merge(auth::router())
         .merge(clone_sources::router())

@@ -5,6 +5,9 @@ use utoipa::ToSchema;
 pub struct AuthUser {
     pub id: i64,
     pub username: String,
+    pub is_platform_admin: bool,
+    pub status: String,
+    pub must_change_password: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -23,6 +26,9 @@ mod tests {
             user: AuthUser {
                 id: 1,
                 username: "admin".to_owned(),
+                is_platform_admin: true,
+                status: "active".to_owned(),
+                must_change_password: false,
             },
             auth_mode: "session".to_owned(),
         })
@@ -33,7 +39,10 @@ mod tests {
             serde_json::json!({
                 "user": {
                     "id": 1,
-                    "username": "admin"
+                    "username": "admin",
+                    "is_platform_admin": true,
+                    "status": "active",
+                    "must_change_password": false
                 },
                 "auth_mode": "session"
             })

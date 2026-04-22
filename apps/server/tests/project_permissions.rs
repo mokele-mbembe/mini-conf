@@ -12,8 +12,9 @@ use schema::{
 use server::error::ErrorResponse;
 use sqlx::PgPool;
 use support::{
-    TestResult, grant_project_role, login_as, read_json, seed_config_file,
-    seed_deployment_instance, seed_release, seed_sync_record, seed_user, setup_app, teardown,
+    TestResult, create_platform_project, grant_project_role, login_as, lookup_user_id, read_json,
+    seed_config_file, seed_deployment_instance, seed_release, seed_sync_record, seed_user,
+    setup_app, teardown,
 };
 use tower::util::ServiceExt;
 
@@ -61,20 +62,24 @@ async fn viewer_can_read_release_and_sync_records_but_not_draft_or_preview() -> 
     seed_user(&pool, "outsider1", "outsider123").await?;
 
     let admin_cookie = login_as(&app, "admin", "admin123456").await?;
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/projects")
-                .header(header::COOKIE, &admin_cookie)
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    r#"{"code":"viewer-project","name":"Viewer Project"}"#,
-                ))?,
-        )
-        .await?;
-    let project: ProjectSummary = read_json(response).await?;
+    let admin_user_id = lookup_user_id(&pool, "admin").await?;
+    let created = create_platform_project(
+        &app,
+        &admin_cookie,
+        "viewer-project",
+        "Viewer Project",
+        None,
+        admin_user_id,
+    )
+    .await?;
+    let project = ProjectSummary {
+        id: created.project.id,
+        code: created.project.code,
+        name: created.project.name,
+        description: created.project.description,
+        status: created.project.status,
+        current_user_role: "admin".to_owned(),
+    };
     grant_project_role(&pool, project.id, "viewer1", "viewer").await?;
 
     let config_file_id = seed_config_file(&pool, project.id, "main").await?;
@@ -169,20 +174,24 @@ async fn editor_can_save_draft_but_cannot_reset_token() -> TestResult {
     seed_user(&pool, "editor1", "editor123").await?;
 
     let admin_cookie = login_as(&app, "admin", "admin123456").await?;
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/projects")
-                .header(header::COOKIE, &admin_cookie)
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    r#"{"code":"editor-project","name":"Editor Project"}"#,
-                ))?,
-        )
-        .await?;
-    let project: ProjectSummary = read_json(response).await?;
+    let admin_user_id = lookup_user_id(&pool, "admin").await?;
+    let created = create_platform_project(
+        &app,
+        &admin_cookie,
+        "editor-project",
+        "Editor Project",
+        None,
+        admin_user_id,
+    )
+    .await?;
+    let project = ProjectSummary {
+        id: created.project.id,
+        code: created.project.code,
+        name: created.project.name,
+        description: created.project.description,
+        status: created.project.status,
+        current_user_role: "admin".to_owned(),
+    };
     grant_project_role(&pool, project.id, "editor1", "editor").await?;
 
     let config_file_id = seed_config_file(&pool, project.id, "main").await?;

@@ -24,6 +24,8 @@ struct UserSeedEntry {
     password: Option<String>,
     password_hash: Option<String>,
     status: Option<String>,
+    is_platform_admin: Option<bool>,
+    must_change_password: Option<bool>,
     memberships: Option<Vec<ProjectMembershipSeed>>,
 }
 
@@ -156,13 +158,17 @@ async fn seed_admin_if_configured(pool: &PgPool, config: &AppConfig) -> Result<(
 
     sqlx::query(
         r#"
-        INSERT INTO users (username, password_hash, status)
-        VALUES ($1, $2, 'active')
+        INSERT INTO users (
+            username,
+            password_hash,
+            status,
+            is_platform_admin,
+            must_change_password,
+            password_updated_at
+        )
+        VALUES ($1, $2, 'active', TRUE, FALSE, NOW())
         ON CONFLICT (username)
-        DO UPDATE SET
-            password_hash = EXCLUDED.password_hash,
-            status = 'active',
-            updated_at = NOW()
+        DO NOTHING
         "#,
     )
     .bind(username)
@@ -224,24 +230,41 @@ async fn seed_user_entry(pool: &PgPool, user: UserSeedEntry) -> Result<(), Start
     let username = non_empty_seed("INIT_USERS_FILE", "username", &user.username)?;
     let status = validate_user_status(user.status.as_deref())?;
     let password_hash = resolve_user_password_hash(&user)?;
+    let is_platform_admin = user.is_platform_admin.unwrap_or(false);
+    let must_change_password = user.must_change_password.unwrap_or(false);
 
-    let user_id: i64 = sqlx::query_scalar(
+    let inserted_user_id = sqlx::query_scalar::<_, i64>(
         r#"
-        INSERT INTO users (username, password_hash, status)
-        VALUES ($1, $2, $3)
+        INSERT INTO users (
+            username,
+            password_hash,
+            status,
+            is_platform_admin,
+            must_change_password,
+            password_updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, NOW())
         ON CONFLICT (username)
-        DO UPDATE SET
-            password_hash = EXCLUDED.password_hash,
-            status = EXCLUDED.status,
-            updated_at = NOW()
+        DO NOTHING
         RETURNING id
         "#,
     )
     .bind(username)
     .bind(password_hash)
     .bind(status)
-    .fetch_one(pool)
+    .bind(is_platform_admin)
+    .bind(must_change_password)
+    .fetch_optional(pool)
     .await?;
+
+    let user_id: i64 = if let Some(id) = inserted_user_id {
+        id
+    } else {
+        sqlx::query_scalar("SELECT id FROM users WHERE username = $1 LIMIT 1")
+            .bind(username)
+            .fetch_one(pool)
+            .await?
+    };
 
     for membership in user.memberships.unwrap_or_default() {
         let role = validate_project_role(&membership.role)?;
@@ -252,7 +275,7 @@ async fn seed_user_entry(pool: &PgPool, user: UserSeedEntry) -> Result<(), Start
             INSERT INTO project_members (project_id, user_id, role)
             VALUES ($1, $2, $3)
             ON CONFLICT (project_id, user_id)
-            DO UPDATE SET role = EXCLUDED.role
+            DO NOTHING
             "#,
         )
         .bind(project_id)

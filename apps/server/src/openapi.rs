@@ -1,6 +1,14 @@
 use crate::{error::ErrorResponse, state::AppState};
 use axum::Router;
 use schema::{
+    admin_project::{
+        CreatePlatformProjectRequest, CreatePlatformProjectResponse, PlatformProject,
+        PlatformProjectInitialAdmin, PlatformProjectListResponse, PlatformProjectSummary,
+    },
+    admin_user::{
+        AdminUserDetail, AdminUserListResponse, AdminUserProjectSummary, AdminUserSummary,
+        CreateAdminUserRequest, ResetAdminUserPasswordRequest, UpdateAdminUserRequest,
+    },
     audit::{
         AuditLogListResponse, AuditLogSummary, DeploymentHeartbeatListResponse,
         DeploymentHeartbeatSummary, DeploymentSyncRecordListResponse, DeploymentSyncRecordSummary,
@@ -53,6 +61,13 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
         crate::http::api::auth::login,
         crate::http::api::auth::logout,
         crate::http::api::auth::me,
+        crate::http::api::admin_users::list_admin_users,
+        crate::http::api::admin_users::create_admin_user,
+        crate::http::api::admin_users::get_admin_user,
+        crate::http::api::admin_users::update_admin_user,
+        crate::http::api::admin_users::reset_admin_user_password,
+        crate::http::api::admin_projects::list_admin_projects,
+        crate::http::api::admin_projects::create_admin_project,
         crate::http::api::audit_logs::list_audit_logs,
         crate::http::api::clone_sources::list_clone_sources,
         crate::http::api::config_files::list_config_files,
@@ -110,6 +125,19 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
             ErrorResponse,
             AuthSessionResponse,
             AuthUser,
+            AdminUserSummary,
+            AdminUserListResponse,
+            AdminUserProjectSummary,
+            AdminUserDetail,
+            CreateAdminUserRequest,
+            UpdateAdminUserRequest,
+            ResetAdminUserPasswordRequest,
+            PlatformProjectSummary,
+            PlatformProjectListResponse,
+            CreatePlatformProjectRequest,
+            PlatformProject,
+            PlatformProjectInitialAdmin,
+            CreatePlatformProjectResponse,
             AuditLogSummary,
             AuditLogListResponse,
             CloneSourceAvailability,
@@ -180,6 +208,12 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
             ConfigBundleParams,
             DeploymentSyncRecordRequestBody,
             HeartbeatRequestBody,
+            CreateAdminUserRequestBody,
+            UpdateAdminUserRequestBody,
+            ResetAdminUserPasswordRequestBody,
+            CreatePlatformProjectRequestBody,
+            ListAdminUsersParams,
+            ListAdminProjectsParams,
         )
     ),
     modifiers(&SecurityAddon),
@@ -323,6 +357,36 @@ pub struct CreateProjectRequestBody {
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
+pub struct CreateAdminUserRequestBody {
+    pub username: String,
+    pub password: String,
+    pub is_platform_admin: bool,
+    pub must_change_password: bool,
+    pub status: String,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
+pub struct UpdateAdminUserRequestBody {
+    pub status: Option<String>,
+    pub is_platform_admin: Option<bool>,
+    pub must_change_password: Option<bool>,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
+pub struct ResetAdminUserPasswordRequestBody {
+    pub new_password: String,
+    pub must_change_password: bool,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
+pub struct CreatePlatformProjectRequestBody {
+    pub code: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub initial_admin_user_id: i64,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, ToSchema)]
 pub struct UpdateProjectRequestBody {
     pub code: String,
     pub name: String,
@@ -355,6 +419,25 @@ pub struct PublishReleaseRequestBody {
 #[into_params(parameter_in = Query)]
 pub struct ListProjectsParams {
     pub status: Option<String>,
+}
+
+#[derive(Debug, IntoParams, ToSchema)]
+#[into_params(parameter_in = Query)]
+pub struct ListAdminUsersParams {
+    pub keyword: Option<String>,
+    pub status: Option<String>,
+    pub is_platform_admin: Option<bool>,
+    pub page: Option<i64>,
+    pub page_size: Option<i64>,
+}
+
+#[derive(Debug, IntoParams, ToSchema)]
+#[into_params(parameter_in = Query)]
+pub struct ListAdminProjectsParams {
+    pub keyword: Option<String>,
+    pub status: Option<String>,
+    pub page: Option<i64>,
+    pub page_size: Option<i64>,
 }
 
 #[derive(Debug, IntoParams, ToSchema)]

@@ -5,11 +5,11 @@ use axum::{
     body::Body,
     http::{Request, StatusCode, header},
 };
-use schema::{audit::DeploymentHeartbeatListResponse, project::ProjectSummary};
+use schema::audit::DeploymentHeartbeatListResponse;
 use server::error::ErrorResponse;
 use support::{
-    TestResult, grant_project_role, login_as, read_json, seed_config_file,
-    seed_deployment_instance, seed_user, setup_app, teardown,
+    TestResult, create_platform_project, grant_project_role, login_as, lookup_user_id, read_json,
+    seed_config_file, seed_deployment_instance, seed_user, setup_app, teardown,
 };
 use tower::util::ServiceExt;
 
@@ -22,23 +22,20 @@ async fn deployment_heartbeats_are_visible_to_project_members_only() -> TestResu
     seed_user(&pool, "outsider2", "outsider123").await?;
 
     let admin_cookie = login_as(&app, "admin", "admin123456").await?;
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/projects")
-                .header(header::COOKIE, &admin_cookie)
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    r#"{"code":"heartbeat-project","name":"Heartbeat Project"}"#,
-                ))?,
-        )
-        .await?;
-    let project: ProjectSummary = read_json(response).await?;
-    grant_project_role(&pool, project.id, "viewer2", "viewer").await?;
-    let config_file_id = seed_config_file(&pool, project.id, "main").await?;
-    let deployment_id = seed_deployment_instance(&pool, project.id, "store-001", false).await?;
+    let admin_user_id = lookup_user_id(&pool, "admin").await?;
+    let project = create_platform_project(
+        &app,
+        &admin_cookie,
+        "heartbeat-project",
+        "Heartbeat Project",
+        None,
+        admin_user_id,
+    )
+    .await?;
+    grant_project_role(&pool, project.project.id, "viewer2", "viewer").await?;
+    let config_file_id = seed_config_file(&pool, project.project.id, "main").await?;
+    let deployment_id =
+        seed_deployment_instance(&pool, project.project.id, "store-001", false).await?;
 
     sqlx::query(
         r#"
@@ -52,7 +49,7 @@ async fn deployment_heartbeats_are_visible_to_project_members_only() -> TestResu
         VALUES ($1, $2, $3, '{"ip":"10.0.0.10","version":"alpha"}', '2026-04-10T12:01:00Z')
         "#,
     )
-    .bind(project.id)
+    .bind(project.project.id)
     .bind(deployment_id)
     .bind(config_file_id)
     .execute(&pool)
@@ -65,7 +62,7 @@ async fn deployment_heartbeats_are_visible_to_project_members_only() -> TestResu
             Request::builder()
                 .uri(format!(
                     "/api/deployment-heartbeats?project_id={}&deployment_instance_id={}&config_file_id={}",
-                    project.id, deployment_id, config_file_id
+                    project.project.id, deployment_id, config_file_id
                 ))
                 .header(header::COOKIE, &viewer_cookie)
                 .body(Body::empty())?,
@@ -83,7 +80,7 @@ async fn deployment_heartbeats_are_visible_to_project_members_only() -> TestResu
             Request::builder()
                 .uri(format!(
                     "/api/deployment-heartbeats?project_id={}",
-                    project.id
+                    project.project.id
                 ))
                 .header(header::COOKIE, &outsider_cookie)
                 .body(Body::empty())?,

@@ -101,6 +101,85 @@ users:
 }
 
 #[tokio::test]
+async fn init_users_file_seed_does_not_overwrite_existing_user_state() -> TestResult {
+    let Some((database_url, schema)) = setup_database("bootstrap users no overwrite").await? else {
+        return Ok(());
+    };
+
+    let seed_file = temp_seed_file(
+        "users-no-overwrite",
+        r#"
+users:
+  - username: alice
+    password: alice123
+    status: active
+    is_platform_admin: false
+    must_change_password: false
+"#,
+    )?;
+
+    let config = AppConfig {
+        init_db_on_boot: true,
+        init_admin_username: Some("admin".to_owned()),
+        init_admin_password: Some("admin123456".to_owned()),
+        init_users_file: Some(seed_file.clone()),
+        database_url: with_search_path(&database_url, &schema),
+        ..AppConfig::default()
+    };
+
+    let state = bootstrap::build_state(config.clone()).await?;
+    let pool = state
+        .db_pool()
+        .cloned()
+        .ok_or_else(|| std::io::Error::other("db pool should be present after bootstrap"))?;
+
+    let replacement_hash = server::auth::hash_password("replacement123")
+        .map_err(|error| std::io::Error::other(error.into_body().message))?;
+    sqlx::query(
+        r#"
+        UPDATE users
+        SET
+            password_hash = $1,
+            status = 'disabled',
+            is_platform_admin = TRUE,
+            must_change_password = TRUE,
+            password_updated_at = NOW(),
+            updated_at = NOW()
+        WHERE username = 'alice'
+        "#,
+    )
+    .bind(&replacement_hash)
+    .execute(&pool)
+    .await?;
+
+    let second_state = bootstrap::build_state(config).await?;
+    let second_pool = second_state
+        .db_pool()
+        .cloned()
+        .ok_or_else(|| std::io::Error::other("db pool should be present after second bootstrap"))?;
+
+    let alice_row: (String, String, bool, bool) = sqlx::query_as(
+        r#"
+        SELECT password_hash, status, is_platform_admin, must_change_password
+        FROM users
+        WHERE username = 'alice'
+        LIMIT 1
+        "#,
+    )
+    .fetch_one(&second_pool)
+    .await?;
+
+    assert_eq!(alice_row.0, replacement_hash);
+    assert_eq!(alice_row.1, "disabled");
+    assert!(alice_row.2);
+    assert!(alice_row.3);
+
+    second_pool.close().await;
+    fs::remove_file(seed_file)?;
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
 async fn build_state_can_bind_seeded_memberships_to_existing_projects() -> TestResult {
     let Some((database_url, schema)) = setup_database("bootstrap user memberships").await? else {
         return Ok(());
@@ -165,5 +244,76 @@ users:
 
     seeded_pool.close().await;
     fs::remove_file(seed_file)?;
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn bootstrap_admin_seed_only_applies_on_first_insert() -> TestResult {
+    let Some((database_url, schema)) = setup_database("bootstrap admin first insert").await? else {
+        return Ok(());
+    };
+
+    let first_state = bootstrap::build_state(AppConfig {
+        init_db_on_boot: true,
+        init_admin_username: Some("admin".to_owned()),
+        init_admin_password: Some("admin123456".to_owned()),
+        database_url: with_search_path(&database_url, &schema),
+        ..AppConfig::default()
+    })
+    .await?;
+    let pool = first_state
+        .db_pool()
+        .cloned()
+        .ok_or_else(|| std::io::Error::other("db pool should be present after bootstrap"))?;
+
+    let replacement_hash = server::auth::hash_password("replacement123")
+        .map_err(|error| std::io::Error::other(error.into_body().message))?;
+    sqlx::query(
+        r#"
+        UPDATE users
+        SET
+            password_hash = $1,
+            status = 'disabled',
+            is_platform_admin = FALSE,
+            must_change_password = TRUE,
+            password_updated_at = NOW(),
+            updated_at = NOW()
+        WHERE username = 'admin'
+        "#,
+    )
+    .bind(&replacement_hash)
+    .execute(&pool)
+    .await?;
+
+    let second_state = bootstrap::build_state(AppConfig {
+        init_db_on_boot: true,
+        init_admin_username: Some("admin".to_owned()),
+        init_admin_password: Some("admin123456".to_owned()),
+        database_url: with_search_path(&database_url, &schema),
+        ..AppConfig::default()
+    })
+    .await?;
+    let second_pool = second_state
+        .db_pool()
+        .cloned()
+        .ok_or_else(|| std::io::Error::other("db pool should be present after second bootstrap"))?;
+
+    let admin_row: (String, String, bool, bool) = sqlx::query_as(
+        r#"
+        SELECT password_hash, status, is_platform_admin, must_change_password
+        FROM users
+        WHERE username = 'admin'
+        LIMIT 1
+        "#,
+    )
+    .fetch_one(&second_pool)
+    .await?;
+
+    assert_eq!(admin_row.0, replacement_hash);
+    assert_eq!(admin_row.1, "disabled");
+    assert!(!admin_row.2);
+    assert!(admin_row.3);
+
+    second_pool.close().await;
     teardown(&database_url, &schema, pool).await
 }

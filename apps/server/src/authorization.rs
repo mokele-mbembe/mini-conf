@@ -59,6 +59,22 @@ pub async fn authenticate_user(
     .await
 }
 
+pub async fn require_platform_admin(
+    pool: &PgPool,
+    headers: &HeaderMap,
+) -> Result<AuthenticatedUser, ApiError> {
+    let auth = authenticate_user(pool, headers).await?;
+
+    if !auth.is_platform_admin {
+        return Err(ApiError::forbidden(
+            "platform_permission_denied",
+            "Platform admin access is required",
+        ));
+    }
+
+    Ok(auth)
+}
+
 pub async fn require_project_role(
     pool: &PgPool,
     user_id: i64,

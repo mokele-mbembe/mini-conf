@@ -1,7 +1,8 @@
 use crate::{
     audit::{AuditLogEntry, write_audit_log},
-    authorization::{ProjectRole, authenticate_user, require_project_role},
+    authorization::{ProjectRole, authenticate_user, require_platform_admin, require_project_role},
     error::ApiError,
+    http::api::admin_projects::create_platform_project_with_initial_admin,
     state::AppState,
 };
 use axum::{
@@ -11,6 +12,7 @@ use axum::{
     http::StatusCode,
     routing::get,
 };
+use schema::admin_project::CreatePlatformProjectResponse;
 use schema::project::{ProjectListResponse, ProjectSummary};
 use serde::Deserialize;
 use sqlx::{Error as SqlxError, Row};
@@ -25,6 +27,7 @@ pub(crate) struct CreateProjectRequest {
     code: Option<String>,
     name: Option<String>,
     description: Option<String>,
+    initial_admin_user_id: Option<i64>,
 }
 
 #[derive(Debug)]
@@ -32,6 +35,7 @@ struct ValidatedCreateProjectRequest {
     code: String,
     name: String,
     description: Option<String>,
+    initial_admin_user_id: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -263,14 +267,16 @@ pub(crate) async fn update_project(
     post,
     path = "/api/projects",
     tag = "admin",
-    request_body = crate::openapi::CreateProjectRequestBody,
+    request_body = crate::openapi::CreatePlatformProjectRequestBody,
     security(
         ("session_auth" = [])
     ),
     responses(
-        (status = 201, description = "Project created", body = ProjectSummary),
+        (status = 201, description = "Deprecated alias for platform project creation", body = CreatePlatformProjectResponse),
         (status = 400, description = "Invalid request body", body = crate::error::ErrorResponse),
         (status = 401, description = "Missing or expired admin session", body = crate::error::ErrorResponse),
+        (status = 403, description = "Platform admin access required", body = crate::error::ErrorResponse),
+        (status = 404, description = "Initial admin user not found", body = crate::error::ErrorResponse),
         (status = 409, description = "Project code already exists", body = crate::error::ErrorResponse),
         (status = 503, description = "Database bootstrap disabled", body = crate::error::ErrorResponse),
         (status = 500, description = "Internal server error", body = crate::error::ErrorResponse),
@@ -280,7 +286,7 @@ pub(crate) async fn create_project(
     State(state): State<AppState>,
     headers: HeaderMap,
     payload: Result<Json<CreateProjectRequest>, JsonRejection>,
-) -> Result<(StatusCode, Json<ProjectSummary>), ApiError> {
+) -> Result<(StatusCode, Json<CreatePlatformProjectResponse>), ApiError> {
     let Json(payload) =
         payload.map_err(|_| ApiError::bad_request("invalid_request", "invalid request body"))?;
     let payload = payload.validate()?;
@@ -291,57 +297,19 @@ pub(crate) async fn create_project(
             "Database bootstrap is disabled",
         ));
     };
-    let auth = authenticate_user(pool, &headers).await?;
+    let auth = require_platform_admin(pool, &headers).await?;
 
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
-    let row = sqlx::query(
-        r#"
-        INSERT INTO projects (code, name, description, status)
-        VALUES ($1, $2, $3, 'active')
-        RETURNING id, code, name, description, status, 'admin'::varchar AS current_user_role
-        "#,
-    )
-    .bind(&payload.code)
-    .bind(&payload.name)
-    .bind(&payload.description)
-    .fetch_one(&mut *tx)
-    .await
-    .map_err(map_project_write_error)?;
-
-    let project_id: i64 = row.get("id");
-
-    sqlx::query(
-        r#"
-        INSERT INTO project_members (project_id, user_id, role)
-        VALUES ($1, $2, 'admin')
-        ON CONFLICT (project_id, user_id) DO NOTHING
-        "#,
-    )
-    .bind(project_id)
-    .bind(auth.user_id)
-    .execute(&mut *tx)
-    .await
-    .map_err(|_| ApiError::internal())?;
-
-    write_audit_log(
-        &mut *tx,
-        AuditLogEntry {
-            project_id: Some(project_id),
-            user_id: Some(auth.user_id),
-            action: "project.created",
-            resource_type: "project",
-            resource_id: project_id.to_string(),
-            detail: Some(serde_json::json!({
-                "code": payload.code,
-                "name": payload.name
-            })),
-        },
+    let response = create_platform_project_with_initial_admin(
+        pool,
+        auth.user_id,
+        payload.code,
+        payload.name,
+        payload.description,
+        payload.initial_admin_user_id,
     )
     .await?;
 
-    tx.commit().await.map_err(|_| ApiError::internal())?;
-
-    Ok((StatusCode::CREATED, Json(map_project_row(&row))))
+    Ok((StatusCode::CREATED, Json(response)))
 }
 
 impl CreateProjectRequest {
@@ -350,6 +318,10 @@ impl CreateProjectRequest {
             code: required(self.code, "code")?,
             name: required(self.name, "name")?,
             description: normalize_optional(self.description),
+            initial_admin_user_id: required_i64(
+                self.initial_admin_user_id,
+                "initial_admin_user_id",
+            )?,
         })
     }
 }
@@ -397,6 +369,10 @@ fn required(value: Option<String>, field: &'static str) -> Result<String, ApiErr
     Ok(value)
 }
 
+fn required_i64(value: Option<i64>, field: &'static str) -> Result<i64, ApiError> {
+    value.ok_or_else(|| ApiError::bad_request("invalid_request", invalid_body_message(field)))
+}
+
 fn normalize_optional(value: Option<String>) -> Option<String> {
     value.and_then(|value| {
         let trimmed = value.trim();
@@ -412,6 +388,7 @@ fn invalid_body_message(field: &'static str) -> &'static str {
     match field {
         "code" => "missing required body field: code",
         "name" => "missing required body field: name",
+        "initial_admin_user_id" => "missing required body field: initial_admin_user_id",
         "status" => "missing required body field: status",
         _ => "missing required body field",
     }

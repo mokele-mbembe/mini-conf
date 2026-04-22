@@ -1,3 +1,5 @@
+pub mod admin_project;
+pub mod admin_user;
 pub mod audit;
 pub mod auth;
 pub mod clone_source;

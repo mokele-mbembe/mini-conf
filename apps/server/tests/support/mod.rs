@@ -5,7 +5,7 @@ use axum::{
     http::{Request, header},
 };
 use infra::testing::{test_database_url, unique_schema_name, with_search_path};
-use schema::auth::AuthSessionResponse;
+use schema::{admin_project::CreatePlatformProjectResponse, auth::AuthSessionResponse};
 use server::{bootstrap, config::AppConfig};
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 use tower::util::ServiceExt;
@@ -107,6 +107,42 @@ pub async fn seed_user(pool: &PgPool, username: &str, password: &str) -> TestRes
     .fetch_one(pool)
     .await?;
     Ok(user_id)
+}
+
+pub async fn lookup_user_id(pool: &PgPool, username: &str) -> TestResult<i64> {
+    let user_id: i64 = sqlx::query_scalar("SELECT id FROM users WHERE username = $1 LIMIT 1")
+        .bind(username)
+        .fetch_one(pool)
+        .await?;
+    Ok(user_id)
+}
+
+pub async fn create_platform_project(
+    app: &axum::Router,
+    cookie: &str,
+    code: &str,
+    name: &str,
+    description: Option<&str>,
+    initial_admin_user_id: i64,
+) -> TestResult<CreatePlatformProjectResponse> {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/admin/projects")
+                .header(header::COOKIE, cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_vec(&serde_json::json!({
+                    "code": code,
+                    "name": name,
+                    "description": description,
+                    "initial_admin_user_id": initial_admin_user_id,
+                }))?))?,
+        )
+        .await?;
+
+    read_json(response).await
 }
 
 pub async fn grant_project_role(

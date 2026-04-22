@@ -20,6 +20,9 @@ pub struct AuthenticatedDeployment {
 pub struct AuthenticatedUser {
     pub user_id: i64,
     pub username: String,
+    pub is_platform_admin: bool,
+    pub status: String,
+    pub must_change_password: bool,
 }
 
 pub async fn authenticate_open_request(
@@ -149,7 +152,7 @@ pub async fn authenticate_admin_session(
 
     let row = sqlx::query(
         r#"
-        SELECT s.id, u.id AS user_id, u.username
+                SELECT s.id, u.id AS user_id, u.username, u.is_platform_admin, u.status, u.must_change_password
         FROM auth_sessions s
         JOIN users u ON u.id = s.user_id
         WHERE s.session_token_hash = $1
@@ -170,6 +173,9 @@ pub async fn authenticate_admin_session(
     let session_id: i64 = row.get("id");
     let user_id: i64 = row.get("user_id");
     let username: String = row.get("username");
+    let is_platform_admin: bool = row.get("is_platform_admin");
+    let status: String = row.get("status");
+    let must_change_password: bool = row.get("must_change_password");
 
     sqlx::query(
         r#"
@@ -183,7 +189,13 @@ pub async fn authenticate_admin_session(
     .await
     .map_err(|_| ApiError::internal())?;
 
-    Ok(AuthenticatedUser { user_id, username })
+    Ok(AuthenticatedUser {
+        user_id,
+        username,
+        is_platform_admin,
+        status,
+        must_change_password,
+    })
 }
 
 pub async fn revoke_admin_session(

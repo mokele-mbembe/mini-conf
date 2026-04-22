@@ -67,7 +67,7 @@ pub(crate) async fn login(
 
     let row = sqlx::query(
         r#"
-        SELECT id, username, password_hash
+                SELECT id, username, password_hash, is_platform_admin, status, must_change_password
         FROM users
         WHERE username = $1
           AND status = 'active'
@@ -125,7 +125,22 @@ pub(crate) async fn login(
 
     let user_id: i64 = row.get("id");
     let username: String = row.get("username");
+    let is_platform_admin: bool = row.get("is_platform_admin");
+    let status: String = row.get("status");
+    let must_change_password: bool = row.get("must_change_password");
     let session_token = generate_session_token();
+
+    sqlx::query(
+        r#"
+        UPDATE users
+        SET last_login_at = NOW(), updated_at = NOW()
+        WHERE id = $1
+        "#,
+    )
+    .bind(user_id)
+    .execute(pool)
+    .await
+    .map_err(|_| ApiError::internal())?;
 
     sqlx::query(
         r#"
@@ -157,6 +172,9 @@ pub(crate) async fn login(
         user: AuthUser {
             id: user_id,
             username,
+            is_platform_admin,
+            status,
+            must_change_password,
         },
         auth_mode: "session".to_owned(),
     })
@@ -203,6 +221,9 @@ pub(crate) async fn me(
         user: AuthUser {
             id: auth.user_id,
             username: auth.username,
+            is_platform_admin: auth.is_platform_admin,
+            status: auth.status,
+            must_change_password: auth.must_change_password,
         },
         auth_mode: "session".to_owned(),
     }))

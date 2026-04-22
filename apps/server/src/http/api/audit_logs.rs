@@ -116,7 +116,7 @@ pub(crate) async fn list_audit_logs(
                           AND pm.user_id = $4
                           AND pm.role = 'admin'
                     ))
-                    OR (al.project_id IS NULL AND al.user_id = $4)
+                      OR (al.project_id IS NULL AND ($5::boolean = TRUE OR al.user_id = $4))
               )
             ORDER BY al.created_at DESC, al.id DESC
             "#,
@@ -125,6 +125,7 @@ pub(crate) async fn list_audit_logs(
         .bind(normalize_optional(query.action))
         .bind(normalize_optional(query.resource_type))
         .bind(auth.user_id)
+              .bind(auth.is_platform_admin)
         .fetch_all(pool)
         .await
         .map_err(|_| ApiError::internal())?

@@ -4,6 +4,7 @@ use axum::{
 };
 use infra::testing::{test_database_url, unique_schema_name, with_search_path};
 use schema::{
+    admin_project::CreatePlatformProjectResponse,
     auth::AuthSessionResponse,
     project::{ProjectListResponse, ProjectSummary},
 };
@@ -12,48 +13,6 @@ use sqlx::{Connection, Executor, PgConnection, PgPool, Row};
 use tower::util::ServiceExt;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
-
-async fn install_admin_project_membership_trigger(pool: &PgPool) -> TestResult {
-    sqlx::query(
-        r#"
-        CREATE OR REPLACE FUNCTION auto_grant_test_admin_project_member()
-        RETURNS TRIGGER AS $$
-        BEGIN
-            INSERT INTO project_members (project_id, user_id, role)
-            SELECT NEW.id, id, 'admin'
-            FROM users
-            WHERE username = 'admin'
-              AND status = 'active'
-            ON CONFLICT (project_id, user_id) DO NOTHING;
-            RETURN NEW;
-        END;
-        $$ LANGUAGE plpgsql;
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
-    sqlx::query(
-        r#"
-        DROP TRIGGER IF EXISTS trg_auto_grant_test_admin_project_member ON projects;
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
-    sqlx::query(
-        r#"
-        CREATE TRIGGER trg_auto_grant_test_admin_project_member
-        AFTER INSERT ON projects
-        FOR EACH ROW
-        EXECUTE FUNCTION auto_grant_test_admin_project_member();
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
-    Ok(())
-}
 
 async fn setup_app() -> TestResult<Option<(axum::Router, PgPool, String, String)>> {
     let Some(database_url) = test_database_url("projects") else {
@@ -77,7 +36,6 @@ async fn setup_app() -> TestResult<Option<(axum::Router, PgPool, String, String)
     let Some(pool) = state.db_pool().cloned() else {
         return Err("db pool should be present after bootstrap".into());
     };
-    install_admin_project_membership_trigger(&pool).await?;
 
     Ok(Some((server::app(state), pool, database_url, schema)))
 }
@@ -129,6 +87,29 @@ async fn login(app: &axum::Router) -> TestResult<String> {
     Ok(cookie)
 }
 
+async fn admin_user_id(pool: &PgPool) -> TestResult<i64> {
+    let user_id: i64 = sqlx::query_scalar("SELECT id FROM users WHERE username = 'admin' LIMIT 1")
+        .fetch_one(pool)
+        .await?;
+    Ok(user_id)
+}
+
+async fn grant_admin_membership(pool: &PgPool, project_id: i64) -> TestResult {
+    let user_id = admin_user_id(pool).await?;
+    sqlx::query(
+        r#"
+        INSERT INTO project_members (project_id, user_id, role)
+        VALUES ($1, $2, 'admin')
+        ON CONFLICT (project_id, user_id) DO NOTHING
+        "#,
+    )
+    .bind(project_id)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 #[tokio::test]
 async fn list_projects_requires_session_cookie() -> TestResult {
     let Some((app, pool, database_url, schema)) = setup_app().await? else {
@@ -174,6 +155,13 @@ async fn list_projects_returns_visible_projects_and_supports_status_filter() -> 
     )
     .execute(&pool)
     .await?;
+    for code in ["coffee-legacy", "coffee-shadow", "store-os"] {
+        let project_id: i64 = sqlx::query_scalar("SELECT id FROM projects WHERE code = $1")
+            .bind(code)
+            .fetch_one(&pool)
+            .await?;
+        grant_admin_membership(&pool, project_id).await?;
+    }
 
     let cookie = login(&app).await?;
     let response = app
@@ -221,12 +209,13 @@ async fn list_projects_returns_visible_projects_and_supports_status_filter() -> 
 }
 
 #[tokio::test]
-async fn create_project_creates_active_project_for_authenticated_session() -> TestResult {
+async fn create_project_alias_creates_active_project_for_explicit_initial_admin() -> TestResult {
     let Some((app, pool, database_url, schema)) = setup_app().await? else {
         return Ok(());
     };
 
     let cookie = login(&app).await?;
+    let admin_user_id = admin_user_id(&pool).await?;
     let response = app
         .clone()
         .oneshot(
@@ -235,16 +224,16 @@ async fn create_project_creates_active_project_for_authenticated_session() -> Te
                 .uri("/api/projects")
                 .header(header::COOKIE, cookie)
                 .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    r#"{"code":"store-os","name":"Store OS","description":"Ops control plane"}"#,
-                ))?,
+                .body(Body::from(format!(
+                    r#"{{"code":"store-os","name":"Store OS","description":"Ops control plane","initial_admin_user_id":{admin_user_id}}}"#,
+                )))?,
         )
         .await?;
 
     assert_eq!(response.status(), StatusCode::CREATED);
-    let payload: ProjectSummary = read_json(response).await?;
-    assert_eq!(payload.code, "store-os");
-    assert_eq!(payload.status, "active");
+    let payload: CreatePlatformProjectResponse = read_json(response).await?;
+    assert_eq!(payload.project.code, "store-os");
+    assert_eq!(payload.project.status, "active");
 
     let row = sqlx::query("SELECT code, name, description, status FROM projects WHERE code = $1")
         .bind("store-os")
@@ -272,6 +261,7 @@ async fn create_project_rejects_duplicate_project_code() -> TestResult {
         .await?;
 
     let cookie = login(&app).await?;
+    let admin_user_id = admin_user_id(&pool).await?;
     let response = app
         .oneshot(
             Request::builder()
@@ -279,9 +269,9 @@ async fn create_project_rejects_duplicate_project_code() -> TestResult {
                 .uri("/api/projects")
                 .header(header::COOKIE, cookie)
                 .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    r#"{"code":"coffee-legacy","name":"Coffee Legacy Duplicate"}"#,
-                ))?,
+                .body(Body::from(format!(
+                    r#"{{"code":"coffee-legacy","name":"Coffee Legacy Duplicate","initial_admin_user_id":{admin_user_id}}}"#,
+                )))?,
         )
         .await?;
 
@@ -310,6 +300,7 @@ async fn get_project_returns_project_detail_for_authenticated_session() -> TestR
     .fetch_one(&pool)
     .await?;
     let project_id: i64 = row.get("id");
+    grant_admin_membership(&pool, project_id).await?;
 
     let cookie = login(&app).await?;
     let response = app
@@ -373,6 +364,7 @@ async fn update_project_updates_existing_project() -> TestResult {
     .fetch_one(&pool)
     .await?;
     let project_id: i64 = row.get("id");
+    grant_admin_membership(&pool, project_id).await?;
 
     let cookie = login(&app).await?;
     let response = app
@@ -450,6 +442,7 @@ async fn project_crud_flow_persists_changes_across_endpoints() -> TestResult {
     };
 
     let cookie = login(&app).await?;
+    let admin_user_id = admin_user_id(&pool).await?;
 
     let create_response = app
         .clone()
@@ -459,13 +452,13 @@ async fn project_crud_flow_persists_changes_across_endpoints() -> TestResult {
                 .uri("/api/projects")
                 .header(header::COOKIE, &cookie)
                 .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    r#"{"code":"coffee-legacy","name":"Coffee Legacy","description":"Retail edge rollout"}"#,
-                ))?,
+                .body(Body::from(format!(
+                    r#"{{"code":"coffee-legacy","name":"Coffee Legacy","description":"Retail edge rollout","initial_admin_user_id":{admin_user_id}}}"#,
+                )))?,
         )
         .await?;
     assert_eq!(create_response.status(), StatusCode::CREATED);
-    let created: ProjectSummary = read_json(create_response).await?;
+    let created: CreatePlatformProjectResponse = read_json(create_response).await?;
 
     let list_response = app
         .clone()
@@ -479,13 +472,13 @@ async fn project_crud_flow_persists_changes_across_endpoints() -> TestResult {
     assert_eq!(list_response.status(), StatusCode::OK);
     let listed: ProjectListResponse = read_json(list_response).await?;
     assert_eq!(listed.items.len(), 1);
-    assert_eq!(listed.items[0].id, created.id);
+    assert_eq!(listed.items[0].id, created.project.id);
 
     let detail_response = app
         .clone()
         .oneshot(
             Request::builder()
-                .uri(format!("/api/projects/{}", created.id))
+                .uri(format!("/api/projects/{}", created.project.id))
                 .header(header::COOKIE, &cookie)
                 .body(Body::empty())?,
         )
@@ -499,7 +492,7 @@ async fn project_crud_flow_persists_changes_across_endpoints() -> TestResult {
         .oneshot(
             Request::builder()
                 .method("PUT")
-                .uri(format!("/api/projects/{}", created.id))
+                .uri(format!("/api/projects/{}", created.project.id))
                 .header(header::COOKIE, &cookie)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
@@ -515,7 +508,7 @@ async fn project_crud_flow_persists_changes_across_endpoints() -> TestResult {
     let detail_after_update = app
         .oneshot(
             Request::builder()
-                .uri(format!("/api/projects/{}", created.id))
+                .uri(format!("/api/projects/{}", created.project.id))
                 .header(header::COOKIE, cookie)
                 .body(Body::empty())?,
         )
@@ -527,11 +520,62 @@ async fn project_crud_flow_persists_changes_across_endpoints() -> TestResult {
     assert_eq!(detail_after_update.status, "archived");
 
     let row = sqlx::query("SELECT code, status FROM projects WHERE id = $1")
-        .bind(created.id)
+        .bind(created.project.id)
         .fetch_one(&pool)
         .await?;
     assert_eq!(row.get::<String, _>("code"), "coffee-retail");
     assert_eq!(row.get::<String, _>("status"), "archived");
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn create_project_alias_does_not_grant_platform_admin_project_visibility() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    let password_hash = server::auth::hash_password("alice1234")
+        .map_err(|error| std::io::Error::other(error.into_body().message))?;
+    let alice_id: i64 = sqlx::query_scalar(
+        r#"
+        INSERT INTO users (username, password_hash, status)
+        VALUES ('alice', $1, 'active')
+        RETURNING id
+        "#,
+    )
+    .bind(password_hash)
+    .fetch_one(&pool)
+    .await?;
+
+    let admin_cookie = login(&app).await?;
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/projects")
+                .header(header::COOKIE, &admin_cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(format!(
+                    r#"{{"code":"coffee-hidden","name":"Coffee Hidden","initial_admin_user_id":{alice_id}}}"#,
+                )))?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let admin_projects_response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/projects")
+                .header(header::COOKIE, admin_cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(admin_projects_response.status(), StatusCode::OK);
+    let admin_projects: ProjectListResponse = read_json(admin_projects_response).await?;
+    assert!(admin_projects.items.is_empty());
 
     teardown(&database_url, &schema, pool).await
 }
