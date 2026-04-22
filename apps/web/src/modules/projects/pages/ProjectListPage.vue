@@ -16,8 +16,17 @@
 
     <EmptyState
       v-else-if="projects.length === 0"
-      :description="t('projects.list.empty')"
-    />
+      :description="emptyStateDescription"
+    >
+      <el-space v-if="authSession.isPlatformAdmin" wrap>
+        <el-button type="primary" @click="goToAdminUsers">
+          {{ t("projects.list.platformEmpty.goToUsers") }}
+        </el-button>
+        <el-button @click="goToAdminProjectCreate">
+          {{ t("projects.list.platformEmpty.goToCreateProject") }}
+        </el-button>
+      </el-space>
+    </EmptyState>
 
     <div v-else class="project-list-page__grid">
       <el-card
@@ -43,7 +52,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { computed, ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import * as projectsApi from "@/api/projects";
 import { ApiRequestError } from "@/api/error";
@@ -56,13 +65,21 @@ import EmptyState from "@/shared/states/EmptyState.vue";
 import ErrorState from "@/shared/states/ErrorState.vue";
 import { ROUTE_NAMES } from "@/shared/constants/routes";
 import { useI18nText } from "@/shared/i18n";
+import { useAuthSession } from "@/modules/auth/composables/useAuthSession";
 
 const router = useRouter();
 const { t } = useI18nText();
+const authSession = useAuthSession();
 
 const projects = ref<ProjectSummary[]>([]);
 const loading = ref(false);
 const error = ref<ApiRequestError | null>(null);
+
+const emptyStateDescription = computed(() =>
+  authSession.isPlatformAdmin
+    ? t("projects.list.platformEmpty.description")
+    : t("projects.list.empty"),
+);
 
 async function fetchProjects() {
   loading.value = true;
@@ -89,6 +106,14 @@ function goToProject(id: number) {
     name: ROUTE_NAMES.PROJECT_OVERVIEW,
     params: { projectId: String(id) },
   });
+}
+
+function goToAdminUsers() {
+  router.push({ name: ROUTE_NAMES.ADMIN_USERS });
+}
+
+function goToAdminProjectCreate() {
+  router.push({ name: ROUTE_NAMES.ADMIN_CREATE_PROJECT });
 }
 
 onMounted(fetchProjects);

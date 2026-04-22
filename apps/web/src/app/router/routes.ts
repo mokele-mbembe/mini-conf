@@ -3,6 +3,7 @@ import { ROUTE_NAMES, ROUTE_PATHS } from "@/shared/constants/routes";
 
 import AuthLayout from "@/app/layouts/AuthLayout.vue";
 import AppShell from "@/app/layouts/AppShell.vue";
+import AdminLayout from "@/app/layouts/AdminLayout.vue";
 import ProjectSectionPlaceholderPage from "@/modules/projects/pages/ProjectSectionPlaceholderPage.vue";
 
 const LoginPage = () => import("@/modules/auth/pages/LoginPage.vue");
@@ -28,6 +29,12 @@ const ReleaseDetailPage = () =>
   import("@/modules/releases/pages/ReleaseDetailPage.vue");
 const ReleaseDiffPage = () =>
   import("@/modules/releases/pages/ReleaseDiffPage.vue");
+
+// Admin pages
+const AdminUserListPage = () =>
+  import("@/modules/admin-users/pages/AdminUserListPage.vue");
+const AdminProjectCreatePage = () =>
+  import("@/modules/admin-projects/pages/AdminProjectCreatePage.vue");
 
 export const routes: RouteRecordRaw[] = [
   {
@@ -130,7 +137,42 @@ export const routes: RouteRecordRaw[] = [
     ],
   },
   {
+    path: ROUTE_PATHS.ADMIN_DASHBOARD,
+    name: ROUTE_NAMES.ADMIN_DASHBOARD,
+    component: AdminLayout,
+    meta: { requiresAuth: true, requiresPlatformAdmin: true },
+    children: [
+      {
+        path: "",
+        redirect: ROUTE_PATHS.ADMIN_USERS,
+      },
+      {
+        path: ROUTE_PATHS.ADMIN_USERS,
+        name: ROUTE_NAMES.ADMIN_USERS,
+        component: AdminUserListPage,
+      },
+      {
+        path: ROUTE_PATHS.ADMIN_PROJECTS,
+        name: ROUTE_NAMES.ADMIN_PROJECTS,
+        redirect: { name: ROUTE_NAMES.ADMIN_CREATE_PROJECT },
+      },
+      {
+        path: ROUTE_PATHS.ADMIN_CREATE_PROJECT,
+        name: ROUTE_NAMES.ADMIN_CREATE_PROJECT,
+        component: AdminProjectCreatePage,
+      },
+    ],
+  },
+  {
     path: "/:pathMatch(.*)*",
     redirect: ROUTE_PATHS.PROJECTS,
   },
 ];
+
+// Add Vue 3 route metadata typing
+declare module "vue-router" {
+  interface RouteMeta {
+    requiresAuth?: boolean;
+    requiresPlatformAdmin?: boolean;
+  }
+}

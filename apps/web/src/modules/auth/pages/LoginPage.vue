@@ -39,18 +39,25 @@ const errorMsg = ref("");
 onMounted(async () => {
   const result = await authSession.checkSession();
   if (result === "authenticated") {
-    router.replace({ name: ROUTE_NAMES.PROJECTS });
+    redirectAfterLogin();
   } else if (result === "error") {
     errorMsg.value = authSession.sessionError ?? t("login.sessionCheckFailed");
   }
 });
+
+function redirectAfterLogin() {
+  const nextRoute = authSession.isPlatformAdmin
+    ? { name: ROUTE_NAMES.ADMIN_DASHBOARD }
+    : { name: ROUTE_NAMES.PROJECTS };
+  router.replace(nextRoute);
+}
 
 async function handleLogin(username: string, password: string) {
   submitting.value = true;
   errorMsg.value = "";
   try {
     await authSession.login(username, password);
-    router.replace({ name: ROUTE_NAMES.PROJECTS });
+    redirectAfterLogin();
   } catch (err) {
     if (isApiError(err)) {
       errorMsg.value = getErrorMessage(err.code, err.message);

@@ -15,6 +15,11 @@ export const ROUTE_NAMES = {
   SYNC_RECORD_LIST: "SyncRecordList",
   HEARTBEAT_LIST: "HeartbeatList",
   AUDIT_LOG_LIST: "AuditLogList",
+  // Platform admin routes
+  ADMIN_DASHBOARD: "AdminDashboard",
+  ADMIN_USERS: "AdminUsers",
+  ADMIN_PROJECTS: "AdminProjects",
+  ADMIN_CREATE_PROJECT: "AdminCreateProject",
 } as const;
 
 export const ROUTE_PATHS = {
@@ -35,4 +40,9 @@ export const ROUTE_PATHS = {
   SYNC_RECORD_LIST: "/projects/:projectId/sync-records",
   HEARTBEAT_LIST: "/projects/:projectId/heartbeats",
   AUDIT_LOG_LIST: "/projects/:projectId/audit-logs",
+  // Platform admin routes
+  ADMIN_DASHBOARD: "/admin",
+  ADMIN_USERS: "/admin/users",
+  ADMIN_PROJECTS: "/admin/projects",
+  ADMIN_CREATE_PROJECT: "/admin/projects/create",
 } as const;

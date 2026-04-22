@@ -23,15 +23,26 @@ export function setupGuards(router: Router) {
     const requiresAuth = to.matched.some(
       (record) => record.meta.requiresAuth !== false,
     );
+    const requiresPlatformAdmin = to.matched.some(
+      (record) => record.meta.requiresPlatformAdmin === true,
+    );
 
-    // Logged-in user visiting /login -> redirect to projects
+    // Logged-in user visiting /login -> redirect based on role
     if (isLoggedIn && to.name === ROUTE_NAMES.LOGIN) {
-      return { name: ROUTE_NAMES.PROJECTS };
+      const nextRoute = authSession.isPlatformAdmin
+        ? { name: ROUTE_NAMES.ADMIN_DASHBOARD }
+        : { name: ROUTE_NAMES.PROJECTS };
+      return nextRoute;
     }
 
     // Not logged in visiting protected route -> redirect to login
     if (!isLoggedIn && requiresAuth) {
       return { name: ROUTE_NAMES.LOGIN };
+    }
+
+    // Requires platform admin but user is not platform admin -> go to projects
+    if (isLoggedIn && requiresPlatformAdmin && !authSession.isPlatformAdmin) {
+      return { name: ROUTE_NAMES.PROJECTS };
     }
 
     return true;

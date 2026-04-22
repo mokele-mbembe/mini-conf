@@ -7,27 +7,82 @@ import type { Page } from "@playwright/test";
 
 const ADMIN_USERNAME = process.env.E2E_ADMIN_USERNAME ?? "admin";
 const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD ?? "admin123456";
+const PLATFORM_ADMIN_USERNAME =
+  process.env.E2E_PLATFORM_ADMIN_USERNAME ?? ADMIN_USERNAME;
+const PLATFORM_ADMIN_PASSWORD =
+  process.env.E2E_PLATFORM_ADMIN_PASSWORD ?? ADMIN_PASSWORD;
 
-async function login(page: Page) {
+interface SessionUser {
+  id: number;
+  username: string;
+  is_platform_admin: boolean;
+}
+
+async function getCurrentUser(page: Page): Promise<SessionUser> {
+  const response = await page.request.get("/api/auth/me");
+  expect(response.ok()).toBeTruthy();
+  const payload = (await response.json()) as { user: SessionUser };
+  return payload.user;
+}
+
+async function login(page: Page): Promise<SessionUser> {
   await page.goto("/login");
-  await expect(page.locator("form")).toBeVisible();
+  await expect(page.getByPlaceholder("请输入用户名")).toBeVisible();
   await page.getByPlaceholder("请输入用户名").fill(ADMIN_USERNAME);
   await page.getByPlaceholder("请输入密码").fill(ADMIN_PASSWORD);
   await page.getByRole("button", { name: "登录" }).click();
+  await page.waitForURL(/\/(projects|admin(?:\/users)?)/, {
+    timeout: 10_000,
+  });
+  await page.goto("/projects");
   await expect(page).toHaveURL(/\/projects/, { timeout: 10_000 });
+  return getCurrentUser(page);
+}
+
+async function loginAsPlatformAdmin(page: Page): Promise<SessionUser> {
+  await page.goto("/login");
+  await expect(page.getByPlaceholder("请输入用户名")).toBeVisible();
+  await page.getByPlaceholder("请输入用户名").fill(PLATFORM_ADMIN_USERNAME);
+  await page.getByPlaceholder("请输入密码").fill(PLATFORM_ADMIN_PASSWORD);
+  await page.getByRole("button", { name: "登录" }).click();
+  await page.waitForURL(/\/(projects|admin(?:\/users)?)/, {
+    timeout: 10_000,
+  });
+  await page.goto("/admin/users");
+  await expect(page.getByRole("button", { name: "新建用户" })).toBeVisible();
+  return getCurrentUser(page);
+}
+
+async function createAdminUser(page: Page, username: string) {
+  const response = await page.request.post("/api/admin/users", {
+    data: {
+      username,
+      password: "Seed12345",
+      status: "active",
+      is_platform_admin: false,
+      must_change_password: false,
+    },
+  });
+  expect(response.ok()).toBeTruthy();
 }
 
 async function createProject(page: Page, suffix: string): Promise<number> {
+  const currentUser = await getCurrentUser(page);
   const response = await page.request.post("/api/projects", {
     data: {
       code: `e2e-project-${suffix}`,
       name: `E2E Project ${suffix}`,
       description: "Isolated Playwright project",
+      initial_admin_user_id: currentUser.id,
     },
   });
-  expect(response.ok()).toBeTruthy();
-  const payload = (await response.json()) as { id: number };
-  return payload.id;
+  if (!response.ok()) {
+    throw new Error(
+      `createProject failed: ${response.status()} ${await response.text()}`,
+    );
+  }
+  const payload = (await response.json()) as { project: { id: number } };
+  return payload.project.id;
 }
 
 test("main path: login → project list → project detail", async ({ page }) => {
@@ -155,6 +210,165 @@ test("deployment lifecycle path: environment → inactive deployment → activat
   await expect(page.getByRole("button", { name: "激活" })).toBeVisible();
   await expect(page.locator(".deployment-instance-detail-page")).toContainText(
     "未启用",
+  );
+});
+
+test("admin user dialogs retain form values after failed submit", async ({
+  page,
+}) => {
+  const suffix = Date.now().toString();
+  const username = `e2e-user-${suffix}`;
+
+  await loginAsPlatformAdmin(page);
+  await createAdminUser(page, username);
+  await page.goto("/admin/users");
+
+  await page.getByRole("button", { name: "新建用户" }).click();
+
+  const createDialog = page.getByRole("dialog", { name: "新建用户" });
+  await expect(createDialog).toBeVisible();
+  await createDialog.getByPlaceholder("请输入用户名").fill(username);
+  await createDialog.getByPlaceholder("请输入密码").fill("abc12345");
+  await createDialog.getByRole("button", { name: "创建" }).click();
+
+  await expect(page.locator(".el-message").last()).toContainText(
+    "用户名已存在",
+  );
+  await expect(createDialog).toBeVisible();
+  await expect(createDialog.getByPlaceholder("请输入用户名")).toHaveValue(
+    username,
+  );
+  await expect(createDialog.getByPlaceholder("请输入密码")).toHaveValue(
+    "abc12345",
+  );
+
+  await createDialog.getByRole("button", { name: "取消" }).click();
+  await expect(createDialog).not.toBeVisible();
+
+  await page.getByPlaceholder("搜索用户名").fill(username);
+  const userRow = page.locator(".el-table__row", { hasText: username }).first();
+  await expect(userRow).toBeVisible();
+  await userRow.getByRole("button", { name: "操作" }).click();
+  await page.getByRole("menuitem", { name: "重置密码" }).click();
+
+  const resetDialog = page.getByRole("dialog", { name: "重置密码" });
+  await expect(resetDialog).toBeVisible();
+  const mustChangePasswordCheckbox = resetDialog.locator("label.el-checkbox", {
+    hasText: "下次登录时必须修改密码",
+  });
+  const mustChangePasswordCheckboxInput = mustChangePasswordCheckbox.locator(
+    'input[type="checkbox"]',
+  );
+  await expect(mustChangePasswordCheckboxInput).toBeChecked();
+  await mustChangePasswordCheckbox.click();
+  await expect(mustChangePasswordCheckboxInput).not.toBeChecked();
+
+  await resetDialog.getByPlaceholder("请输入新密码").fill("aaaaaaaa");
+  await resetDialog.getByRole("button", { name: "确认" }).click();
+
+  await expect(page.locator(".el-message").last()).toContainText(
+    "密码强度不足，请使用更强的密码",
+  );
+  await expect(resetDialog).toBeVisible();
+  await expect(resetDialog.getByPlaceholder("请输入新密码")).toHaveValue(
+    "aaaaaaaa",
+  );
+  await expect(mustChangePasswordCheckboxInput).not.toBeChecked();
+});
+
+test("admin project create path: remote search → submit → success state", async ({
+  page,
+}) => {
+  const suffix = Date.now().toString();
+  const currentUser = await loginAsPlatformAdmin(page);
+  const projectCode = `e2e-admin-project-${suffix}`;
+  const projectName = `E2E Admin Project ${suffix}`;
+
+  await page.goto("/admin/projects/create");
+  await expect(page.getByRole("heading", { name: "创建项目" })).toBeVisible();
+
+  await page.getByPlaceholder("如 coffee-main").fill(projectCode);
+  await page.getByPlaceholder("如 Coffee Main").fill(projectName);
+  await page
+    .getByPlaceholder("可选描述")
+    .fill("Playwright admin project create coverage");
+
+  const initialAdminField = page.locator(".el-form-item", {
+    hasText: "首个项目管理员",
+  });
+  await initialAdminField.locator(".el-select__wrapper").click();
+  const initialAdminInput = initialAdminField.locator("input.el-select__input");
+  await initialAdminInput.fill(currentUser.username);
+
+  const initialAdminOption = page
+    .locator(".el-select-dropdown__item", { hasText: currentUser.username })
+    .first();
+  await expect(initialAdminOption).toBeVisible({ timeout: 10_000 });
+  await initialAdminOption.click();
+
+  await page.getByRole("button", { name: "创建" }).click();
+
+  const successCard = page.locator(".admin-project-create-page__success-card");
+  await expect(successCard).toContainText("项目创建成功");
+  await expect(successCard).toContainText(projectName);
+  await expect(successCard).toContainText(projectCode);
+  await expect(successCard).toContainText(currentUser.username);
+  await expect(
+    page.getByRole("button", { name: "继续创建项目" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "前往项目列表" }),
+  ).toBeVisible();
+});
+
+test("admin project create path: other initial admin hides project-list action", async ({
+  page,
+}) => {
+  const suffix = Date.now().toString();
+  await loginAsPlatformAdmin(page);
+
+  const initialAdminUsername = `e2e-project-admin-${suffix}`;
+  await createAdminUser(page, initialAdminUsername);
+
+  const projectCode = `e2e-admin-other-${suffix}`;
+  const projectName = `E2E Admin Other ${suffix}`;
+
+  await page.goto("/admin/projects/create");
+  await expect(page.getByRole("heading", { name: "创建项目" })).toBeVisible();
+
+  await page.getByPlaceholder("如 coffee-main").fill(projectCode);
+  await page.getByPlaceholder("如 Coffee Main").fill(projectName);
+  await page
+    .getByPlaceholder("可选描述")
+    .fill(
+      "Playwright admin project create coverage for non-self initial admin",
+    );
+
+  const initialAdminField = page.locator(".el-form-item", {
+    hasText: "首个项目管理员",
+  });
+  await initialAdminField.locator(".el-select__wrapper").click();
+  const initialAdminInput = initialAdminField.locator("input.el-select__input");
+  await initialAdminInput.fill(initialAdminUsername);
+
+  const initialAdminOption = page
+    .locator(".el-select-dropdown__item", { hasText: initialAdminUsername })
+    .first();
+  await expect(initialAdminOption).toBeVisible({ timeout: 10_000 });
+  await initialAdminOption.click();
+
+  await page.getByRole("button", { name: "创建" }).click();
+
+  const successCard = page.locator(".admin-project-create-page__success-card");
+  await expect(successCard).toContainText("项目创建成功");
+  await expect(successCard).toContainText(projectName);
+  await expect(successCard).toContainText(projectCode);
+  await expect(successCard).toContainText(initialAdminUsername);
+  await expect(
+    page.getByRole("button", { name: "继续创建项目" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "前往项目列表" })).toHaveCount(
+    0,
   );
 });
 

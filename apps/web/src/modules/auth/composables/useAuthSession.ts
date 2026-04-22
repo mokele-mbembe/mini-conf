@@ -1,4 +1,4 @@
-import { ref } from "vue";
+import { ref, computed } from "vue";
 import { defineStore } from "pinia";
 import type { AuthUser } from "@/api/types/auth";
 import * as authApi from "@/api/auth";
@@ -13,6 +13,14 @@ export const useAuthSession = defineStore("authSession", () => {
   const sessionError = ref<string | null>(null);
 
   const isLoggedIn = () => user.value !== null;
+
+  const isPlatformAdmin = computed(
+    () => user.value?.is_platform_admin ?? false,
+  );
+  const mustChangePassword = computed(
+    () => user.value?.must_change_password ?? false,
+  );
+  const userStatus = computed(() => user.value?.status ?? null);
 
   async function checkSession(): Promise<SessionCheckResult> {
     sessionError.value = null;
@@ -52,6 +60,9 @@ export const useAuthSession = defineStore("authSession", () => {
     checked,
     sessionError,
     isLoggedIn,
+    isPlatformAdmin,
+    mustChangePassword,
+    userStatus,
     checkSession,
     login,
     logout,

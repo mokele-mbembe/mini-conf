@@ -168,4 +168,9 @@ E2E_MANAGED_SERVER=1 \
   E2E_ADMIN_USERNAME="${admin_username}" \
   E2E_ADMIN_PASSWORD="${admin_password}" \
   PLAYWRIGHT_BASE_URL="${base_url}" \
-  pnpm --dir apps/web test:e2e
+  node apps/web/scripts/ensure-e2e-target.mjs && \
+  E2E_MANAGED_SERVER=1 \
+  E2E_ADMIN_USERNAME="${admin_username}" \
+  E2E_ADMIN_PASSWORD="${admin_password}" \
+  PLAYWRIGHT_BASE_URL="${base_url}" \
+  pnpm --dir apps/web exec playwright test --config playwright.config.ts "$@"
