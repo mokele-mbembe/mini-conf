@@ -10,6 +10,8 @@ Content-Type: application/json
   "password": "{{admin_password}}"
 }
 HTTP 200
+[Captures]
+admin_user_id: jsonpath "$.user.id"
 [Asserts]
 header "set-cookie" contains "mini_conf_session="
 jsonpath "$.user.username" == "admin"
@@ -19,13 +21,15 @@ Content-Type: application/json
 {
   "code": "alpha-full-{{suite_id}}",
   "name": "Alpha Full {{suite_id}}",
-  "description": "alpha full project"
+  "description": "alpha full project",
+  "initial_admin_user_id": {{admin_user_id}}
 }
 HTTP 201
 [Captures]
-project_id: jsonpath "$.id"
+project_id: jsonpath "$.project.id"
 [Asserts]
-jsonpath "$.status" == "active"
+jsonpath "$.project.status" == "active"
+jsonpath "$.initial_admin.user_id" == {{admin_user_id}}
 
 POST {{base_url}}/api/config-files
 Content-Type: application/json
