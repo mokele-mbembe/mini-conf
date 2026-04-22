@@ -12,3 +12,5 @@
 - [product-qa/README.md](./product-qa/README.md)
 - [product-qa/0006-config-file-format-and-ux-alignment.md](./product-qa/0006-config-file-format-and-ux-alignment.md)
 - [product-qa/0007-config-identity-and-heartbeats.md](./product-qa/0007-config-identity-and-heartbeats.md)
+- [product-qa/0011-merge-workspace-and-visual-config-editor.md](./product-qa/0011-merge-workspace-and-visual-config-editor.md)
+- [product-qa/0012-mvp-launch-operability-and-admin-model.md](./product-qa/0012-mvp-launch-operability-and-admin-model.md)

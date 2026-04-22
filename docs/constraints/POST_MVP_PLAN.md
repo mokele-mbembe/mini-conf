@@ -70,6 +70,14 @@
 - 不做隐式联动覆盖
 - 要先看 Diff，再执行应用
 
+补充设计方向：
+
+- 首版不应直接做“批量自动覆盖”，而应先落地单实例、单配置文件的 **Merge Workspace**
+- Merge Workspace 采用三方合并模型：`base / source / target / result`
+- 交互形态参考 JetBrains / VS Code 的 merge editor，而不是简化的 GitHub Web conflict editor
+- 结果始终写回 Current Draft，保存前自动生成一条 Saved Version 作为回退点
+- 详细方案见 `docs/constraints/product-qa/0011-merge-workspace-and-visual-config-editor.md`
+
 ### 5. 批量替换与批量发布
 
 后续目标：
@@ -130,14 +138,14 @@
 - 在 Release 详情页、Release Diff 页、preview-bundle 和 Draft 编辑页的只读预览区域支持 YAML / TOML 语法高亮
 - 在 Diff 页支持新增 / 删除 / 修改行的颜色区分，必要时支持行号和折叠未变更上下文
 - 敏感配置被脱敏时仍保持高亮和 Diff 结构稳定，不因为脱敏占位符破坏阅读体验
+- 把 Draft 编辑、Release 只读查看、Diff 和 Merge 收束为统一的 Config Workspace 视觉体系
 
 实施建议：
 
-- 优先选择只读渲染方案，不急于把 Draft 编辑器整体替换成重型代码编辑器
-- 语法高亮可评估 `Shiki` 或 `highlight.js`；Release 详情这类只读页面更适合按需加载高亮器，避免继续放大主 bundle
-- Diff 颜色展示可评估 `diff` / `diff2html`，或基于后端已有 `before_content` / `after_content` 在前端生成 line diff 后自绘简单行级视图
-- 如果后续 Draft 编辑器也需要代码编辑体验，再单独评估 CodeMirror 6 / Monaco，不和只读 Release 视图绑定推进
-- 如果选择 Monaco，应优先封装成独立 `ConfigCodeViewer` / `ConfigCodeEditor`，使用 Vite worker 配置和动态导入控制 bundle 体积，再逐步替换 Draft 编辑器与只读 Release 视图
+- 优先把编辑、只读查看、Diff 和 Merge 统一到一套代码工作区方案中，而不是继续把只读和编辑拆成不同栈
+- 当前更推荐优先评估 CodeMirror 6：它已有官方 merge view，可支撑只读 Diff 和后续 Merge Workspace
+- 语法高亮应与 Merge Workspace 方案一起规划，避免先做一套只读高亮、再做另一套 merge 工作台
+- 如果后续 Draft 编辑器确实需要更重的 IDE 体验，再单独评估 Monaco；但当前不建议先上 Monaco 再自行拼 merge editor
 - 加入 E2E/组件层检查：确认 YAML / TOML 内容可见、secret redaction 可见、首个发布版本不显示误导性删除行、普通变更能展示新增/删除颜色
 
 ## 4. 实际业务背景

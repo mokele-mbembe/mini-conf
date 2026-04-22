@@ -31,3 +31,5 @@
 - `0008-current-draft-saved-versions-and-release-workspace.md`
 - `0009-saved-versions-api-and-rollout.md`
 - `0010-release-readonly-template-split-and-deployment-archive.md`
+- `0011-merge-workspace-and-visual-config-editor.md`
+- `0012-mvp-launch-operability-and-admin-model.md`

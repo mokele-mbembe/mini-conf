@@ -272,32 +272,50 @@
 - [x] 部署实例列表拆分模板 / 普通实例区块
 - [x] deployment archive / tombstone delete 生命周期
 
+### 3.4 新确认的 MVP 大块
+
+- [ ] 平台级权限模型：引入 `platform_admin`，把平台管理与项目业务访问分层
+- [ ] 用户管理：创建用户、禁用/启用、重置密码、强制改密、项目成员绑定
+- [ ] 项目创建语义调整：由平台管理员创建项目并指定首个项目 `admin`
+- [ ] 系统初始化与首次登录 setup wizard
+- [ ] 上线实施方案：Docker Compose + 通用 Linux runbook
+- [ ] 上线安全基线：CSRF、安全响应头、登录节流、开放接口限流
+- [ ] projects / config_files 的删除能力与生命周期文案统一
+- [ ] 低风险管理页面补齐：项目成员、sync records、heartbeats、audit logs
+- [ ] 中间文档压缩整理
+- [ ] 配置编辑体验统一升级（延后到上述骨架完成之后）
+
 ## 4. 当前阶段剩余工作
 
 推荐顺序：
 
-1. 咖啡中间件 demo 程序和 demo seed / 手工演示脚本
-2. 项目成员页、sync records、heartbeats、audit logs 等管理辅助页面
-3. Release 详情 / Diff 的 Post-MVP 体验增强：语法高亮、彩色 diff、复制和跳转体验
-4. 前端单元 / 组件测试基线，优先覆盖高状态密度组件
-5. `sqlx-check` 恢复为强制检查的时机评估
-6. 黑盒与覆盖率基线的持续补量
+1. 平台级权限模型与用户管理：`platform_admin`、用户状态、项目首个管理员指定
+2. 系统初始化与上线实施方案：init 脚本、首次登录 setup wizard、Docker Compose / Linux runbook
+3. 上线安全基线：CSRF、安全响应头、登录节流、开放接口限流、平台级/项目级审计边界
+4. 资源生命周期与文案收口：projects / config_files 删除能力、用户禁用模型、状态词统一
+5. 项目成员页、sync records、heartbeats、audit logs 等低风险管理页面补齐
+6. 前端单元 / 组件测试基线，优先覆盖高状态密度组件
+7. `sqlx-check` 恢复为强制检查的时机评估
+8. 黑盒与覆盖率基线的持续补量
+9. 配置编辑体验统一升级：Draft / Release / Diff / Merge 的 Config Workspace
 
 理由：
 
-- 后端主路径、项目级权限、审计日志、配置标识收口、部署实例生命周期和开放接口活跃态约束已经完成
-- Draft / preview-bundle / publish、Release 回看 / Diff、模板拆分、归档 / 删除主路径前端已经闭环
-- 当前更大的风险已从“核心链路缺失”转向“demo 真实链路、运维可见性、测试颗粒度和体验细化”
-- alpha 黑盒已覆盖成员权限、审计查询、模板 clone、二次发布 diff 和 token 失效回归
-- 前端 E2E 已覆盖部署生命周期、Saved Versions、clone-sources、Release detail / diff、模板拆分和归档删除主要交互
+- 当前业务主路径已经基本闭环，但距离“可上线、可运营、可长期使用”仍缺平台骨架
+- 当前最大的剩余风险不再是单个业务页面，而是平台权限分层、初始化上线和安全基线
+- 项目成员、sync records、heartbeats、audit logs 已有后端接口，但前端仍未形成完整运营闭环
+- 配置编辑体验升级仍然重要，但顺序应后移，避免与平台骨架建设互相打断
+- 详细方向已收口到 `docs/constraints/product-qa/0012-mvp-launch-operability-and-admin-model.md`
 
 前端下一批推荐顺序：
 
-1. 项目成员页：成员列表、添加成员、角色调整、最后 admin 保护错误提示
-2. sync records / heartbeats 页面：按实例和配置筛选，服务 demo 时能解释客户端拉取与上报行为
-3. audit logs 页面：按事件类型和项目资源筛选，辅助解释归档 / 删除 / 发布等关键操作
-4. Release 详情 / Diff 增强：引入 Monaco 只读高亮和 diff 颜色展示
-5. 前端组件测试基线：优先覆盖 ArchivedInstancesDrawer、ReleaseDetailPage、ReleaseDiffPage 和 Draft 历史面板
+1. 平台初始化与登录后首屏：初始密码修改、系统未初始化 / 已初始化分流
+2. 用户管理页：用户列表、创建、禁用、重置密码、强制改密
+3. 项目创建入口改造：由平台管理员创建并指定首个项目管理员
+4. 项目成员页：成员列表、添加成员、角色调整、最后 admin 保护错误提示
+5. sync records / heartbeats / audit logs 页面：形成完整运营可见性
+6. 前端组件测试基线：优先覆盖高风险状态页和权限相关交互
+7. 配置编辑体验统一升级：最后再收束到统一 Config Workspace
 
 ## 5. 下一个会话建议先跑的命令
 
@@ -353,6 +371,7 @@ just ci-local-db
 - [部署实例 Token 重置澄清](./docs/constraints/product-qa/0004-token-reset.md)
 - [项目成员、项目级权限与审计日志澄清](./docs/constraints/product-qa/0005-project-members-permissions-audit.md)
 - [配置标识与心跳澄清](./docs/constraints/product-qa/0007-config-identity-and-heartbeats.md)
+- [MVP 上线运营闭环与平台管理模型澄清](./docs/constraints/product-qa/0012-mvp-launch-operability-and-admin-model.md)
 - [咖啡中间件演示案例规格](./docs/constraints/DEMO_SCENARIO_COFFEE_MIDDLEWARE.md)
 - [前端 MVP 蓝图](./docs/constraints/FRONTEND_MVP_BLUEPRINT.md)
 
