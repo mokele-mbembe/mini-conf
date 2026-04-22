@@ -366,6 +366,7 @@ just ci-local-db
 - [前端接手说明](./docs/collaboration/FRONTEND_HANDOFF.md)
 - [前端工作区与运行方式](./docs/collaboration/FRONTEND_WORKSPACE.md)
 - [前端页面测试与白屏排查](./docs/collaboration/FRONTEND_PAGE_TESTING.md)
+- [MVP 上线实施清单](./docs/collaboration/MVP_LAUNCH_IMPLEMENTATION_CHECKLIST.md)
 - [产品澄清目录](./docs/constraints/product-qa/README.md)
 - [必选配置与预览澄清](./docs/constraints/product-qa/0002-required-configs-and-preview.md)
 - [部署实例 Token 重置澄清](./docs/constraints/product-qa/0004-token-reset.md)
