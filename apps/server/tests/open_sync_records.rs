@@ -28,6 +28,8 @@ async fn setup_app() -> TestResult<Option<(axum::Router, PgPool, String, String)
 
     let state = bootstrap::build_state(AppConfig {
         init_db_on_boot: true,
+        init_admin_username: Some("admin".to_owned()),
+        init_admin_password: Some("admin123456".to_owned()),
         database_url: with_search_path(&database_url, &schema),
         ..AppConfig::default()
     })
