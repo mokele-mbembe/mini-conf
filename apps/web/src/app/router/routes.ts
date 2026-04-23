@@ -7,6 +7,7 @@ import AdminLayout from "@/app/layouts/AdminLayout.vue";
 import ProjectSectionPlaceholderPage from "@/modules/projects/pages/ProjectSectionPlaceholderPage.vue";
 
 const LoginPage = () => import("@/modules/auth/pages/LoginPage.vue");
+const SetupPage = () => import("@/modules/setup/pages/SetupPage.vue");
 const ProjectListPage = () =>
   import("@/modules/projects/pages/ProjectListPage.vue");
 const ProjectOverviewPage = () =>
@@ -33,6 +34,8 @@ const ReleaseDiffPage = () =>
 // Admin pages
 const AdminUserListPage = () =>
   import("@/modules/admin-users/pages/AdminUserListPage.vue");
+const AdminProjectListPage = () =>
+  import("@/modules/admin-projects/pages/AdminProjectListPage.vue");
 const AdminProjectCreatePage = () =>
   import("@/modules/admin-projects/pages/AdminProjectCreatePage.vue");
 
@@ -46,6 +49,19 @@ export const routes: RouteRecordRaw[] = [
         path: "",
         name: ROUTE_NAMES.LOGIN,
         component: LoginPage,
+        meta: { requiresAuth: false },
+      },
+    ],
+  },
+  {
+    path: ROUTE_PATHS.SETUP,
+    component: AuthLayout,
+    meta: { requiresAuth: false },
+    children: [
+      {
+        path: "",
+        name: ROUTE_NAMES.SETUP,
+        component: SetupPage,
         meta: { requiresAuth: false },
       },
     ],
@@ -154,7 +170,7 @@ export const routes: RouteRecordRaw[] = [
       {
         path: ROUTE_PATHS.ADMIN_PROJECTS,
         name: ROUTE_NAMES.ADMIN_PROJECTS,
-        redirect: { name: ROUTE_NAMES.ADMIN_CREATE_PROJECT },
+        component: AdminProjectListPage,
       },
       {
         path: ROUTE_PATHS.ADMIN_CREATE_PROJECT,

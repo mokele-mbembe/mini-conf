@@ -110,6 +110,7 @@ pub async fn build_state(config: AppConfig) -> Result<AppState, StartupError> {
         tracing::info!("database migrations applied");
         seed_admin_if_configured(&pool, &config).await?;
         seed_users_from_file_if_configured(&pool, &config).await?;
+        ensure_system_settings_row(&pool).await?;
 
         Some(pool)
     } else {
@@ -193,6 +194,20 @@ async fn seed_users_from_file_if_configured(
     for user in seed_file.users {
         seed_user_entry(pool, user).await?;
     }
+
+    Ok(())
+}
+
+async fn ensure_system_settings_row(pool: &PgPool) -> Result<(), StartupError> {
+    sqlx::query(
+        r#"
+        INSERT INTO system_settings (id)
+        VALUES (1)
+        ON CONFLICT (id) DO NOTHING
+        "#,
+    )
+    .execute(pool)
+    .await?;
 
     Ok(())
 }

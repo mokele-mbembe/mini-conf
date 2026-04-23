@@ -6,6 +6,23 @@
       </div>
       <h2 class="login-page__title">{{ t("login.title") }}</h2>
       <el-alert
+        v-if="setupStatus.setupRequired"
+        :title="t('setup.loginNoticeTitle')"
+        type="warning"
+        show-icon
+        :closable="false"
+        style="margin-bottom: 20px"
+      >
+        <template #default>
+          <div class="login-page__setup-notice">
+            <span>{{ t("setup.loginNoticeDescription") }}</span>
+            <el-button link type="primary" @click="goToSetup">
+              {{ t("setup.actions.goToSetup") }}
+            </el-button>
+          </div>
+        </template>
+      </el-alert>
+      <el-alert
         v-if="errorMsg"
         :title="errorMsg"
         type="error"
@@ -23,6 +40,7 @@ import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import LoginForm from "../components/LoginForm.vue";
 import { useAuthSession } from "../composables/useAuthSession";
+import { useSetupStatus } from "@/modules/setup/composables/useSetupStatus";
 import { isApiError } from "@/api/error";
 import { getErrorMessage } from "@/shared/constants/error-messages";
 import { ROUTE_NAMES } from "@/shared/constants/routes";
@@ -31,12 +49,17 @@ import LocaleSelect from "@/shared/components/LocaleSelect.vue";
 
 const router = useRouter();
 const authSession = useAuthSession();
+const setupStatus = useSetupStatus();
 const { t } = useI18nText();
 
 const submitting = ref(false);
 const errorMsg = ref("");
 
 onMounted(async () => {
+  if (!setupStatus.checked) {
+    await setupStatus.checkStatus();
+  }
+
   const result = await authSession.checkSession();
   if (result === "authenticated") {
     redirectAfterLogin();
@@ -67,6 +90,10 @@ async function handleLogin(username: string, password: string) {
   } finally {
     submitting.value = false;
   }
+}
+
+function goToSetup() {
+  router.push({ name: ROUTE_NAMES.SETUP });
 }
 </script>
 
@@ -101,5 +128,12 @@ async function handleLogin(username: string, password: string) {
   text-align: center;
   margin-bottom: var(--spacing-lg);
   color: var(--color-text-primary);
+}
+
+.login-page__setup-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
 }
 </style>

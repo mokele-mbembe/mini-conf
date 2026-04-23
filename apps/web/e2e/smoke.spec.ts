@@ -317,8 +317,17 @@ test("admin project create path: remote search → submit → success state", as
     page.getByRole("button", { name: "继续创建项目" }),
   ).toBeVisible();
   await expect(
+    page.getByRole("button", { name: "前往平台项目" }),
+  ).toBeVisible();
+  await expect(
     page.getByRole("button", { name: "前往项目列表" }),
   ).toBeVisible();
+
+  await page.getByRole("button", { name: "前往平台项目" }).click();
+  await expect(page).toHaveURL(/\/admin\/projects$/, { timeout: 10_000 });
+  await expect(page.getByRole("heading", { name: "项目管理" })).toBeVisible();
+  await expect(page.locator(".el-table")).toContainText(projectCode);
+  await expect(page.locator(".el-table")).toContainText(projectName);
 });
 
 test("admin project create path: other initial admin hides project-list action", async ({
@@ -366,6 +375,9 @@ test("admin project create path: other initial admin hides project-list action",
   await expect(successCard).toContainText(initialAdminUsername);
   await expect(
     page.getByRole("button", { name: "继续创建项目" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "前往平台项目" }),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "前往项目列表" })).toHaveCount(
     0,

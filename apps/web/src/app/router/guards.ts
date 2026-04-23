@@ -1,10 +1,19 @@
 import type { Router } from "vue-router";
 import { useAuthSession } from "@/modules/auth/composables/useAuthSession";
+import { useSetupStatus } from "@/modules/setup/composables/useSetupStatus";
 import { ROUTE_NAMES } from "@/shared/constants/routes";
 
 export function setupGuards(router: Router) {
   router.beforeEach(async (to) => {
     const authSession = useAuthSession();
+    const setupStatus = useSetupStatus();
+
+    if (
+      !setupStatus.checked &&
+      (to.name === ROUTE_NAMES.LOGIN || to.name === ROUTE_NAMES.SETUP)
+    ) {
+      await setupStatus.checkStatus();
+    }
 
     // If the session hasn't been checked yet, do so now
     if (!authSession.checked) {
@@ -26,6 +35,16 @@ export function setupGuards(router: Router) {
     const requiresPlatformAdmin = to.matched.some(
       (record) => record.meta.requiresPlatformAdmin === true,
     );
+
+    if (
+      to.name === ROUTE_NAMES.SETUP &&
+      setupStatus.checked &&
+      !setupStatus.setupRequired
+    ) {
+      return isLoggedIn
+        ? { name: ROUTE_NAMES.PROJECTS }
+        : { name: ROUTE_NAMES.LOGIN };
+    }
 
     // Logged-in user visiting /login -> redirect based on role
     if (isLoggedIn && to.name === ROUTE_NAMES.LOGIN) {

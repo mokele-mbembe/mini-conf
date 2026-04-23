@@ -5866,6 +5866,46 @@
           }
         ]
       }
+    },
+    "/api/setup/status": {
+      "get": {
+        "tags": [
+          "setup"
+        ],
+        "operationId": "get_setup_status",
+        "responses": {
+          "200": {
+            "description": "Current setup status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupStatusResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database bootstrap disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -8551,6 +8591,40 @@
           },
           "title": {
             "type": "string"
+          }
+        }
+      },
+      "SetupStatusResponse": {
+        "type": "object",
+        "required": [
+          "setup_required",
+          "active_platform_admin_count",
+          "project_count"
+        ],
+        "properties": {
+          "active_platform_admin_count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "project_count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "setup_completed_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "setup_completed_by_user_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "setup_required": {
+            "type": "boolean"
           }
         }
       },

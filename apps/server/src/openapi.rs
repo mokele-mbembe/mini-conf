@@ -36,6 +36,7 @@ use schema::{
         SavedVersionDetail, SavedVersionDetailResponse, SavedVersionListResponse,
         SavedVersionRestoreResponse, SavedVersionSummary,
     },
+    setup::SetupStatusResponse,
 };
 use std::{fs, path::Path, sync::OnceLock};
 use utoipa::{
@@ -114,6 +115,7 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
         crate::http::api::saved_versions::update_saved_version,
         crate::http::api::saved_versions::restore_saved_version,
         crate::http::api::saved_versions::delete_saved_version,
+        crate::http::api::setup::get_setup_status,
         crate::http::api::open::configs::resolve_config,
         crate::http::api::open::releases::get_release,
         crate::http::api::open::deployments::get_config_bundle,
@@ -176,6 +178,7 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
             SavedVersionDetail,
             SavedVersionDetailResponse,
             SavedVersionRestoreResponse,
+            SetupStatusResponse,
             LoginRequestBody,
             CreateConfigFileRequestBody,
             CreateDeploymentInstanceRequestBody,

@@ -8,6 +8,13 @@ export interface AdminProjectSummary {
   created_at: string;
 }
 
+export interface AdminProjectListQuery {
+  keyword?: string;
+  status?: string;
+  page?: number;
+  page_size?: number;
+}
+
 export interface AdminProjectCreateRequest {
   code: string;
   name: string;

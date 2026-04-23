@@ -124,6 +124,9 @@
             <el-button type="primary" @click="handleCreateAnother">
               {{ t("admin.projects.success.createAnother") }}
             </el-button>
+            <el-button @click="goToAdminProjects">
+              {{ t("admin.projects.success.goToAdminProjects") }}
+            </el-button>
             <el-button v-if="canGoToProjectList" @click="goToProjectList">
               {{ t("admin.projects.success.goToProjects") }}
             </el-button>
@@ -289,6 +292,10 @@ function handleCreateAnother() {
 
 function goToProjectList() {
   router.push({ name: ROUTE_NAMES.PROJECTS });
+}
+
+function goToAdminProjects() {
+  router.push({ name: ROUTE_NAMES.ADMIN_PROJECTS });
 }
 </script>
 
