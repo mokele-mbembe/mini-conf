@@ -44,6 +44,14 @@ export function setupGuards(router: Router) {
     }
 
     if (
+      isLoggedIn &&
+      authSession.mustChangePassword &&
+      to.name !== ROUTE_NAMES.CHANGE_PASSWORD
+    ) {
+      return { name: ROUTE_NAMES.CHANGE_PASSWORD };
+    }
+
+    if (
       setupStatus.setupRequired &&
       isLoggedIn &&
       to.name !== ROUTE_NAMES.SETUP
@@ -51,14 +59,27 @@ export function setupGuards(router: Router) {
       return { name: ROUTE_NAMES.SETUP };
     }
 
+    if (
+      isLoggedIn &&
+      !authSession.mustChangePassword &&
+      to.name === ROUTE_NAMES.CHANGE_PASSWORD
+    ) {
+      return authSession.isPlatformAdmin
+        ? { name: ROUTE_NAMES.ADMIN_DASHBOARD }
+        : { name: ROUTE_NAMES.PROJECTS };
+    }
+
     // Logged-in user visiting /login -> redirect based on role
     if (isLoggedIn && to.name === ROUTE_NAMES.LOGIN) {
-      const nextRoute = setupStatus.setupRequired
-        ? { name: ROUTE_NAMES.SETUP }
-        : authSession.isPlatformAdmin
-          ? { name: ROUTE_NAMES.ADMIN_DASHBOARD }
-          : { name: ROUTE_NAMES.PROJECTS };
-      return nextRoute;
+      if (authSession.mustChangePassword) {
+        return { name: ROUTE_NAMES.CHANGE_PASSWORD };
+      }
+      if (setupStatus.setupRequired) {
+        return { name: ROUTE_NAMES.SETUP };
+      }
+      return authSession.isPlatformAdmin
+        ? { name: ROUTE_NAMES.ADMIN_DASHBOARD }
+        : { name: ROUTE_NAMES.PROJECTS };
     }
 
     // Not logged in visiting protected route -> redirect to login

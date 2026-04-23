@@ -47,6 +47,18 @@ export const useAuthSession = defineStore("authSession", () => {
     checked.value = true;
   }
 
+  async function changePassword(
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    const res = await authApi.changePassword({
+      current_password: currentPassword,
+      new_password: newPassword,
+    });
+    user.value = res.user;
+    checked.value = true;
+  }
+
   async function logout(): Promise<void> {
     try {
       await authApi.logout();
@@ -65,6 +77,7 @@ export const useAuthSession = defineStore("authSession", () => {
     userStatus,
     checkSession,
     login,
+    changePassword,
     logout,
   };
 });

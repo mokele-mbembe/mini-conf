@@ -1,6 +1,6 @@
 use crate::{
     audit::{AuditLogEntry, write_audit_log},
-    auth::hash_password,
+    auth::{hash_password, validate_password_strength},
     authorization::require_platform_admin,
     error::ApiError,
     state::AppState,
@@ -762,20 +762,6 @@ fn validate_user_status(value: String) -> Result<String, ApiError> {
             "invalid user status",
         )),
     }
-}
-
-fn validate_password_strength(password: &str) -> Result<(), ApiError> {
-    let has_letter = password.chars().any(|char| char.is_ascii_alphabetic());
-    let has_digit = password.chars().any(|char| char.is_ascii_digit());
-
-    if password.len() < 8 || !has_letter || !has_digit {
-        return Err(ApiError::unprocessable_entity(
-            "password_too_weak",
-            "password must be at least 8 characters and include letters and digits",
-        ));
-    }
-
-    Ok(())
 }
 
 fn required_trimmed(value: Option<String>, field: &'static str) -> Result<String, ApiError> {

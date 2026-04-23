@@ -1,6 +1,7 @@
 export const ROUTE_NAMES = {
   LOGIN: "Login",
   SETUP: "Setup",
+  CHANGE_PASSWORD: "ChangePassword",
   PROJECTS: "Projects",
   PROJECT_OVERVIEW: "ProjectOverview",
   CONFIG_FILE_LIST: "ConfigFileList",
@@ -26,6 +27,7 @@ export const ROUTE_NAMES = {
 export const ROUTE_PATHS = {
   LOGIN: "/login",
   SETUP: "/setup",
+  CHANGE_PASSWORD: "/change-password",
   PROJECTS: "/projects",
   PROJECT: "/projects/:projectId",
   CONFIG_FILE_LIST: "/projects/:projectId/config-files",

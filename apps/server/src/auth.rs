@@ -18,6 +18,7 @@ pub struct AuthenticatedDeployment {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AuthenticatedUser {
+    pub session_id: i64,
     pub user_id: i64,
     pub username: String,
     pub is_platform_admin: bool,
@@ -110,6 +111,20 @@ pub fn verify_password(password: &str, password_hash: &str) -> Result<bool, ApiE
         .is_ok())
 }
 
+pub fn validate_password_strength(password: &str) -> Result<(), ApiError> {
+    let has_letter = password.chars().any(|char| char.is_ascii_alphabetic());
+    let has_digit = password.chars().any(|char| char.is_ascii_digit());
+
+    if password.len() < 8 || !has_letter || !has_digit {
+        return Err(ApiError::unprocessable_entity(
+            "password_too_weak",
+            "password must be at least 8 characters and include letters and digits",
+        ));
+    }
+
+    Ok(())
+}
+
 pub fn generate_session_token() -> String {
     Uuid::new_v4().to_string()
 }
@@ -190,6 +205,7 @@ pub async fn authenticate_admin_session(
     .map_err(|_| ApiError::internal())?;
 
     Ok(AuthenticatedUser {
+        session_id,
         user_id,
         username,
         is_platform_admin,

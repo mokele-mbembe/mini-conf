@@ -50,13 +50,22 @@ pub async fn authenticate_user(
     pool: &PgPool,
     headers: &HeaderMap,
 ) -> Result<AuthenticatedUser, ApiError> {
-    authenticate_admin_session(
+    let auth = authenticate_admin_session(
         pool,
         headers
             .get(header::COOKIE)
             .and_then(|value| value.to_str().ok()),
     )
-    .await
+    .await?;
+
+    if auth.must_change_password {
+        return Err(ApiError::conflict(
+            "password_change_required",
+            "Password change is required before continuing",
+        ));
+    }
+
+    Ok(auth)
 }
 
 pub async fn require_platform_admin(

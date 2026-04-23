@@ -15,12 +15,23 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "login.password": "密码",
     "login.passwordPlaceholder": "请输入密码",
     "login.submit": "登录",
+    "changePassword.title": "修改密码",
+    "changePassword.subtitle": "当前账号需要先修改密码，然后才能继续使用系统。",
+    "changePassword.currentPassword": "当前密码",
+    "changePassword.currentPasswordPlaceholder": "请输入当前密码",
+    "changePassword.newPassword": "新密码",
+    "changePassword.newPasswordPlaceholder": "请输入新密码",
+    "changePassword.confirmPassword": "确认新密码",
+    "changePassword.confirmPasswordPlaceholder": "请再次输入新密码",
+    "changePassword.submit": "确认修改",
+    "changePassword.success": "密码已修改",
+    "changePassword.validation.confirmRequired": "请确认新密码",
+    "changePassword.validation.mismatch": "两次输入的新密码不一致",
     "setup.title": "系统初始化",
-    "setup.subtitle":
-      "这里先承载初始化状态展示。后续会在这个入口接入首次改密和 setup wizard。",
+    "setup.subtitle": "完成首个项目管理员和项目创建后，再开放业务管理流程。",
     "setup.requiredTitle": "系统尚未完成初始化",
     "setup.requiredDescription":
-      "当前仍处于平台初始化阶段。下一步会在这里接入完整的初始化向导。",
+      "当前仍处于平台初始化阶段。请先创建项目管理员和第一个项目。",
     "setup.completedTitle": "系统已完成初始化",
     "setup.completedDescription":
       "初始化标记已经存在，可以继续进入现有管理流程。",
@@ -38,6 +49,23 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "setup.actions.completeSetup": "标记初始化完成",
     "setup.actions.goToLogin": "返回登录",
     "setup.actions.goToProjects": "进入项目列表",
+    "setup.wizard.steps.admin": "项目管理员",
+    "setup.wizard.steps.project": "首个项目",
+    "setup.wizard.steps.complete": "完成",
+    "setup.wizard.created": "已创建",
+    "setup.wizard.admin.title": "创建首个项目管理员",
+    "setup.wizard.admin.description":
+      "平台管理员默认不进入业务项目。先创建一个项目管理员账号，后续由它负责具体项目配置。",
+    "setup.wizard.admin.create": "创建项目管理员",
+    "setup.wizard.admin.createdToast": "项目管理员已创建",
+    "setup.wizard.project.title": "创建第一个项目",
+    "setup.wizard.project.description":
+      "项目创建时必须指定首个项目管理员。平台管理员不会被自动加入项目。",
+    "setup.wizard.project.create": "创建项目",
+    "setup.wizard.complete.title": "完成初始化",
+    "setup.wizard.complete.description":
+      "确认已经创建首个项目后，就可以完成初始化并进入正式管理流程。",
+    "setup.wizard.complete.projectRequired": "请先创建至少一个项目",
     "validation.login.usernameRequired": "请输入用户名",
     "validation.login.passwordRequired": "请输入密码",
     "projects.list.title": "项目列表",
@@ -490,7 +518,9 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "validation.adminProjects.nameRequired": "请输入项目名称",
     "validation.adminProjects.initialAdminRequired": "请选择首个项目管理员",
     "error.auth_invalid_credentials": "用户名或密码错误",
+    "error.current_password_invalid": "当前密码不正确",
     "error.auth_session_expired": "登录状态已过期，请重新登录",
+    "error.password_change_required": "请先修改密码后继续操作",
     "error.setup_required": "系统尚未完成初始化，请先完成 setup",
     "error.invalid_request": "请求参数无效，请检查输入内容",
     "error.platform_permission_denied": "当前账号没有平台管理权限",
@@ -647,12 +677,26 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "login.password": "Password",
     "login.passwordPlaceholder": "Enter password",
     "login.submit": "Sign in",
+    "changePassword.title": "Change Password",
+    "changePassword.subtitle":
+      "This account must change its password before continuing.",
+    "changePassword.currentPassword": "Current Password",
+    "changePassword.currentPasswordPlaceholder": "Enter current password",
+    "changePassword.newPassword": "New Password",
+    "changePassword.newPasswordPlaceholder": "Enter new password",
+    "changePassword.confirmPassword": "Confirm New Password",
+    "changePassword.confirmPasswordPlaceholder": "Enter new password again",
+    "changePassword.submit": "Change Password",
+    "changePassword.success": "Password changed",
+    "changePassword.validation.confirmRequired":
+      "Please confirm the new password",
+    "changePassword.validation.mismatch": "The new passwords do not match",
     "setup.title": "System Setup",
     "setup.subtitle":
-      "This page is the placeholder for setup status. The initial password-change flow and setup wizard will be connected here next.",
+      "Create the first project admin and project before opening the management flow.",
     "setup.requiredTitle": "System setup is not complete",
     "setup.requiredDescription":
-      "The platform is still in its initialization phase. The full setup wizard will be added here next.",
+      "The platform is still in its initialization phase. Create a project admin and the first project first.",
     "setup.completedTitle": "System setup is complete",
     "setup.completedDescription":
       "A setup completion marker already exists. You can continue using the current management flow.",
@@ -670,6 +714,24 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "setup.actions.completeSetup": "Mark Setup Complete",
     "setup.actions.goToLogin": "Back to Login",
     "setup.actions.goToProjects": "Go to Project List",
+    "setup.wizard.steps.admin": "Project Admin",
+    "setup.wizard.steps.project": "First Project",
+    "setup.wizard.steps.complete": "Complete",
+    "setup.wizard.created": "Created",
+    "setup.wizard.admin.title": "Create the first project admin",
+    "setup.wizard.admin.description":
+      "Platform admins do not enter business projects by default. Create a project admin account for project configuration work.",
+    "setup.wizard.admin.create": "Create Project Admin",
+    "setup.wizard.admin.createdToast": "Project admin created",
+    "setup.wizard.project.title": "Create the first project",
+    "setup.wizard.project.description":
+      "A project must have an initial project admin. The platform admin is not added automatically.",
+    "setup.wizard.project.create": "Create Project",
+    "setup.wizard.complete.title": "Complete setup",
+    "setup.wizard.complete.description":
+      "After the first project exists, complete setup and enter the normal management flow.",
+    "setup.wizard.complete.projectRequired":
+      "Create at least one project first",
     "validation.login.usernameRequired": "Please enter a username",
     "validation.login.passwordRequired": "Please enter a password",
     "projects.list.title": "Projects",
@@ -1156,8 +1218,11 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "validation.adminProjects.initialAdminRequired":
       "Please choose an initial project admin",
     "error.auth_invalid_credentials": "Incorrect username or password",
+    "error.current_password_invalid": "Current password is incorrect",
     "error.auth_session_expired":
       "Your session has expired. Please log in again.",
+    "error.password_change_required":
+      "Please change your password before continuing.",
     "error.setup_required":
       "System setup is not complete yet. Finish setup first.",
     "error.invalid_request": "Invalid request. Please check your input.",

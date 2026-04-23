@@ -7,6 +7,8 @@ import AdminLayout from "@/app/layouts/AdminLayout.vue";
 import ProjectSectionPlaceholderPage from "@/modules/projects/pages/ProjectSectionPlaceholderPage.vue";
 
 const LoginPage = () => import("@/modules/auth/pages/LoginPage.vue");
+const ChangePasswordPage = () =>
+  import("@/modules/auth/pages/ChangePasswordPage.vue");
 const SetupPage = () => import("@/modules/setup/pages/SetupPage.vue");
 const ProjectListPage = () =>
   import("@/modules/projects/pages/ProjectListPage.vue");
@@ -63,6 +65,18 @@ export const routes: RouteRecordRaw[] = [
         name: ROUTE_NAMES.SETUP,
         component: SetupPage,
         meta: { requiresAuth: false },
+      },
+    ],
+  },
+  {
+    path: ROUTE_PATHS.CHANGE_PASSWORD,
+    component: AuthLayout,
+    meta: { requiresAuth: true },
+    children: [
+      {
+        path: "",
+        name: ROUTE_NAMES.CHANGE_PASSWORD,
+        component: ChangePasswordPage,
       },
     ],
   },

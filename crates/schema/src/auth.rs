@@ -16,6 +16,12 @@ pub struct AuthSessionResponse {
     pub auth_mode: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct ChangePasswordRequest {
+    pub current_password: String,
+    pub new_password: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::{AuthSessionResponse, AuthUser};

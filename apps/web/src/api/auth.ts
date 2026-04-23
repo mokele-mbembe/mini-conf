@@ -1,5 +1,9 @@
 import { client } from "./client";
-import type { AuthSessionResponse, LoginRequest } from "./types/auth";
+import type {
+  AuthSessionResponse,
+  ChangePasswordRequest,
+  LoginRequest,
+} from "./types/auth";
 
 export function getMe(): Promise<AuthSessionResponse> {
   return client.get<AuthSessionResponse>("/auth/me");
@@ -11,4 +15,10 @@ export function login(body: LoginRequest): Promise<AuthSessionResponse> {
 
 export function logout(): Promise<void> {
   return client.post<void>("/auth/logout");
+}
+
+export function changePassword(
+  body: ChangePasswordRequest,
+): Promise<AuthSessionResponse> {
+  return client.post<AuthSessionResponse>("/auth/change-password", body);
 }

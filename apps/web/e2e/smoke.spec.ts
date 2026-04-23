@@ -34,15 +34,33 @@ async function completeSetupIfNeeded(page: Page): Promise<void> {
     return;
   }
 
-  const completeButton = page.getByRole("button", {
-    name: "标记初始化完成",
+  const suffix = Date.now().toString();
+  const userResponse = await page.request.post("/api/admin/users", {
+    data: {
+      username: `e2e-setup-admin-${suffix}`,
+      password: "Seed12345",
+      status: "active",
+      is_platform_admin: false,
+      must_change_password: true,
+    },
   });
-  if (await completeButton.isVisible()) {
-    await completeButton.click();
-    await expect(
-      page.getByText("系统初始化已标记为完成").first(),
-    ).toBeVisible();
-  }
+  expect(userResponse.ok()).toBeTruthy();
+  const createdUser = (await userResponse.json()) as { id: number };
+
+  const projectResponse = await page.request.post("/api/admin/projects", {
+    data: {
+      code: `e2e-setup-project-${suffix}`,
+      name: `E2E Setup Project ${suffix}`,
+      description: "Created by the setup completion helper",
+      initial_admin_user_id: createdUser.id,
+    },
+  });
+  expect(projectResponse.ok()).toBeTruthy();
+
+  const completeResponse = await page.request.post("/api/setup/complete");
+  expect(completeResponse.ok()).toBeTruthy();
+  await page.goto("/projects");
+  await expect(page).toHaveURL(/\/projects$/, { timeout: 10_000 });
 }
 
 async function login(page: Page): Promise<SessionUser> {
@@ -101,9 +119,21 @@ async function createProject(page: Page, suffix: string): Promise<number> {
   return payload.project.id;
 }
 
+function getInitialAdminOption(page: Page, username: string) {
+  return page
+    .locator(".el-select-dropdown__item")
+    .filter({ has: page.getByText(username, { exact: true }) })
+    .first();
+}
+
 test("setup path: platform admin login redirects to setup and can complete", async ({
   page,
 }) => {
+  const suffix = Date.now().toString();
+  const projectAdminUsername = `e2e-wizard-admin-${suffix}`;
+  const projectCode = `e2e-wizard-project-${suffix}`;
+  const projectName = `E2E Wizard Project ${suffix}`;
+
   await page.goto("/login");
   await expect(page.getByPlaceholder("请输入用户名")).toBeVisible();
   await page.getByPlaceholder("请输入用户名").fill(PLATFORM_ADMIN_USERNAME);
@@ -113,6 +143,17 @@ test("setup path: platform admin login redirects to setup and can complete", asy
   await expect(page).toHaveURL(/\/setup$/, { timeout: 10_000 });
   await expect(page.getByRole("heading", { name: "系统初始化" })).toBeVisible();
   await expect(page.getByText("系统尚未完成初始化")).toBeVisible();
+
+  await page.getByPlaceholder("请输入用户名").fill(projectAdminUsername);
+  await page.getByPlaceholder("请输入密码").fill("Seed12345");
+  await page.getByRole("button", { name: "创建项目管理员" }).click();
+  await expect(page.getByText("项目管理员已创建").first()).toBeVisible();
+
+  await page.getByPlaceholder("如 coffee-main").fill(projectCode);
+  await page.getByPlaceholder("如 Coffee Main").fill(projectName);
+  await page.getByPlaceholder("可选描述").fill("Created by setup wizard smoke");
+  await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  await expect(page.getByText("项目已创建").first()).toBeVisible();
 
   await page.getByRole("button", { name: "标记初始化完成" }).click();
   await expect(page.getByText("系统初始化已标记为完成")).toBeVisible();
@@ -312,6 +353,47 @@ test("admin user dialogs retain form values after failed submit", async ({
   await expect(mustChangePasswordCheckboxInput).not.toBeChecked();
 });
 
+test("must-change-password user changes password before continuing", async ({
+  page,
+}) => {
+  const suffix = Date.now().toString();
+  const username = `e2e-must-change-${suffix}`;
+
+  await loginAsPlatformAdmin(page);
+  const createResponse = await page.request.post("/api/admin/users", {
+    data: {
+      username,
+      password: "Seed12345",
+      status: "active",
+      is_platform_admin: false,
+      must_change_password: true,
+    },
+  });
+  expect(createResponse.ok()).toBeTruthy();
+
+  const logoutResponse = await page.request.post("/api/auth/logout");
+  expect(logoutResponse.ok()).toBeTruthy();
+
+  await page.goto("/login");
+  await page.getByPlaceholder("请输入用户名").fill(username);
+  await page.getByPlaceholder("请输入密码").fill("Seed12345");
+  await page.getByRole("button", { name: "登录" }).click();
+
+  await expect(page).toHaveURL(/\/change-password$/, { timeout: 10_000 });
+  await expect(page.getByRole("heading", { name: "修改密码" })).toBeVisible();
+
+  await page.getByPlaceholder("请输入当前密码").fill("Seed12345");
+  await page.getByPlaceholder("请输入新密码").fill("NewPassword123");
+  await page.getByPlaceholder("请再次输入新密码").fill("NewPassword123");
+  await page.getByRole("button", { name: "确认修改" }).click();
+
+  await expect(page.getByText("密码已修改").first()).toBeVisible();
+  await expect(page).toHaveURL(/\/projects$/, { timeout: 10_000 });
+
+  const currentUser = await getCurrentUser(page);
+  expect(currentUser.username).toBe(username);
+});
+
 test("admin project create path: remote search → submit → success state", async ({
   page,
 }) => {
@@ -336,9 +418,7 @@ test("admin project create path: remote search → submit → success state", as
   const initialAdminInput = initialAdminField.locator("input.el-select__input");
   await initialAdminInput.fill(currentUser.username);
 
-  const initialAdminOption = page
-    .locator(".el-select-dropdown__item", { hasText: currentUser.username })
-    .first();
+  const initialAdminOption = getInitialAdminOption(page, currentUser.username);
   await expect(initialAdminOption).toBeVisible({ timeout: 10_000 });
   await initialAdminOption.click();
 
@@ -396,11 +476,12 @@ test("admin project create path: other initial admin hides project-list action",
   const initialAdminInput = initialAdminField.locator("input.el-select__input");
   await initialAdminInput.fill(initialAdminUsername);
 
-  const initialAdminOption = page
-    .locator(".el-select-dropdown__item", { hasText: initialAdminUsername })
-    .first();
-  await expect(initialAdminOption).toBeVisible({ timeout: 10_000 });
-  await initialAdminOption.click();
+  const createdInitialAdminOption = getInitialAdminOption(
+    page,
+    initialAdminUsername,
+  );
+  await expect(createdInitialAdminOption).toBeVisible({ timeout: 10_000 });
+  await createdInitialAdminOption.click();
 
   await page.getByRole("button", { name: "创建" }).click();
 

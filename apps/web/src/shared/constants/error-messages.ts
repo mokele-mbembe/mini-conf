@@ -2,7 +2,9 @@ import { t } from "@/shared/i18n";
 
 export const ERROR_MESSAGES: Record<string, string> = {
   auth_invalid_credentials: "error.auth_invalid_credentials",
+  current_password_invalid: "error.current_password_invalid",
   auth_session_expired: "error.auth_session_expired",
+  password_change_required: "error.password_change_required",
   setup_required: "error.setup_required",
   invalid_request: "error.invalid_request",
   platform_permission_denied: "error.platform_permission_denied",

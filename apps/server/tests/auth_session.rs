@@ -191,3 +191,224 @@ async fn logout_revokes_current_session() -> TestResult {
 
     teardown(&database_url, &schema, pool).await
 }
+
+#[tokio::test]
+async fn change_password_clears_must_change_and_keeps_current_session() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    sqlx::query(
+        r#"
+        UPDATE users
+        SET must_change_password = TRUE
+        WHERE username = 'admin'
+        "#,
+    )
+    .execute(&pool)
+    .await?;
+
+    let login_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/login")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"username":"admin","password":"admin123456"}"#,
+                ))?,
+        )
+        .await?;
+    let cookie = session_cookie(&login_response);
+    let login_payload: serde_json::Value = read_json(login_response).await?;
+    assert_eq!(login_payload["user"]["must_change_password"], true);
+
+    let change_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/change-password")
+                .header(header::COOKIE, &cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"current_password":"admin123456","new_password":"NewPassword123"}"#,
+                ))?,
+        )
+        .await?;
+
+    assert_eq!(change_response.status(), StatusCode::OK);
+    let change_payload: serde_json::Value = read_json(change_response).await?;
+    assert_eq!(change_payload["user"]["must_change_password"], false);
+
+    let me_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/auth/me")
+                .header(header::COOKIE, cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+
+    assert_eq!(me_response.status(), StatusCode::OK);
+    let me_payload: serde_json::Value = read_json(me_response).await?;
+    assert_eq!(me_payload["user"]["must_change_password"], false);
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn change_password_rejects_invalid_current_password() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    let login_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/login")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"username":"admin","password":"admin123456"}"#,
+                ))?,
+        )
+        .await?;
+    let cookie = session_cookie(&login_response);
+
+    let change_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/change-password")
+                .header(header::COOKIE, cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"current_password":"wrong-password","new_password":"NewPassword123"}"#,
+                ))?,
+        )
+        .await?;
+
+    assert_eq!(change_response.status(), StatusCode::UNAUTHORIZED);
+    let payload: ErrorResponse = read_json(change_response).await?;
+    assert_eq!(payload.code, "current_password_invalid");
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn change_password_rejects_weak_new_password() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    let login_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/login")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"username":"admin","password":"admin123456"}"#,
+                ))?,
+        )
+        .await?;
+    let cookie = session_cookie(&login_response);
+
+    let change_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/change-password")
+                .header(header::COOKIE, cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"current_password":"admin123456","new_password":"aaaaaaaa"}"#,
+                ))?,
+        )
+        .await?;
+
+    assert_eq!(change_response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let payload: ErrorResponse = read_json(change_response).await?;
+    assert_eq!(payload.code, "password_too_weak");
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn must_change_password_blocks_app_workflows_until_changed() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    sqlx::query(
+        r#"
+        UPDATE users
+        SET must_change_password = TRUE
+        WHERE username = 'admin'
+        "#,
+    )
+    .execute(&pool)
+    .await?;
+
+    let login_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/login")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"username":"admin","password":"admin123456"}"#,
+                ))?,
+        )
+        .await?;
+    let cookie = session_cookie(&login_response);
+
+    let projects_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/projects")
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(projects_response.status(), StatusCode::CONFLICT);
+    let payload: ErrorResponse = read_json(projects_response).await?;
+    assert_eq!(payload.code, "password_change_required");
+
+    let change_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/change-password")
+                .header(header::COOKIE, cookie.clone())
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"current_password":"admin123456","new_password":"NewPassword123"}"#,
+                ))?,
+        )
+        .await?;
+    assert_eq!(change_response.status(), StatusCode::OK);
+
+    let unlocked_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/projects")
+                .header(header::COOKIE, cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(unlocked_response.status(), StatusCode::OK);
+
+    teardown(&database_url, &schema, pool).await
+}

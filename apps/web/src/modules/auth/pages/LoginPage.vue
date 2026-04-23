@@ -69,12 +69,19 @@ onMounted(async () => {
 });
 
 function redirectAfterLogin() {
-  const nextRoute = setupStatus.setupRequired
-    ? { name: ROUTE_NAMES.SETUP }
-    : authSession.isPlatformAdmin
+  if (authSession.mustChangePassword) {
+    router.replace({ name: ROUTE_NAMES.CHANGE_PASSWORD });
+    return;
+  }
+  if (setupStatus.setupRequired) {
+    router.replace({ name: ROUTE_NAMES.SETUP });
+    return;
+  }
+  router.replace(
+    authSession.isPlatformAdmin
       ? { name: ROUTE_NAMES.ADMIN_DASHBOARD }
-      : { name: ROUTE_NAMES.PROJECTS };
-  router.replace(nextRoute);
+      : { name: ROUTE_NAMES.PROJECTS },
+  );
 }
 
 async function handleLogin(username: string, password: string) {

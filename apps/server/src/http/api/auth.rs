@@ -1,8 +1,9 @@
 use crate::{
-    audit::{AuditLogEntry, write_audit_log_best_effort},
+    audit::{AuditLogEntry, write_audit_log, write_audit_log_best_effort},
     auth::{
         authenticate_admin_session, clear_session_cookie_header, generate_session_token,
-        hash_bearer_token, revoke_admin_session, session_cookie_header, verify_password,
+        hash_bearer_token, hash_password, revoke_admin_session, session_cookie_header,
+        validate_password_strength, verify_password,
     },
     error::ApiError,
     state::AppState,
@@ -30,11 +31,24 @@ struct ValidatedLoginRequest {
     password: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct ChangePasswordRequest {
+    current_password: Option<String>,
+    new_password: Option<String>,
+}
+
+#[derive(Debug)]
+struct ValidatedChangePasswordRequest {
+    current_password: String,
+    new_password: String,
+}
+
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/auth/login", post(login))
         .route("/auth/logout", post(logout))
         .route("/auth/me", get(me))
+        .route("/auth/change-password", post(change_password))
 }
 
 #[utoipa::path(
@@ -231,6 +245,132 @@ pub(crate) async fn me(
 
 #[utoipa::path(
     post,
+    path = "/api/auth/change-password",
+    tag = "auth",
+    request_body = schema::auth::ChangePasswordRequest,
+    security(
+        ("session_auth" = [])
+    ),
+    responses(
+        (status = 200, description = "Password changed and current session refreshed", body = AuthSessionResponse),
+        (status = 400, description = "Invalid request body", body = crate::error::ErrorResponse),
+        (status = 401, description = "Missing, expired, or invalid current password", body = crate::error::ErrorResponse),
+        (status = 422, description = "Password does not meet strength requirements", body = crate::error::ErrorResponse),
+        (status = 503, description = "Database bootstrap disabled", body = crate::error::ErrorResponse),
+        (status = 500, description = "Internal server error", body = crate::error::ErrorResponse),
+    )
+)]
+pub(crate) async fn change_password(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    payload: Result<Json<ChangePasswordRequest>, JsonRejection>,
+) -> Result<Json<AuthSessionResponse>, ApiError> {
+    let Json(payload) =
+        payload.map_err(|_| ApiError::bad_request("invalid_request", "invalid request body"))?;
+    let payload = payload.validate()?;
+
+    let Some(pool) = state.db_pool() else {
+        return Err(ApiError::service_unavailable(
+            "database_unavailable",
+            "Database bootstrap is disabled",
+        ));
+    };
+    let auth = authenticate_admin_session(
+        pool,
+        headers
+            .get(header::COOKIE)
+            .and_then(|value| value.to_str().ok()),
+    )
+    .await?;
+
+    validate_password_strength(&payload.new_password)?;
+    let row = sqlx::query(
+        r#"
+        SELECT password_hash
+        FROM users
+        WHERE id = $1
+          AND status = 'active'
+        LIMIT 1
+        "#,
+    )
+    .bind(auth.user_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|_| ApiError::internal())?;
+    let password_hash: String = row.get("password_hash");
+
+    if !verify_password(&payload.current_password, &password_hash)? {
+        return Err(ApiError::unauthorized(
+            "current_password_invalid",
+            "Current password is invalid",
+        ));
+    }
+
+    let new_password_hash = hash_password(&payload.new_password)?;
+    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    sqlx::query(
+        r#"
+        UPDATE users
+        SET
+            password_hash = $2,
+            must_change_password = FALSE,
+            password_updated_at = NOW(),
+            updated_at = NOW()
+        WHERE id = $1
+        "#,
+    )
+    .bind(auth.user_id)
+    .bind(new_password_hash)
+    .execute(&mut *tx)
+    .await
+    .map_err(|_| ApiError::internal())?;
+
+    sqlx::query(
+        r#"
+        UPDATE auth_sessions
+        SET status = 'revoked', updated_at = NOW()
+        WHERE user_id = $1
+          AND id <> $2
+          AND status = 'active'
+        "#,
+    )
+    .bind(auth.user_id)
+    .bind(auth.session_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|_| ApiError::internal())?;
+
+    write_audit_log(
+        &mut *tx,
+        AuditLogEntry {
+            project_id: None,
+            user_id: Some(auth.user_id),
+            action: "auth.password_changed",
+            resource_type: "auth",
+            resource_id: auth.user_id.to_string(),
+            detail: Some(serde_json::json!({
+                "changed_fields": ["password", "must_change_password"]
+            })),
+        },
+    )
+    .await?;
+
+    tx.commit().await.map_err(|_| ApiError::internal())?;
+
+    Ok(Json(AuthSessionResponse {
+        user: AuthUser {
+            id: auth.user_id,
+            username: auth.username,
+            is_platform_admin: auth.is_platform_admin,
+            status: auth.status,
+            must_change_password: false,
+        },
+        auth_mode: "session".to_owned(),
+    }))
+}
+
+#[utoipa::path(
+    post,
     path = "/api/auth/logout",
     tag = "auth",
     security(
@@ -276,6 +416,15 @@ impl LoginRequest {
     }
 }
 
+impl ChangePasswordRequest {
+    fn validate(self) -> Result<ValidatedChangePasswordRequest, ApiError> {
+        Ok(ValidatedChangePasswordRequest {
+            current_password: required(self.current_password, "current_password")?,
+            new_password: required(self.new_password, "new_password")?,
+        })
+    }
+}
+
 fn required(value: Option<String>, field: &'static str) -> Result<String, ApiError> {
     let Some(value) = value else {
         return Err(ApiError::bad_request(
@@ -298,6 +447,8 @@ fn invalid_body_message(field: &'static str) -> &'static str {
     match field {
         "username" => "missing required body field: username",
         "password" => "missing required body field: password",
+        "current_password" => "missing required body field: current_password",
+        "new_password" => "missing required body field: new_password",
         _ => "missing required body field",
     }
 }

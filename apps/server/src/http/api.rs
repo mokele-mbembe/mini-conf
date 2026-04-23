@@ -30,11 +30,11 @@ pub fn router(state: AppState) -> Router<AppState> {
     let setup_free_routes = Router::new()
         .merge(auth::router())
         .merge(health::router())
-        .merge(setup::router());
+        .merge(setup::router())
+        .merge(admin_projects::router())
+        .merge(admin_users::router());
 
     let gated_routes = Router::new()
-        .merge(admin_projects::router())
-        .merge(admin_users::router())
         .merge(audit_logs::router())
         .merge(clone_sources::router())
         .merge(config_files::router())

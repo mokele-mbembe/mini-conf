@@ -175,6 +175,59 @@ async fn project_endpoints_require_completed_setup() -> TestResult {
 }
 
 #[tokio::test]
+async fn setup_allows_platform_initialization_admin_apis() -> TestResult {
+    let Some((app, pool, database_url, schema)) =
+        setup_app_pending_setup("setup gate allows admin initialization").await?
+    else {
+        return Ok(());
+    };
+
+    let admin_cookie = login_as(&app, "admin", "admin123456").await?;
+    let create_user_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/admin/users")
+                .header(header::COOKIE, admin_cookie.clone())
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"username":"setup-project-admin","password":"TempPassword123!","status":"active","is_platform_admin":false,"must_change_password":true}"#,
+                ))?,
+        )
+        .await?;
+
+    assert_eq!(create_user_response.status(), StatusCode::CREATED);
+    let created_user: serde_json::Value = read_json(create_user_response).await?;
+    let Some(initial_admin_user_id) = created_user.get("id").and_then(|id| id.as_i64()) else {
+        return Err(
+            std::io::Error::other("created admin user response should include numeric id").into(),
+        );
+    };
+
+    let create_project_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/admin/projects")
+                .header(header::COOKIE, admin_cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_vec(&serde_json::json!({
+                    "code": "setup-project",
+                    "name": "Setup Project",
+                    "description": "created before setup completion",
+                    "initial_admin_user_id": initial_admin_user_id,
+                }))?))?,
+        )
+        .await?;
+
+    assert_eq!(create_project_response.status(), StatusCode::CREATED);
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
 async fn completing_setup_unlocks_project_endpoints() -> TestResult {
     let Some((app, pool, database_url, schema)) =
         setup_app_pending_setup("setup gate unlock").await?
