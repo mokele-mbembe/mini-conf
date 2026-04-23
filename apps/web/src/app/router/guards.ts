@@ -8,10 +8,7 @@ export function setupGuards(router: Router) {
     const authSession = useAuthSession();
     const setupStatus = useSetupStatus();
 
-    if (
-      !setupStatus.checked &&
-      (to.name === ROUTE_NAMES.LOGIN || to.name === ROUTE_NAMES.SETUP)
-    ) {
+    if (!setupStatus.checked) {
       await setupStatus.checkStatus();
     }
 
@@ -46,11 +43,21 @@ export function setupGuards(router: Router) {
         : { name: ROUTE_NAMES.LOGIN };
     }
 
+    if (
+      setupStatus.setupRequired &&
+      isLoggedIn &&
+      to.name !== ROUTE_NAMES.SETUP
+    ) {
+      return { name: ROUTE_NAMES.SETUP };
+    }
+
     // Logged-in user visiting /login -> redirect based on role
     if (isLoggedIn && to.name === ROUTE_NAMES.LOGIN) {
-      const nextRoute = authSession.isPlatformAdmin
-        ? { name: ROUTE_NAMES.ADMIN_DASHBOARD }
-        : { name: ROUTE_NAMES.PROJECTS };
+      const nextRoute = setupStatus.setupRequired
+        ? { name: ROUTE_NAMES.SETUP }
+        : authSession.isPlatformAdmin
+          ? { name: ROUTE_NAMES.ADMIN_DASHBOARD }
+          : { name: ROUTE_NAMES.PROJECTS };
       return nextRoute;
     }
 

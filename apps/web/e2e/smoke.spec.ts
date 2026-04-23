@@ -25,15 +25,33 @@ async function getCurrentUser(page: Page): Promise<SessionUser> {
   return payload.user;
 }
 
+async function completeSetupIfNeeded(page: Page): Promise<void> {
+  await page.waitForURL(/\/(setup|projects|admin(?:\/users)?)/, {
+    timeout: 10_000,
+  });
+
+  if (!page.url().includes("/setup")) {
+    return;
+  }
+
+  const completeButton = page.getByRole("button", {
+    name: "标记初始化完成",
+  });
+  if (await completeButton.isVisible()) {
+    await completeButton.click();
+    await expect(
+      page.getByText("系统初始化已标记为完成").first(),
+    ).toBeVisible();
+  }
+}
+
 async function login(page: Page): Promise<SessionUser> {
   await page.goto("/login");
   await expect(page.getByPlaceholder("请输入用户名")).toBeVisible();
   await page.getByPlaceholder("请输入用户名").fill(ADMIN_USERNAME);
   await page.getByPlaceholder("请输入密码").fill(ADMIN_PASSWORD);
   await page.getByRole("button", { name: "登录" }).click();
-  await page.waitForURL(/\/(projects|admin(?:\/users)?)/, {
-    timeout: 10_000,
-  });
+  await completeSetupIfNeeded(page);
   await page.goto("/projects");
   await expect(page).toHaveURL(/\/projects/, { timeout: 10_000 });
   return getCurrentUser(page);
@@ -45,9 +63,7 @@ async function loginAsPlatformAdmin(page: Page): Promise<SessionUser> {
   await page.getByPlaceholder("请输入用户名").fill(PLATFORM_ADMIN_USERNAME);
   await page.getByPlaceholder("请输入密码").fill(PLATFORM_ADMIN_PASSWORD);
   await page.getByRole("button", { name: "登录" }).click();
-  await page.waitForURL(/\/(projects|admin(?:\/users)?)/, {
-    timeout: 10_000,
-  });
+  await completeSetupIfNeeded(page);
   await page.goto("/admin/users");
   await expect(page.getByRole("button", { name: "新建用户" })).toBeVisible();
   return getCurrentUser(page);
@@ -84,6 +100,26 @@ async function createProject(page: Page, suffix: string): Promise<number> {
   const payload = (await response.json()) as { project: { id: number } };
   return payload.project.id;
 }
+
+test("setup path: platform admin login redirects to setup and can complete", async ({
+  page,
+}) => {
+  await page.goto("/login");
+  await expect(page.getByPlaceholder("请输入用户名")).toBeVisible();
+  await page.getByPlaceholder("请输入用户名").fill(PLATFORM_ADMIN_USERNAME);
+  await page.getByPlaceholder("请输入密码").fill(PLATFORM_ADMIN_PASSWORD);
+  await page.getByRole("button", { name: "登录" }).click();
+
+  await expect(page).toHaveURL(/\/setup$/, { timeout: 10_000 });
+  await expect(page.getByRole("heading", { name: "系统初始化" })).toBeVisible();
+  await expect(page.getByText("系统尚未完成初始化")).toBeVisible();
+
+  await page.getByRole("button", { name: "标记初始化完成" }).click();
+  await expect(page.getByText("系统初始化已标记为完成")).toBeVisible();
+
+  await page.getByRole("button", { name: "进入项目列表" }).click();
+  await expect(page).toHaveURL(/\/projects$/, { timeout: 10_000 });
+});
 
 test("main path: login → project list → project detail", async ({ page }) => {
   const suffix = Date.now().toString();

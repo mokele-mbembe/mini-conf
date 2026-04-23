@@ -7,12 +7,16 @@ use axum::{
 };
 use schema::setup::SetupStatusResponse;
 use server::error::ErrorResponse;
-use support::{TestResult, login_as, lookup_user_id, read_json, seed_user, setup_app, teardown};
+use support::{
+    TestResult, login_as, lookup_user_id, read_json, seed_user, setup_app_pending_setup, teardown,
+};
 use tower::util::ServiceExt;
 
 #[tokio::test]
 async fn setup_status_defaults_to_required_with_seeded_platform_admin() -> TestResult {
-    let Some((app, pool, database_url, schema)) = setup_app("setup status default").await? else {
+    let Some((app, pool, database_url, schema)) =
+        setup_app_pending_setup("setup status default").await?
+    else {
         return Ok(());
     };
 
@@ -38,7 +42,9 @@ async fn setup_status_defaults_to_required_with_seeded_platform_admin() -> TestR
 
 #[tokio::test]
 async fn setup_status_reflects_completed_setup_marker() -> TestResult {
-    let Some((app, pool, database_url, schema)) = setup_app("setup status complete").await? else {
+    let Some((app, pool, database_url, schema)) =
+        setup_app_pending_setup("setup status complete").await?
+    else {
         return Ok(());
     };
 
@@ -79,7 +85,7 @@ async fn setup_status_reflects_completed_setup_marker() -> TestResult {
 #[tokio::test]
 async fn platform_admin_can_complete_setup() -> TestResult {
     let Some((app, pool, database_url, schema)) =
-        setup_app("setup complete platform admin").await?
+        setup_app_pending_setup("setup complete platform admin").await?
     else {
         return Ok(());
     };
@@ -108,7 +114,8 @@ async fn platform_admin_can_complete_setup() -> TestResult {
 
 #[tokio::test]
 async fn non_platform_admin_cannot_complete_setup() -> TestResult {
-    let Some((app, pool, database_url, schema)) = setup_app("setup complete forbidden").await?
+    let Some((app, pool, database_url, schema)) =
+        setup_app_pending_setup("setup complete forbidden").await?
     else {
         return Ok(());
     };
@@ -129,6 +136,85 @@ async fn non_platform_admin_cannot_complete_setup() -> TestResult {
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
     let payload: ErrorResponse = read_json(response).await?;
     assert_eq!(payload.code, "platform_permission_denied");
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn project_endpoints_require_completed_setup() -> TestResult {
+    let Some((app, pool, database_url, schema)) =
+        setup_app_pending_setup("setup gate projects").await?
+    else {
+        return Ok(());
+    };
+
+    let admin_cookie = login_as(&app, "admin", "admin123456").await?;
+    let admin_user_id = lookup_user_id(&pool, "admin").await?;
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/projects")
+                .header(header::COOKIE, admin_cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_vec(&serde_json::json!({
+                    "code": "setup-blocked",
+                    "name": "Setup Blocked",
+                    "description": "should be blocked before setup is complete",
+                    "initial_admin_user_id": admin_user_id,
+                }))?))?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let payload: ErrorResponse = read_json(response).await?;
+    assert_eq!(payload.code, "setup_required");
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn completing_setup_unlocks_project_endpoints() -> TestResult {
+    let Some((app, pool, database_url, schema)) =
+        setup_app_pending_setup("setup gate unlock").await?
+    else {
+        return Ok(());
+    };
+
+    let admin_cookie = login_as(&app, "admin", "admin123456").await?;
+    let admin_user_id = lookup_user_id(&pool, "admin").await?;
+
+    let complete_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/setup/complete")
+                .header(header::COOKIE, admin_cookie.clone())
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(complete_response.status(), StatusCode::OK);
+
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/projects")
+                .header(header::COOKIE, admin_cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_vec(&serde_json::json!({
+                    "code": "setup-unlocked",
+                    "name": "Setup Unlocked",
+                    "description": "allowed after setup completion",
+                    "initial_admin_user_id": admin_user_id,
+                }))?))?,
+        )
+        .await?;
+
+    assert_eq!(create_response.status(), StatusCode::CREATED);
 
     teardown(&database_url, &schema, pool).await
 }

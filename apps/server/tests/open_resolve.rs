@@ -32,6 +32,17 @@ async fn setup_app() -> TestResult<Option<(axum::Router, PgPool, String, String)
         .db_pool()
         .cloned()
         .ok_or_else(|| std::io::Error::other("db pool should be present after bootstrap"))?;
+    sqlx::query(
+        r#"
+        UPDATE system_settings
+        SET
+            setup_completed_at = COALESCE(setup_completed_at, NOW()),
+            updated_at = NOW()
+        WHERE id = 1
+        "#,
+    )
+    .execute(&pool)
+    .await?;
     let app = server::app(state);
 
     Ok(Some((app, pool, database_url, schema)))

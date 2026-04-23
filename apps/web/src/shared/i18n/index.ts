@@ -491,6 +491,7 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "validation.adminProjects.initialAdminRequired": "请选择首个项目管理员",
     "error.auth_invalid_credentials": "用户名或密码错误",
     "error.auth_session_expired": "登录状态已过期，请重新登录",
+    "error.setup_required": "系统尚未完成初始化，请先完成 setup",
     "error.invalid_request": "请求参数无效，请检查输入内容",
     "error.platform_permission_denied": "当前账号没有平台管理权限",
     "error.user_disabled": "当前用户已被禁用",
@@ -1157,6 +1158,8 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "error.auth_invalid_credentials": "Incorrect username or password",
     "error.auth_session_expired":
       "Your session has expired. Please log in again.",
+    "error.setup_required":
+      "System setup is not complete yet. Finish setup first.",
     "error.invalid_request": "Invalid request. Please check your input.",
     "error.platform_permission_denied":
       "Your account does not have platform admin permission.",

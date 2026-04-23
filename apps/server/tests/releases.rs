@@ -78,6 +78,18 @@ async fn setup_app() -> TestResult<Option<(axum::Router, PgPool, String, String)
     let Some(pool) = state.db_pool().cloned() else {
         return Err("db pool should be present after bootstrap".into());
     };
+
+    sqlx::query(
+        r#"
+        UPDATE system_settings
+        SET
+            setup_completed_at = COALESCE(setup_completed_at, NOW()),
+            updated_at = NOW()
+        WHERE id = 1
+        "#,
+    )
+    .execute(&pool)
+    .await?;
     install_admin_project_membership_trigger(&pool).await?;
 
     Ok(Some((server::app(state), pool, database_url, schema)))

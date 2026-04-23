@@ -69,9 +69,11 @@ onMounted(async () => {
 });
 
 function redirectAfterLogin() {
-  const nextRoute = authSession.isPlatformAdmin
-    ? { name: ROUTE_NAMES.ADMIN_DASHBOARD }
-    : { name: ROUTE_NAMES.PROJECTS };
+  const nextRoute = setupStatus.setupRequired
+    ? { name: ROUTE_NAMES.SETUP }
+    : authSession.isPlatformAdmin
+      ? { name: ROUTE_NAMES.ADMIN_DASHBOARD }
+      : { name: ROUTE_NAMES.PROJECTS };
   router.replace(nextRoute);
 }
 

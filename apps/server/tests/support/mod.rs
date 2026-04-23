@@ -15,6 +15,19 @@ pub type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 pub async fn setup_app(
     test_name: &str,
 ) -> TestResult<Option<(axum::Router, PgPool, String, String)>> {
+    build_app(test_name, true).await
+}
+
+pub async fn setup_app_pending_setup(
+    test_name: &str,
+) -> TestResult<Option<(axum::Router, PgPool, String, String)>> {
+    build_app(test_name, false).await
+}
+
+async fn build_app(
+    test_name: &str,
+    complete_setup: bool,
+) -> TestResult<Option<(axum::Router, PgPool, String, String)>> {
     let Some(database_url) = test_database_url(test_name) else {
         return Ok(None);
     };
@@ -38,7 +51,26 @@ pub async fn setup_app(
         .cloned()
         .ok_or_else(|| std::io::Error::other("db pool should be present after bootstrap"))?;
 
+    if complete_setup {
+        mark_setup_complete(&pool).await?;
+    }
+
     Ok(Some((server::app(state), pool, database_url, schema)))
+}
+
+pub async fn mark_setup_complete(pool: &PgPool) -> TestResult {
+    sqlx::query(
+        r#"
+        UPDATE system_settings
+        SET
+            setup_completed_at = COALESCE(setup_completed_at, NOW()),
+            updated_at = NOW()
+        WHERE id = 1
+        "#,
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
 }
 
 pub async fn teardown(database_url: &str, schema: &str, pool: PgPool) -> TestResult {
