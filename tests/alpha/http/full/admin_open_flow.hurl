@@ -3,8 +3,16 @@ HTTP 200
 [Asserts]
 jsonpath "$.status" == "ok"
 
+GET {{base_url}}/api/auth/csrf
+HTTP 204
+[Captures]
+csrf_token: cookie "mini_conf_csrf"
+[Asserts]
+header "set-cookie" contains "mini_conf_csrf="
+
 POST {{base_url}}/api/auth/login
 Content-Type: application/json
+X-CSRF-Token: {{csrf_token}}
 {
   "username": "{{admin_username}}",
   "password": "{{admin_password}}"
@@ -12,11 +20,13 @@ Content-Type: application/json
 HTTP 200
 [Captures]
 admin_user_id: jsonpath "$.user.id"
+session_cookie: cookie "mini_conf_session"
+csrf_token: cookie "mini_conf_csrf"
 [Asserts]
-header "set-cookie" contains "mini_conf_session="
 jsonpath "$.user.username" == "admin"
 
 POST {{base_url}}/api/setup/complete
+X-CSRF-Token: {{csrf_token}}
 HTTP 200
 [Asserts]
 jsonpath "$.setup_required" == false
@@ -24,6 +34,7 @@ jsonpath "$.setup_completed_by_user_id" == {{admin_user_id}}
 
 POST {{base_url}}/api/projects
 Content-Type: application/json
+X-CSRF-Token: {{csrf_token}}
 {
   "code": "alpha-full-{{suite_id}}",
   "name": "Alpha Full {{suite_id}}",
@@ -39,6 +50,7 @@ jsonpath "$.initial_admin.user_id" == {{admin_user_id}}
 
 POST {{base_url}}/api/config-files
 Content-Type: application/json
+X-CSRF-Token: {{csrf_token}}
 {
   "project_id": {{project_id}},
   "code": "main",
@@ -58,6 +70,7 @@ jsonpath "$.is_required" == true
 
 POST {{base_url}}/api/projects/{{project_id}}/environments
 Content-Type: application/json
+X-CSRF-Token: {{csrf_token}}
 {
   "code": "prod",
   "name": "Production",
@@ -74,6 +87,7 @@ jsonpath "$.status" == "active"
 
 POST {{base_url}}/api/deployment-instances
 Content-Type: application/json
+X-CSRF-Token: {{csrf_token}}
 {
   "project_id": {{project_id}},
   "environment_id": {{environment_id}},
@@ -91,6 +105,7 @@ jsonpath "$.deployment_key" == "template-{{suite_id}}"
 
 PUT {{base_url}}/api/drafts/{{template_id}}/{{config_file_id}}
 Content-Type: application/json
+X-CSRF-Token: {{csrf_token}}
 {
   "content": "poll_interval_ms: 5000\n",
   "format": "yaml"
@@ -103,6 +118,7 @@ jsonpath "$.version" == 1
 
 POST {{base_url}}/api/deployment-instances/{{template_id}}/clone
 Content-Type: application/json
+X-CSRF-Token: {{csrf_token}}
 {
   "deployment_key": "store-{{suite_id}}",
   "name": "Store {{suite_id}}",
@@ -128,6 +144,7 @@ jsonpath "$.version" == 1
 
 POST {{base_url}}/api/projects/{{project_id}}/members
 Content-Type: application/json
+X-CSRF-Token: {{csrf_token}}
 {
   "username": "alice",
   "role": "viewer"
@@ -158,6 +175,7 @@ jsonpath "$.open_bundle_preview.configs[0].config" == "main"
 
 POST {{base_url}}/api/releases/publish
 Content-Type: application/json
+X-CSRF-Token: {{csrf_token}}
 {
   "project_id": {{project_id}},
   "deployment_instance_id": {{deployment_id}},
@@ -197,6 +215,7 @@ jsonpath "$.diff_summary.has_changes" == true
 jsonpath "$.after_redacted" == false
 
 POST {{base_url}}/api/deployment-instances/{{deployment_id}}/activate
+X-CSRF-Token: {{csrf_token}}
 HTTP 200
 [Captures]
 deployment_token_old: jsonpath "$.token"
@@ -275,13 +294,23 @@ HTTP 200
 [Asserts]
 jsonpath "$.ok" == true
 
+GET {{base_url}}/api/auth/csrf
+HTTP 204
+[Captures]
+csrf_token: cookie "mini_conf_csrf"
+[Asserts]
+header "set-cookie" contains "mini_conf_csrf="
+
 POST {{base_url}}/api/auth/login
 Content-Type: application/json
+X-CSRF-Token: {{csrf_token}}
 {
   "username": "alice",
   "password": "alice123"
 }
 HTTP 200
+[Captures]
+csrf_token: cookie "mini_conf_csrf"
 [Asserts]
 jsonpath "$.user.username" == "alice"
 
@@ -313,13 +342,23 @@ HTTP 403
 [Asserts]
 jsonpath "$.code" == "project_permission_denied"
 
+GET {{base_url}}/api/auth/csrf
+HTTP 204
+[Captures]
+csrf_token: cookie "mini_conf_csrf"
+[Asserts]
+header "set-cookie" contains "mini_conf_csrf="
+
 POST {{base_url}}/api/auth/login
 Content-Type: application/json
+X-CSRF-Token: {{csrf_token}}
 {
   "username": "{{admin_username}}",
   "password": "{{admin_password}}"
 }
 HTTP 200
+[Captures]
+csrf_token: cookie "mini_conf_csrf"
 [Asserts]
 jsonpath "$.user.username" == "admin"
 
@@ -332,6 +371,7 @@ jsonpath "$.items[0].detail.role" == "viewer"
 
 PUT {{base_url}}/api/drafts/{{deployment_id}}/{{config_file_id}}
 Content-Type: application/json
+X-CSRF-Token: {{csrf_token}}
 {
   "content": "poll_interval_ms: 7000\nlog_level: info\n",
   "format": "yaml",
@@ -344,6 +384,7 @@ jsonpath "$.version" == 2
 
 POST {{base_url}}/api/releases/publish
 Content-Type: application/json
+X-CSRF-Token: {{csrf_token}}
 {
   "project_id": {{project_id}},
   "deployment_instance_id": {{deployment_id}},
@@ -369,6 +410,7 @@ jsonpath "$.diff_summary.is_initial" == false
 jsonpath "$.diff_summary.has_changes" == true
 
 POST {{base_url}}/api/deployment-instances/{{deployment_id}}/token/reset
+X-CSRF-Token: {{csrf_token}}
 HTTP 200
 [Captures]
 deployment_token_new: jsonpath "$.token"

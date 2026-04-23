@@ -35,7 +35,7 @@ pub fn router(state: AppState) -> Router<AppState> {
         .merge(admin_projects::router())
         .merge(admin_users::router());
 
-    let gated_routes = Router::new()
+    let gated_session_routes = Router::new()
         .merge(audit_logs::router())
         .merge(clone_sources::router())
         .merge(config_files::router())
@@ -43,20 +43,25 @@ pub fn router(state: AppState) -> Router<AppState> {
         .merge(deployment_heartbeats::router())
         .merge(deployment_sync_records::router())
         .merge(drafts::router())
-        .merge(open::router())
         .merge(project_members::router())
         .merge(project_environments::router())
         .merge(projects::router())
         .merge(releases::router())
         .merge(saved_versions::router())
         .route_layer(middleware::from_fn_with_state(
-            state,
+            state.clone(),
             require_completed_setup,
         ));
 
+    let gated_open_routes = open::router().route_layer(middleware::from_fn_with_state(
+        state,
+        require_completed_setup,
+    ));
+
     setup_free_routes
-        .merge(gated_routes)
+        .merge(gated_session_routes)
         .route_layer(middleware::from_fn(require_csrf_protection))
+        .merge(gated_open_routes)
 }
 
 async fn require_completed_setup(

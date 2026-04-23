@@ -4,8 +4,16 @@ HTTP 200
 header "content-type" contains "application/json"
 jsonpath "$.status" == "ok"
 
+GET {{base_url}}/api/auth/csrf
+HTTP 204
+[Captures]
+csrf_token: cookie "mini_conf_csrf"
+[Asserts]
+header "set-cookie" contains "mini_conf_csrf="
+
 POST {{base_url}}/api/auth/login
 Content-Type: application/json
+X-CSRF-Token: {{csrf_token}}
 {
   "username": "{{admin_username}}",
   "password": "{{admin_password}}"
@@ -13,12 +21,14 @@ Content-Type: application/json
 HTTP 200
 [Captures]
 admin_user_id: jsonpath "$.user.id"
+session_cookie: cookie "mini_conf_session"
+csrf_token: cookie "mini_conf_csrf"
 [Asserts]
-header "set-cookie" contains "mini_conf_session="
 jsonpath "$.user.username" == "admin"
 jsonpath "$.auth_mode" == "session"
 
 POST {{base_url}}/api/setup/complete
+X-CSRF-Token: {{csrf_token}}
 HTTP 200
 [Asserts]
 jsonpath "$.setup_required" == false
@@ -26,6 +36,7 @@ jsonpath "$.setup_completed_by_user_id" == {{admin_user_id}}
 
 POST {{base_url}}/api/projects
 Content-Type: application/json
+X-CSRF-Token: {{csrf_token}}
 {
   "code": "alpha-smoke-{{suite_id}}",
   "name": "Alpha Smoke {{suite_id}}",

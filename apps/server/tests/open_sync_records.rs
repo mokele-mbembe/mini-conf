@@ -8,6 +8,9 @@ use server::{bootstrap, config::AppConfig, error::ErrorResponse};
 use sqlx::{Connection, Executor, PgConnection, PgPool, Row};
 use tower::util::ServiceExt;
 
+#[path = "support/mod.rs"]
+mod support;
+
 const TEST_TOKEN: &str = "mini-conf-open-sync-token";
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
@@ -216,6 +219,52 @@ async fn sync_record_inserts_row_and_returns_ok() -> TestResult {
     assert_eq!(row.get::<String, _>("revision"), "20260405.0001");
     assert_eq!(row.get::<String, _>("message"), "config applied");
     assert_eq!(row.get::<String, _>("duration_ms"), "87");
+
+    teardown(&database_url, &schema, pool).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn sync_record_ignores_browser_csrf_cookies_when_using_bearer_auth() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    seed_release(&pool).await?;
+
+    let csrf_cookie = support::fetch_csrf_cookie(&app).await?;
+    let session_cookie = support::login_as(&app, "admin", "admin123456").await?;
+    let cookie_header = format!("{session_cookie}; {csrf_cookie}");
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/open/deployment-sync-records")
+                .header(header::COOKIE, cookie_header)
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {TEST_TOKEN}"))
+                .body(Body::from(
+                    r#"{
+                        "project":"coffee-legacy",
+                        "environment":"prod",
+                        "deployment_key":"store-001",
+                        "config":"main",
+                        "action":"apply",
+                        "revision":"20260405.0001",
+                        "status":"success",
+                        "message":"config applied from browser context",
+                        "detail":{"duration_ms":91},
+                        "reported_at":"2026-04-05T12:05:00Z"
+                    }"#,
+                ))?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload: DeploymentSyncResponse = read_json(response).await?;
+    assert_eq!(payload, DeploymentSyncResponse { ok: true });
 
     teardown(&database_url, &schema, pool).await?;
 
