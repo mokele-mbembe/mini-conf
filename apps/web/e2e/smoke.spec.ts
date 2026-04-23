@@ -18,6 +18,45 @@ interface SessionUser {
   is_platform_admin: boolean;
 }
 
+async function fetchCsrfToken(page: Page): Promise<string> {
+  const response = await page.request.get("/api/auth/csrf");
+  expect(response.ok()).toBeTruthy();
+  const setCookie = response.headers()["set-cookie"] ?? "";
+  const match = /mini_conf_csrf=([^;]+)/.exec(setCookie);
+  expect(match).toBeTruthy();
+  return match![1];
+}
+
+async function postWithCsrf(
+  page: Page,
+  url: string,
+  options: Parameters<Page["request"]["post"]>[1],
+) {
+  const csrfToken = await fetchCsrfToken(page);
+  return page.request.post(url, {
+    ...options,
+    headers: {
+      ...options?.headers,
+      "X-CSRF-Token": csrfToken,
+    },
+  });
+}
+
+async function putWithCsrf(
+  page: Page,
+  url: string,
+  options: Parameters<Page["request"]["put"]>[1],
+) {
+  const csrfToken = await fetchCsrfToken(page);
+  return page.request.put(url, {
+    ...options,
+    headers: {
+      ...options?.headers,
+      "X-CSRF-Token": csrfToken,
+    },
+  });
+}
+
 async function getCurrentUser(page: Page): Promise<SessionUser> {
   const response = await page.request.get("/api/auth/me");
   expect(response.ok()).toBeTruthy();
@@ -35,7 +74,7 @@ async function completeSetupIfNeeded(page: Page): Promise<void> {
   }
 
   const suffix = Date.now().toString();
-  const userResponse = await page.request.post("/api/admin/users", {
+  const userResponse = await postWithCsrf(page, "/api/admin/users", {
     data: {
       username: `e2e-setup-admin-${suffix}`,
       password: "Seed12345",
@@ -47,7 +86,7 @@ async function completeSetupIfNeeded(page: Page): Promise<void> {
   expect(userResponse.ok()).toBeTruthy();
   const createdUser = (await userResponse.json()) as { id: number };
 
-  const projectResponse = await page.request.post("/api/admin/projects", {
+  const projectResponse = await postWithCsrf(page, "/api/admin/projects", {
     data: {
       code: `e2e-setup-project-${suffix}`,
       name: `E2E Setup Project ${suffix}`,
@@ -57,7 +96,7 @@ async function completeSetupIfNeeded(page: Page): Promise<void> {
   });
   expect(projectResponse.ok()).toBeTruthy();
 
-  const completeResponse = await page.request.post("/api/setup/complete");
+  const completeResponse = await postWithCsrf(page, "/api/setup/complete", {});
   expect(completeResponse.ok()).toBeTruthy();
   await page.goto("/projects");
   await expect(page).toHaveURL(/\/projects$/, { timeout: 10_000 });
@@ -88,7 +127,7 @@ async function loginAsPlatformAdmin(page: Page): Promise<SessionUser> {
 }
 
 async function createAdminUser(page: Page, username: string) {
-  const response = await page.request.post("/api/admin/users", {
+  const response = await postWithCsrf(page, "/api/admin/users", {
     data: {
       username,
       password: "Seed12345",
@@ -102,7 +141,7 @@ async function createAdminUser(page: Page, username: string) {
 
 async function createProject(page: Page, suffix: string): Promise<number> {
   const currentUser = await getCurrentUser(page);
-  const response = await page.request.post("/api/projects", {
+  const response = await postWithCsrf(page, "/api/projects", {
     data: {
       code: `e2e-project-${suffix}`,
       name: `E2E Project ${suffix}`,
@@ -360,7 +399,7 @@ test("must-change-password user changes password before continuing", async ({
   const username = `e2e-must-change-${suffix}`;
 
   await loginAsPlatformAdmin(page);
-  const createResponse = await page.request.post("/api/admin/users", {
+  const createResponse = await postWithCsrf(page, "/api/admin/users", {
     data: {
       username,
       password: "Seed12345",
@@ -371,7 +410,7 @@ test("must-change-password user changes password before continuing", async ({
   });
   expect(createResponse.ok()).toBeTruthy();
 
-  const logoutResponse = await page.request.post("/api/auth/logout");
+  const logoutResponse = await postWithCsrf(page, "/api/auth/logout", {});
   expect(logoutResponse.ok()).toBeTruthy();
 
   await page.goto("/login");
@@ -515,7 +554,8 @@ async function setupDraftEditorContext(
 }> {
   const projectId = await createProject(page, suffix);
 
-  const envResponse = await page.request.post(
+  const envResponse = await postWithCsrf(
+    page,
     `/api/projects/${projectId}/environments`,
     {
       data: {
@@ -527,7 +567,7 @@ async function setupDraftEditorContext(
   expect(envResponse.ok()).toBeTruthy();
   const env = (await envResponse.json()) as { id: number };
 
-  const cfResponse = await page.request.post("/api/config-files", {
+  const cfResponse = await postWithCsrf(page, "/api/config-files", {
     data: {
       project_id: projectId,
       code: `e2e-cfg-${suffix}`,
@@ -538,7 +578,7 @@ async function setupDraftEditorContext(
   expect(cfResponse.ok()).toBeTruthy();
   const configFile = (await cfResponse.json()) as { id: number };
 
-  const diResponse = await page.request.post("/api/deployment-instances", {
+  const diResponse = await postWithCsrf(page, "/api/deployment-instances", {
     data: {
       project_id: projectId,
       environment_id: env.id,
@@ -678,14 +718,15 @@ test("clone from other instance: search source → select → clone draft", asyn
   // --- seed: project + env + config file + 2 deployments ---
   const projectId = await createProject(page, suffix);
 
-  const envResponse = await page.request.post(
+  const envResponse = await postWithCsrf(
+    page,
     `/api/projects/${projectId}/environments`,
     { data: { code: `e2e-env-${suffix}`, name: `E2E Env ${suffix}` } },
   );
   expect(envResponse.ok()).toBeTruthy();
   const env = (await envResponse.json()) as { id: number };
 
-  const cfResponse = await page.request.post("/api/config-files", {
+  const cfResponse = await postWithCsrf(page, "/api/config-files", {
     data: {
       project_id: projectId,
       code: `e2e-cfg-${suffix}`,
@@ -697,7 +738,7 @@ test("clone from other instance: search source → select → clone draft", asyn
   const configFile = (await cfResponse.json()) as { id: number };
 
   // source deployment (will have a draft)
-  const srcResponse = await page.request.post("/api/deployment-instances", {
+  const srcResponse = await postWithCsrf(page, "/api/deployment-instances", {
     data: {
       project_id: projectId,
       environment_id: env.id,
@@ -709,7 +750,7 @@ test("clone from other instance: search source → select → clone draft", asyn
   const srcDeployment = (await srcResponse.json()) as { id: number };
 
   // target deployment (clone destination)
-  const tgtResponse = await page.request.post("/api/deployment-instances", {
+  const tgtResponse = await postWithCsrf(page, "/api/deployment-instances", {
     data: {
       project_id: projectId,
       environment_id: env.id,
@@ -722,7 +763,8 @@ test("clone from other instance: search source → select → clone draft", asyn
 
   // seed a draft on the source instance
   const draftContent = `greeting: hello-from-source-${suffix}`;
-  const putDraftResponse = await page.request.put(
+  const putDraftResponse = await putWithCsrf(
+    page,
     `/api/drafts/${srcDeployment.id}/${configFile.id}`,
     { data: { content: draftContent, format: "yaml", base_version: 0 } },
   );
@@ -781,14 +823,15 @@ test("clone dialog: remote search filters by keyword and pagination carries keyw
 
   const projectId = await createProject(page, suffix);
 
-  const envResponse = await page.request.post(
+  const envResponse = await postWithCsrf(
+    page,
     `/api/projects/${projectId}/environments`,
     { data: { code: `e2e-env-${suffix}`, name: `E2E Env ${suffix}` } },
   );
   expect(envResponse.ok()).toBeTruthy();
   const env = (await envResponse.json()) as { id: number };
 
-  const cfResponse = await page.request.post("/api/config-files", {
+  const cfResponse = await postWithCsrf(page, "/api/config-files", {
     data: {
       project_id: projectId,
       code: `e2e-cfg-${suffix}`,
@@ -810,7 +853,7 @@ test("clone dialog: remote search filters by keyword and pagination carries keyw
   ] as const;
   const deploymentIds: number[] = [];
   for (const name of names) {
-    const r = await page.request.post("/api/deployment-instances", {
+    const r = await postWithCsrf(page, "/api/deployment-instances", {
       data: {
         project_id: projectId,
         environment_id: env.id,
@@ -830,7 +873,7 @@ test("clone dialog: remote search filters by keyword and pagination carries keyw
     deploymentIds[2],
     deploymentIds[4],
   ]) {
-    const r = await page.request.put(`/api/drafts/${id}/${configFile.id}`, {
+    const r = await putWithCsrf(page, `/api/drafts/${id}/${configFile.id}`, {
       data: { content: `key: val-${id}`, format: "yaml", base_version: 0 },
     });
     expect(r.ok()).toBeTruthy();
@@ -1057,7 +1100,8 @@ test("deployment list page: templates and instances in separate sections", async
   const projectId = await createProject(page, suffix);
 
   // Create environment via API
-  const envResponse = await page.request.post(
+  const envResponse = await postWithCsrf(
+    page,
     `/api/projects/${projectId}/environments`,
     { data: { code: `e2e-env-${suffix}`, name: `E2E Env ${suffix}` } },
   );
@@ -1065,7 +1109,7 @@ test("deployment list page: templates and instances in separate sections", async
   const env = (await envResponse.json()) as { id: number };
 
   // Create a template via API
-  const tmplResponse = await page.request.post("/api/deployment-instances", {
+  const tmplResponse = await postWithCsrf(page, "/api/deployment-instances", {
     data: {
       project_id: projectId,
       environment_id: env.id,
@@ -1077,7 +1121,7 @@ test("deployment list page: templates and instances in separate sections", async
   expect(tmplResponse.ok()).toBeTruthy();
 
   // Create a normal instance via API
-  const instResponse = await page.request.post("/api/deployment-instances", {
+  const instResponse = await postWithCsrf(page, "/api/deployment-instances", {
     data: {
       project_id: projectId,
       environment_id: env.id,
@@ -1157,14 +1201,16 @@ test("deployment archive drawer: archive → restore → permanently delete → 
   await login(page);
   const projectId = await createProject(page, suffix);
 
-  const envResponse = await page.request.post(
+  const envResponse = await postWithCsrf(
+    page,
     `/api/projects/${projectId}/environments`,
     { data: { code: `archive-env-${suffix}`, name: `Archive Env ${suffix}` } },
   );
   expect(envResponse.ok()).toBeTruthy();
   const env = (await envResponse.json()) as { id: number };
 
-  const deploymentResponse = await page.request.post(
+  const deploymentResponse = await postWithCsrf(
+    page,
     "/api/deployment-instances",
     {
       data: {
@@ -1237,7 +1283,7 @@ test("deployment archive drawer: archive → restore → permanently delete → 
   await deletePrompt.getByRole("button", { name: "永久删除" }).click();
   await expect(deleteRow).not.toBeVisible({ timeout: 10_000 });
 
-  const reusedResponse = await page.request.post("/api/deployment-instances", {
+  const reusedResponse = await postWithCsrf(page, "/api/deployment-instances", {
     data: {
       project_id: projectId,
       environment_id: env.id,

@@ -17,10 +17,11 @@ pub(crate) mod releases;
 pub(crate) mod saved_versions;
 pub(crate) mod setup;
 
-use crate::{error::ApiError, state::AppState};
+use crate::{auth::csrf_token, error::ApiError, state::AppState};
 use axum::{
     Router,
     extract::{Request, State},
+    http::{Method, header},
     middleware::{self, Next},
     response::Response,
 };
@@ -53,7 +54,9 @@ pub fn router(state: AppState) -> Router<AppState> {
             require_completed_setup,
         ));
 
-    setup_free_routes.merge(gated_routes)
+    setup_free_routes
+        .merge(gated_routes)
+        .route_layer(middleware::from_fn(require_csrf_protection))
 }
 
 async fn require_completed_setup(
@@ -83,6 +86,40 @@ async fn require_completed_setup(
         return Err(ApiError::conflict(
             "setup_required",
             "System setup is not complete",
+        ));
+    }
+
+    Ok(next.run(request).await)
+}
+
+async fn require_csrf_protection(request: Request, next: Next) -> Result<Response, ApiError> {
+    if matches!(
+        *request.method(),
+        Method::GET | Method::HEAD | Method::OPTIONS | Method::TRACE
+    ) {
+        return Ok(next.run(request).await);
+    }
+
+    let cookie_header = request
+        .headers()
+        .get(header::COOKIE)
+        .and_then(|value| value.to_str().ok());
+    let Some(expected_token) = csrf_token(cookie_header) else {
+        return Ok(next.run(request).await);
+    };
+
+    let actual_token = request
+        .headers()
+        .get("x-csrf-token")
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| ApiError::forbidden("csrf_token_missing", "Missing CSRF token header"))?;
+
+    if actual_token != expected_token {
+        return Err(ApiError::forbidden(
+            "csrf_token_invalid",
+            "CSRF token does not match",
         ));
     }
 

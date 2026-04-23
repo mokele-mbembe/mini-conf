@@ -9,7 +9,12 @@ export function getMe(): Promise<AuthSessionResponse> {
   return client.get<AuthSessionResponse>("/auth/me");
 }
 
-export function login(body: LoginRequest): Promise<AuthSessionResponse> {
+export function fetchCsrf(): Promise<void> {
+  return client.get<void>("/auth/csrf");
+}
+
+export async function login(body: LoginRequest): Promise<AuthSessionResponse> {
+  await fetchCsrf();
   return client.post<AuthSessionResponse>("/auth/login", body);
 }
 

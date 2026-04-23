@@ -96,13 +96,19 @@ async fn disabled_user_cannot_login_after_platform_admin_update() -> TestResult 
 
     assert_eq!(disable_response.status(), StatusCode::OK);
 
+    let csrf_cookie = support::fetch_csrf_cookie(&app).await?;
+    let csrf_token = csrf_cookie
+        .strip_prefix("mini_conf_csrf=")
+        .ok_or_else(|| std::io::Error::other("csrf cookie should have expected prefix"))?;
     let login_response = app
         .clone()
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/api/auth/login")
+                .header(header::COOKIE, &csrf_cookie)
                 .header(header::CONTENT_TYPE, "application/json")
+                .header("x-csrf-token", csrf_token)
                 .body(Body::from(r#"{"username":"alice","password":"alice1234"}"#))?,
         )
         .await?;
@@ -164,16 +170,7 @@ async fn disabling_user_revokes_existing_session_and_reenable_does_not_restore_i
     let me_error: ErrorResponse = read_json(me_response).await?;
     assert_eq!(me_error.code, "auth_session_expired");
 
-    let new_login_response = app
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/auth/login")
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(r#"{"username":"alice","password":"alice1234"}"#))?,
-        )
-        .await?;
-    assert_eq!(new_login_response.status(), StatusCode::OK);
+    let _new_cookie = login_as(&app, "alice", "alice1234").await?;
 
     teardown(&database_url, &schema, pool).await
 }

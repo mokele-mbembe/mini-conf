@@ -8,8 +8,9 @@ use axum::{
 use schema::audit::AuditLogListResponse;
 use server::error::ErrorResponse;
 use support::{
-    TestResult, create_platform_project, grant_project_role, login_as, lookup_user_id, read_json,
-    seed_config_file, seed_deployment_instance, seed_user, setup_app, teardown,
+    TestResult, create_platform_project, fetch_csrf_cookie, grant_project_role, login_as,
+    lookup_user_id, read_json, seed_config_file, seed_deployment_instance, seed_user, setup_app,
+    teardown,
 };
 use tower::util::ServiceExt;
 
@@ -19,6 +20,10 @@ async fn audit_logs_include_project_events_without_sensitive_content() -> TestRe
         return Ok(());
     };
     seed_user(&pool, "viewer2", "viewer123").await?;
+    let csrf_cookie = fetch_csrf_cookie(&app).await?;
+    let csrf_token = csrf_cookie
+        .strip_prefix("mini_conf_csrf=")
+        .ok_or_else(|| std::io::Error::other("csrf cookie should have expected prefix"))?;
 
     let _ = app
         .clone()
@@ -26,7 +31,9 @@ async fn audit_logs_include_project_events_without_sensitive_content() -> TestRe
             Request::builder()
                 .method("POST")
                 .uri("/api/auth/login")
+                .header(header::COOKIE, &csrf_cookie)
                 .header(header::CONTENT_TYPE, "application/json")
+                .header("x-csrf-token", csrf_token)
                 .body(Body::from(
                     r#"{"username":"admin","password":"wrong-password"}"#,
                 ))?,

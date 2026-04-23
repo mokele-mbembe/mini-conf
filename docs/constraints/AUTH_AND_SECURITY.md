@@ -65,6 +65,8 @@ MVP 只完整实现：
 - Session Cookie 设置为 `HttpOnly`
 - HTTPS 场景启用 `Secure`
 - 适当设置 `SameSite=Lax` 或 `Strict`
+- 基础安全响应头默认开启
+- 登录失败需要基础节流，避免密码撞库直接打满
 
 后续路线：
 
@@ -244,9 +246,11 @@ MVP 阶段建议这样落地：
 管理端首版建议做到：
 
 - Session 登录接口启用 CSRF 防护
+- 已登录会话的写操作使用 CSRF cookie + `X-CSRF-Token` header 校验
 - 所有输出默认按文本处理
 - Monaco 编辑内容不直接作为 HTML 渲染
 - 设置基础安全响应头
+- 登录失败节流
 
 ## 14. 发布安全
 

@@ -125,13 +125,28 @@ fn session_cookie(response: &axum::response::Response) -> TestResult<String> {
 }
 
 async fn login(app: &axum::Router) -> TestResult<String> {
+    let csrf_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/auth/csrf")
+                .body(Body::empty())?,
+        )
+        .await?;
+    let csrf_cookie = session_cookie(&csrf_response)?;
+    let csrf_token = csrf_cookie
+        .strip_prefix("mini_conf_csrf=")
+        .ok_or("set-cookie should contain a csrf cookie")?;
+
     let response = app
         .clone()
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/api/auth/login")
+                .header(header::COOKIE, &csrf_cookie)
                 .header(header::CONTENT_TYPE, "application/json")
+                .header("x-csrf-token", csrf_token)
                 .body(Body::from(
                     r#"{"username":"admin","password":"admin123456"}"#,
                 ))?,

@@ -8,6 +8,7 @@ const DEFAULT_DATABASE_URL: &str = "postgres://127.0.0.1:5432/postgres";
 const DEFAULT_STATIC_DIR: &str = "apps/web/dist";
 const DEFAULT_OPENAPI_EXPORT_PATH: &str = "docs/artifacts/openapi.json";
 const DEFAULT_INIT_DB_ON_BOOT: bool = false;
+const DEFAULT_SESSION_COOKIE_SECURE: bool = false;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppEnv {
@@ -44,6 +45,7 @@ pub struct AppConfig {
     pub http_addr: String,
     pub database_url: String,
     pub init_db_on_boot: bool,
+    pub session_cookie_secure: bool,
     pub init_admin_username: Option<String>,
     pub init_admin_password: Option<String>,
     pub init_users_file: Option<PathBuf>,
@@ -58,6 +60,7 @@ impl Default for AppConfig {
             http_addr: DEFAULT_HTTP_ADDR.to_owned(),
             database_url: DEFAULT_DATABASE_URL.to_owned(),
             init_db_on_boot: DEFAULT_INIT_DB_ON_BOOT,
+            session_cookie_secure: DEFAULT_SESSION_COOKIE_SECURE,
             init_admin_username: None,
             init_admin_password: None,
             init_users_file: None,
@@ -92,6 +95,12 @@ impl AppConfig {
 
         if let Some(value) = lookup("INIT_DB_ON_BOOT") {
             config.init_db_on_boot = parse_bool("INIT_DB_ON_BOOT", &value)?;
+        }
+
+        config.session_cookie_secure = matches!(config.app_env, AppEnv::Staging | AppEnv::Prod);
+
+        if let Some(value) = lookup("SESSION_COOKIE_SECURE") {
+            config.session_cookie_secure = parse_bool("SESSION_COOKIE_SECURE", &value)?;
         }
 
         if let Some(value) = lookup("INIT_ADMIN_USERNAME") {
@@ -229,6 +238,7 @@ mod tests {
                 http_addr: "0.0.0.0:8080".to_owned(),
                 database_url: "postgres://127.0.0.1:5432/postgres".to_owned(),
                 init_db_on_boot: false,
+                session_cookie_secure: false,
                 init_admin_username: None,
                 init_admin_password: None,
                 init_users_file: None,
@@ -256,6 +266,7 @@ mod tests {
                 "postgres://db.example/mini_conf_prod_candidate",
             ),
             ("INIT_DB_ON_BOOT", "true"),
+            ("SESSION_COOKIE_SECURE", "true"),
             ("INIT_USERS_FILE", "config/bootstrap-users.yaml"),
             ("STATIC_DIR", "var/web"),
             ("OPENAPI_EXPORT_PATH", "var/openapi.json"),
@@ -271,6 +282,7 @@ mod tests {
                 http_addr: "127.0.0.1:9090".to_owned(),
                 database_url: "postgres://db.example/mini_conf_prod_candidate".to_owned(),
                 init_db_on_boot: true,
+                session_cookie_secure: true,
                 init_admin_username: None,
                 init_admin_password: None,
                 init_users_file: Some(PathBuf::from("config/bootstrap-users.yaml")),
@@ -384,6 +396,17 @@ mod tests {
     }
 
     #[test]
+    fn from_lookup_enables_secure_cookies_in_prod_by_default() {
+        let config = AppConfig::from_lookup(|key| match key {
+            "APP_ENV" => Some("prod".to_owned()),
+            _ => None,
+        })
+        .expect("config should load");
+
+        assert!(config.session_cookie_secure);
+    }
+
+    #[test]
     fn parse_bool_accepts_disabled_values_directly() {
         for raw in [" 0 ", "FALSE", "no", "Off"] {
             assert_eq!(
@@ -470,6 +493,7 @@ mod tests {
             std::env::set_var("HTTP_ADDR", "127.0.0.1:7001");
             std::env::set_var("DATABASE_URL", "postgres://override/mini_conf_test");
             std::env::set_var("INIT_DB_ON_BOOT", "1");
+            std::env::set_var("SESSION_COOKIE_SECURE", "1");
             std::env::set_var("STATIC_DIR", "tmp/static");
             std::env::set_var("OPENAPI_EXPORT_PATH", "tmp/openapi.json");
         }
@@ -482,6 +506,7 @@ mod tests {
             std::env::remove_var("HTTP_ADDR");
             std::env::remove_var("DATABASE_URL");
             std::env::remove_var("INIT_DB_ON_BOOT");
+            std::env::remove_var("SESSION_COOKIE_SECURE");
             std::env::remove_var("STATIC_DIR");
             std::env::remove_var("OPENAPI_EXPORT_PATH");
         }
@@ -493,6 +518,7 @@ mod tests {
                 http_addr: "127.0.0.1:7001".to_owned(),
                 database_url: "postgres://override/mini_conf_test".to_owned(),
                 init_db_on_boot: true,
+                session_cookie_secure: true,
                 init_admin_username: None,
                 init_admin_password: None,
                 init_users_file: None,

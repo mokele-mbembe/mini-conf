@@ -3,6 +3,28 @@ import type { ApiError } from "./error";
 
 const BASE_URL = "/api";
 
+function isUnsafeMethod(method: string | undefined): boolean {
+  return ["POST", "PUT", "PATCH", "DELETE"].includes(
+    (method ?? "GET").toUpperCase(),
+  );
+}
+
+function readCookie(name: string): string | null {
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  const prefix = `${name}=`;
+  for (const part of document.cookie.split(";")) {
+    const trimmed = part.trim();
+    if (trimmed.startsWith(prefix)) {
+      return trimmed.slice(prefix.length) || null;
+    }
+  }
+
+  return null;
+}
+
 async function parseErrorResponse(res: Response): Promise<ApiRequestError> {
   try {
     const body = (await res.json()) as ApiError;
@@ -25,6 +47,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (options.body && typeof options.body === "string") {
     headers["Content-Type"] = "application/json";
+  }
+
+  if (isUnsafeMethod(options.method)) {
+    const csrfToken = readCookie("mini_conf_csrf");
+    if (csrfToken) {
+      headers["X-CSRF-Token"] = csrfToken;
+    }
   }
 
   let res: Response;

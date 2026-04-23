@@ -77,6 +77,7 @@ HTTP_ADDR=0.0.0.0:8080
 DATABASE_URL=postgres://mini_conf:secret@127.0.0.1:5432/mini_conf
 DATABASE_ADMIN_URL=postgres://postgres:secret@127.0.0.1:5432/postgres
 INIT_DB_ON_BOOT=true
+SESSION_COOKIE_SECURE=false
 INIT_ADMIN_USERNAME=admin
 INIT_ADMIN_PASSWORD=admin123456
 INIT_USERS_FILE=tests/alpha/users.seed.yaml

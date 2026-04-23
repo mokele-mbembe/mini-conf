@@ -59,6 +59,7 @@ static OPENAPI: OnceLock<OpenApiDocument> = OnceLock::new();
     ),
     paths(
         crate::http::api::health::get_healthz,
+        crate::http::api::auth::get_csrf,
         crate::http::api::auth::login,
         crate::http::api::auth::logout,
         crate::http::api::auth::me,

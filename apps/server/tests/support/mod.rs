@@ -96,14 +96,39 @@ pub async fn read_json<T: serde::de::DeserializeOwned>(
     })
 }
 
+pub async fn fetch_csrf_cookie(app: &axum::Router) -> TestResult<String> {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/auth/csrf")
+                .body(Body::empty())?,
+        )
+        .await?;
+
+    response
+        .headers()
+        .get(header::SET_COOKIE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .map(str::to_owned)
+        .ok_or_else(|| std::io::Error::other("set-cookie should contain a csrf cookie").into())
+}
+
 pub async fn login_as(app: &axum::Router, username: &str, password: &str) -> TestResult<String> {
+    let csrf_cookie = fetch_csrf_cookie(app).await?;
+    let csrf_token = csrf_cookie
+        .strip_prefix("mini_conf_csrf=")
+        .ok_or_else(|| std::io::Error::other("csrf cookie should have expected prefix"))?;
     let response = app
         .clone()
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/api/auth/login")
+                .header(header::COOKIE, &csrf_cookie)
                 .header(header::CONTENT_TYPE, "application/json")
+                .header("x-csrf-token", csrf_token)
                 .body(Body::from(format!(
                     r#"{{"username":{},"password":{}}}"#,
                     serde_json::to_string(username)?,

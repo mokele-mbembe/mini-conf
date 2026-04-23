@@ -48,6 +48,10 @@ impl ApiError {
         Self::new(StatusCode::CONFLICT, code, message)
     }
 
+    pub const fn too_many_requests(code: &'static str, message: &'static str) -> Self {
+        Self::new(StatusCode::TOO_MANY_REQUESTS, code, message)
+    }
+
     pub const fn not_found() -> Self {
         Self::new(StatusCode::NOT_FOUND, "route_not_found", "Route not found")
     }

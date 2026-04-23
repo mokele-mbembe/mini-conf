@@ -1,12 +1,14 @@
-use crate::config::AppConfig;
+use crate::{config::AppConfig, security::LoginThrottle};
 use infra::AppIdentity;
 use sqlx::PgPool;
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct AppState {
     identity: AppIdentity,
     config: AppConfig,
     db_pool: Option<PgPool>,
+    login_throttle: Arc<LoginThrottle>,
 }
 
 impl AppState {
@@ -15,6 +17,7 @@ impl AppState {
             identity,
             config,
             db_pool,
+            login_throttle: LoginThrottle::new(),
         }
     }
 
@@ -28,6 +31,10 @@ impl AppState {
 
     pub fn db_pool(&self) -> Option<&PgPool> {
         self.db_pool.as_ref()
+    }
+
+    pub fn login_throttle(&self) -> &Arc<LoginThrottle> {
+        &self.login_throttle
     }
 }
 
@@ -67,6 +74,7 @@ mod tests {
                 http_addr: "0.0.0.0:8080".to_owned(),
                 database_url: "postgres://127.0.0.1:5432/postgres".to_owned(),
                 init_db_on_boot: false,
+                session_cookie_secure: false,
                 init_admin_username: None,
                 init_admin_password: None,
                 init_users_file: None,

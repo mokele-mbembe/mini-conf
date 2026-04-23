@@ -1,11 +1,13 @@
 use crate::{
     audit::{AuditLogEntry, write_audit_log, write_audit_log_best_effort},
     auth::{
-        authenticate_admin_session, clear_session_cookie_header, generate_session_token,
+        authenticate_admin_session, clear_csrf_cookie_header, clear_session_cookie_header,
+        csrf_cookie_header, csrf_token, generate_csrf_token, generate_session_token,
         hash_bearer_token, hash_password, revoke_admin_session, session_cookie_header,
         validate_password_strength, verify_password,
     },
     error::ApiError,
+    security::login_throttle_key,
     state::AppState,
 };
 use axum::{
@@ -45,10 +47,37 @@ struct ValidatedChangePasswordRequest {
 
 pub fn router() -> Router<AppState> {
     Router::new()
+        .route("/auth/csrf", get(get_csrf))
         .route("/auth/login", post(login))
         .route("/auth/logout", post(logout))
         .route("/auth/me", get(me))
         .route("/auth/change-password", post(change_password))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/auth/csrf",
+    tag = "auth",
+    responses(
+        (status = 204, description = "CSRF cookie issued", headers(("set-cookie" = String, description = "Readable CSRF cookie"))),
+        (status = 503, description = "Database bootstrap disabled", body = crate::error::ErrorResponse),
+        (status = 500, description = "Internal server error", body = crate::error::ErrorResponse),
+    )
+)]
+pub(crate) async fn get_csrf(State(state): State<AppState>) -> Result<Response, ApiError> {
+    if state.db_pool().is_none() {
+        return Err(ApiError::service_unavailable(
+            "database_unavailable",
+            "Database bootstrap is disabled",
+        ));
+    }
+
+    let mut response = StatusCode::NO_CONTENT.into_response();
+    response.headers_mut().append(
+        header::SET_COOKIE,
+        csrf_cookie_header(&generate_csrf_token(), state.config().session_cookie_secure),
+    );
+    Ok(response)
 }
 
 #[utoipa::path(
@@ -59,13 +88,16 @@ pub fn router() -> Router<AppState> {
     responses(
         (status = 200, description = "Login successful and session cookie issued", body = AuthSessionResponse, headers(("set-cookie" = String, description = "HttpOnly session cookie"))),
         (status = 400, description = "Invalid request body", body = crate::error::ErrorResponse),
+        (status = 403, description = "Missing or invalid CSRF token", body = crate::error::ErrorResponse),
         (status = 401, description = "Invalid username or password", body = crate::error::ErrorResponse),
+        (status = 429, description = "Too many failed login attempts", body = crate::error::ErrorResponse),
         (status = 503, description = "Database bootstrap disabled", body = crate::error::ErrorResponse),
         (status = 500, description = "Internal server error", body = crate::error::ErrorResponse),
     )
 )]
 pub(crate) async fn login(
     State(state): State<AppState>,
+    headers: HeaderMap,
     payload: Result<Json<LoginRequest>, JsonRejection>,
 ) -> Result<Response, ApiError> {
     let Json(payload) =
@@ -78,6 +110,9 @@ pub(crate) async fn login(
             "Database bootstrap is disabled",
         ));
     };
+    require_login_csrf(&headers)?;
+    let throttle_key = login_throttle_key(&headers, &payload.username);
+    state.login_throttle().ensure_allowed(&throttle_key)?;
 
     let row = sqlx::query(
         r#"
@@ -107,6 +142,7 @@ pub(crate) async fn login(
             },
         )
         .await;
+        state.login_throttle().record_failure(&throttle_key);
         return Err(ApiError::unauthorized(
             "invalid_credentials",
             "Invalid username or password",
@@ -131,6 +167,7 @@ pub(crate) async fn login(
             },
         )
         .await;
+        state.login_throttle().record_failure(&throttle_key);
         return Err(ApiError::unauthorized(
             "invalid_credentials",
             "Invalid username or password",
@@ -143,6 +180,8 @@ pub(crate) async fn login(
     let status: String = row.get("status");
     let must_change_password: bool = row.get("must_change_password");
     let session_token = generate_session_token();
+    let csrf_token = generate_csrf_token();
+    state.login_throttle().record_success(&throttle_key);
 
     sqlx::query(
         r#"
@@ -193,9 +232,14 @@ pub(crate) async fn login(
         auth_mode: "session".to_owned(),
     })
     .into_response();
-    response
-        .headers_mut()
-        .append(header::SET_COOKIE, session_cookie_header(&session_token));
+    response.headers_mut().append(
+        header::SET_COOKIE,
+        session_cookie_header(&session_token, state.config().session_cookie_secure),
+    );
+    response.headers_mut().append(
+        header::SET_COOKIE,
+        csrf_cookie_header(&csrf_token, state.config().session_cookie_secure),
+    );
     Ok(response)
 }
 
@@ -216,22 +260,23 @@ pub(crate) async fn login(
 pub(crate) async fn me(
     State(state): State<AppState>,
     headers: HeaderMap,
-) -> Result<Json<AuthSessionResponse>, ApiError> {
+) -> Result<Response, ApiError> {
     let Some(pool) = state.db_pool() else {
         return Err(ApiError::service_unavailable(
             "database_unavailable",
             "Database bootstrap is disabled",
         ));
     };
-    let auth = authenticate_admin_session(
-        pool,
-        headers
-            .get(header::COOKIE)
-            .and_then(|value| value.to_str().ok()),
-    )
-    .await?;
+    let cookie_header = headers
+        .get(header::COOKIE)
+        .and_then(|value| value.to_str().ok());
+    let auth = authenticate_admin_session(pool, cookie_header).await?;
 
-    Ok(Json(AuthSessionResponse {
+    let csrf = csrf_token(cookie_header)
+        .map(str::to_owned)
+        .unwrap_or_else(generate_csrf_token);
+
+    let mut response = Json(AuthSessionResponse {
         user: AuthUser {
             id: auth.user_id,
             username: auth.username,
@@ -240,7 +285,13 @@ pub(crate) async fn me(
             must_change_password: auth.must_change_password,
         },
         auth_mode: "session".to_owned(),
-    }))
+    })
+    .into_response();
+    response.headers_mut().append(
+        header::SET_COOKIE,
+        csrf_cookie_header(&csrf, state.config().session_cookie_secure),
+    );
+    Ok(response)
 }
 
 #[utoipa::path(
@@ -264,7 +315,7 @@ pub(crate) async fn change_password(
     State(state): State<AppState>,
     headers: HeaderMap,
     payload: Result<Json<ChangePasswordRequest>, JsonRejection>,
-) -> Result<Json<AuthSessionResponse>, ApiError> {
+) -> Result<Response, ApiError> {
     let Json(payload) =
         payload.map_err(|_| ApiError::bad_request("invalid_request", "invalid request body"))?;
     let payload = payload.validate()?;
@@ -275,13 +326,10 @@ pub(crate) async fn change_password(
             "Database bootstrap is disabled",
         ));
     };
-    let auth = authenticate_admin_session(
-        pool,
-        headers
-            .get(header::COOKIE)
-            .and_then(|value| value.to_str().ok()),
-    )
-    .await?;
+    let cookie_header = headers
+        .get(header::COOKIE)
+        .and_then(|value| value.to_str().ok());
+    let auth = authenticate_admin_session(pool, cookie_header).await?;
 
     validate_password_strength(&payload.new_password)?;
     let row = sqlx::query(
@@ -357,7 +405,11 @@ pub(crate) async fn change_password(
 
     tx.commit().await.map_err(|_| ApiError::internal())?;
 
-    Ok(Json(AuthSessionResponse {
+    let csrf = csrf_token(cookie_header)
+        .map(str::to_owned)
+        .unwrap_or_else(generate_csrf_token);
+
+    let mut response = Json(AuthSessionResponse {
         user: AuthUser {
             id: auth.user_id,
             username: auth.username,
@@ -366,7 +418,13 @@ pub(crate) async fn change_password(
             must_change_password: false,
         },
         auth_mode: "session".to_owned(),
-    }))
+    })
+    .into_response();
+    response.headers_mut().append(
+        header::SET_COOKIE,
+        csrf_cookie_header(&csrf, state.config().session_cookie_secure),
+    );
+    Ok(response)
 }
 
 #[utoipa::path(
@@ -401,9 +459,14 @@ pub(crate) async fn logout(
     .await?;
 
     let mut response = StatusCode::NO_CONTENT.into_response();
-    response
-        .headers_mut()
-        .append(header::SET_COOKIE, clear_session_cookie_header());
+    response.headers_mut().append(
+        header::SET_COOKIE,
+        clear_session_cookie_header(state.config().session_cookie_secure),
+    );
+    response.headers_mut().append(
+        header::SET_COOKIE,
+        clear_csrf_cookie_header(state.config().session_cookie_secure),
+    );
     Ok(response)
 }
 
@@ -451,4 +514,28 @@ fn invalid_body_message(field: &'static str) -> &'static str {
         "new_password" => "missing required body field: new_password",
         _ => "missing required body field",
     }
+}
+
+fn require_login_csrf(headers: &HeaderMap) -> Result<(), ApiError> {
+    let cookie_header = headers
+        .get(header::COOKIE)
+        .and_then(|value| value.to_str().ok());
+    let expected_token = csrf_token(cookie_header)
+        .ok_or_else(|| ApiError::forbidden("csrf_token_missing", "Missing CSRF token cookie"))?;
+
+    let actual_token = headers
+        .get("x-csrf-token")
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| ApiError::forbidden("csrf_token_missing", "Missing CSRF token header"))?;
+
+    if actual_token != expected_token {
+        return Err(ApiError::forbidden(
+            "csrf_token_invalid",
+            "CSRF token does not match",
+        ));
+    }
+
+    Ok(())
 }

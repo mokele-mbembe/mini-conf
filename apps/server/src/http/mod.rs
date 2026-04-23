@@ -1,7 +1,13 @@
 pub(crate) mod api;
 
 use crate::{error::ApiError, state::AppState};
-use axum::{Router, routing::get_service};
+use axum::{
+    Router,
+    extract::Request,
+    middleware::{self, Next},
+    response::Response,
+    routing::get_service,
+};
 use tower_http::{
     services::{ServeDir, ServeFile},
     trace::TraceLayer,
@@ -14,7 +20,8 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::openapi::router())
         .nest("/api", api::router(state.clone()))
         .with_state(state)
-        .layer(TraceLayer::new_for_http());
+        .layer(TraceLayer::new_for_http())
+        .layer(middleware::from_fn(add_security_headers));
 
     if static_dir.is_dir() {
         let static_service = get_service(
@@ -27,4 +34,10 @@ pub fn router(state: AppState) -> Router {
     } else {
         router.fallback(|| async { ApiError::not_found() })
     }
+}
+
+async fn add_security_headers(request: Request, next: Next) -> Response {
+    let mut response = next.run(request).await;
+    crate::security::apply_security_headers(response.headers_mut());
+    response
 }

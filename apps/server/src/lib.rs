@@ -6,6 +6,7 @@ pub mod config;
 pub mod error;
 mod http;
 pub mod openapi;
+pub mod security;
 pub mod state;
 pub mod validation;
 
@@ -82,6 +83,14 @@ mod tests {
             .expect("request should succeed");
 
         assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers().get("x-content-type-options"),
+            Some(&header::HeaderValue::from_static("nosniff"))
+        );
+        assert_eq!(
+            response.headers().get("x-frame-options"),
+            Some(&header::HeaderValue::from_static("DENY"))
+        );
 
         let body = to_bytes(response.into_body(), usize::MAX)
             .await

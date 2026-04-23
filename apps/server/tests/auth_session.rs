@@ -74,13 +74,72 @@ fn session_cookie(response: &axum::response::Response) -> String {
         .to_owned()
 }
 
+fn auth_cookie_parts(response: &axum::response::Response) -> TestResult<(String, String, String)> {
+    let session = session_cookie(response);
+    let csrf_cookie = cookie_value(response, "mini_conf_csrf")?;
+    let csrf_token = csrf_cookie
+        .strip_prefix("mini_conf_csrf=")
+        .ok_or_else(|| std::io::Error::other("csrf cookie should have expected prefix"))?
+        .to_owned();
+
+    Ok((session, csrf_cookie, csrf_token))
+}
+
+async fn fetch_csrf_cookie(app: &axum::Router) -> TestResult<String> {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/auth/csrf")
+                .body(Body::empty())?,
+        )
+        .await?;
+
+    response
+        .headers()
+        .get(header::SET_COOKIE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .map(str::to_owned)
+        .ok_or_else(|| std::io::Error::other("set-cookie should contain a csrf cookie").into())
+}
+
+async fn login_response(
+    app: &axum::Router,
+    username: &str,
+    password: &str,
+) -> TestResult<axum::response::Response> {
+    let csrf_cookie = fetch_csrf_cookie(app).await?;
+    let csrf_token = csrf_cookie
+        .strip_prefix("mini_conf_csrf=")
+        .ok_or_else(|| std::io::Error::other("csrf cookie should have expected prefix"))?;
+
+    Ok(app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/login")
+                .header(header::COOKIE, &csrf_cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-csrf-token", csrf_token)
+                .body(Body::from(format!(
+                    r#"{{"username":{},"password":{}}}"#,
+                    serde_json::to_string(username)?,
+                    serde_json::to_string(password)?,
+                )))?,
+        )
+        .await?)
+}
+
 #[tokio::test]
-async fn login_sets_session_cookie_and_returns_user_payload() -> TestResult {
+async fn login_requires_csrf_cookie_and_header() -> TestResult {
     let Some((app, pool, database_url, schema)) = setup_app().await? else {
         return Ok(());
     };
 
-    let response = app
+    let missing_csrf_response = app
+        .clone()
         .oneshot(
             Request::builder()
                 .method("POST")
@@ -91,9 +150,57 @@ async fn login_sets_session_cookie_and_returns_user_payload() -> TestResult {
                 ))?,
         )
         .await?;
+    assert_eq!(missing_csrf_response.status(), StatusCode::FORBIDDEN);
+    let missing_payload: ErrorResponse = read_json(missing_csrf_response).await?;
+    assert_eq!(missing_payload.code, "csrf_token_missing");
+
+    let csrf_cookie = fetch_csrf_cookie(&app).await?;
+    let invalid_csrf_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/login")
+                .header(header::COOKIE, &csrf_cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-csrf-token", "wrong-token")
+                .body(Body::from(
+                    r#"{"username":"admin","password":"admin123456"}"#,
+                ))?,
+        )
+        .await?;
+    assert_eq!(invalid_csrf_response.status(), StatusCode::FORBIDDEN);
+    let invalid_payload: ErrorResponse = read_json(invalid_csrf_response).await?;
+    assert_eq!(invalid_payload.code, "csrf_token_invalid");
+
+    teardown(&database_url, &schema, pool).await
+}
+
+fn cookie_value(response: &axum::response::Response, name: &str) -> TestResult<String> {
+    for value in &response.headers().get_all(header::SET_COOKIE) {
+        let raw = value.to_str()?;
+        let Some(cookie) = raw.split(';').next() else {
+            continue;
+        };
+        if let Some(cookie_value) = cookie.strip_prefix(&format!("{name}=")) {
+            return Ok(format!("{name}={cookie_value}"));
+        }
+    }
+
+    Err(std::io::Error::other(format!("missing cookie {name}")).into())
+}
+
+#[tokio::test]
+async fn login_sets_session_cookie_and_returns_user_payload() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    let response = login_response(&app, "admin", "admin123456").await?;
 
     assert_eq!(response.status(), StatusCode::OK);
     assert!(response.headers().contains_key(header::SET_COOKIE));
+    assert!(cookie_value(&response, "mini_conf_csrf").is_ok());
 
     let payload: serde_json::Value = read_json(response).await?;
     assert_eq!(payload["user"]["username"], "admin");
@@ -108,18 +215,7 @@ async fn me_returns_current_user_from_session_cookie() -> TestResult {
         return Ok(());
     };
 
-    let login_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/auth/login")
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    r#"{"username":"admin","password":"admin123456"}"#,
-                ))?,
-        )
-        .await?;
+    let login_response = login_response(&app, "admin", "admin123456").await?;
     let cookie = session_cookie(&login_response);
 
     let response = app
@@ -144,19 +240,9 @@ async fn logout_revokes_current_session() -> TestResult {
         return Ok(());
     };
 
-    let login_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/auth/login")
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    r#"{"username":"admin","password":"admin123456"}"#,
-                ))?,
-        )
-        .await?;
-    let cookie = session_cookie(&login_response);
+    let login_response = login_response(&app, "admin", "admin123456").await?;
+    let (session, csrf_cookie, csrf_token) = auth_cookie_parts(&login_response)?;
+    let cookie = format!("{session}; {csrf_cookie}");
 
     let logout_response = app
         .clone()
@@ -165,6 +251,7 @@ async fn logout_revokes_current_session() -> TestResult {
                 .method("POST")
                 .uri("/api/auth/logout")
                 .header(header::COOKIE, &cookie)
+                .header("x-csrf-token", csrf_token)
                 .body(Body::empty())?,
         )
         .await?;
@@ -174,7 +261,7 @@ async fn logout_revokes_current_session() -> TestResult {
         .oneshot(
             Request::builder()
                 .uri("/api/auth/me")
-                .header(header::COOKIE, cookie)
+                .header(header::COOKIE, session)
                 .body(Body::empty())?,
         )
         .await?;
@@ -208,19 +295,9 @@ async fn change_password_clears_must_change_and_keeps_current_session() -> TestR
     .execute(&pool)
     .await?;
 
-    let login_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/auth/login")
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    r#"{"username":"admin","password":"admin123456"}"#,
-                ))?,
-        )
-        .await?;
-    let cookie = session_cookie(&login_response);
+    let login_response = login_response(&app, "admin", "admin123456").await?;
+    let (session, csrf_cookie, csrf_token) = auth_cookie_parts(&login_response)?;
+    let cookie = format!("{session}; {csrf_cookie}");
     let login_payload: serde_json::Value = read_json(login_response).await?;
     assert_eq!(login_payload["user"]["must_change_password"], true);
 
@@ -232,6 +309,7 @@ async fn change_password_clears_must_change_and_keeps_current_session() -> TestR
                 .uri("/api/auth/change-password")
                 .header(header::COOKIE, &cookie)
                 .header(header::CONTENT_TYPE, "application/json")
+                .header("x-csrf-token", &csrf_token)
                 .body(Body::from(
                     r#"{"current_password":"admin123456","new_password":"NewPassword123"}"#,
                 ))?,
@@ -247,7 +325,7 @@ async fn change_password_clears_must_change_and_keeps_current_session() -> TestR
         .oneshot(
             Request::builder()
                 .uri("/api/auth/me")
-                .header(header::COOKIE, cookie)
+                .header(header::COOKIE, session)
                 .body(Body::empty())?,
         )
         .await?;
@@ -260,24 +338,100 @@ async fn change_password_clears_must_change_and_keeps_current_session() -> TestR
 }
 
 #[tokio::test]
+async fn login_is_rate_limited_after_repeated_failures() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    for _ in 0..5 {
+        let response = login_response(&app, "admin", "wrong-password").await?;
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    let blocked_response = login_response(&app, "admin", "admin123456").await?;
+
+    assert_eq!(blocked_response.status(), StatusCode::TOO_MANY_REQUESTS);
+    let payload: ErrorResponse = read_json(blocked_response).await?;
+    assert_eq!(
+        payload,
+        ErrorResponse {
+            code: "auth_rate_limited".to_owned(),
+            message: "Too many failed login attempts; try again later".to_owned(),
+        }
+    );
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn logout_requires_matching_csrf_token_when_cookie_is_present() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    let login_response = login_response(&app, "admin", "admin123456").await?;
+    let session = session_cookie(&login_response);
+    let csrf = cookie_value(&login_response, "mini_conf_csrf")?;
+    let cookie_header = format!("{session}; {csrf}");
+
+    let missing_header_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/logout")
+                .header(header::COOKIE, &cookie_header)
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(missing_header_response.status(), StatusCode::FORBIDDEN);
+    let missing_payload: ErrorResponse = read_json(missing_header_response).await?;
+    assert_eq!(missing_payload.code, "csrf_token_missing");
+
+    let invalid_header_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/logout")
+                .header(header::COOKIE, &cookie_header)
+                .header("x-csrf-token", "wrong-token")
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(invalid_header_response.status(), StatusCode::FORBIDDEN);
+    let invalid_payload: ErrorResponse = read_json(invalid_header_response).await?;
+    assert_eq!(invalid_payload.code, "csrf_token_invalid");
+
+    let csrf_value = csrf
+        .strip_prefix("mini_conf_csrf=")
+        .ok_or_else(|| std::io::Error::other("csrf cookie should have expected prefix"))?;
+    let logout_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/logout")
+                .header(header::COOKIE, &cookie_header)
+                .header("x-csrf-token", csrf_value)
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(logout_response.status(), StatusCode::NO_CONTENT);
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
 async fn change_password_rejects_invalid_current_password() -> TestResult {
     let Some((app, pool, database_url, schema)) = setup_app().await? else {
         return Ok(());
     };
 
-    let login_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/auth/login")
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    r#"{"username":"admin","password":"admin123456"}"#,
-                ))?,
-        )
-        .await?;
-    let cookie = session_cookie(&login_response);
+    let login_response = login_response(&app, "admin", "admin123456").await?;
+    let (session, csrf_cookie, csrf_token) = auth_cookie_parts(&login_response)?;
+    let cookie = format!("{session}; {csrf_cookie}");
 
     let change_response = app
         .clone()
@@ -287,6 +441,7 @@ async fn change_password_rejects_invalid_current_password() -> TestResult {
                 .uri("/api/auth/change-password")
                 .header(header::COOKIE, cookie)
                 .header(header::CONTENT_TYPE, "application/json")
+                .header("x-csrf-token", csrf_token)
                 .body(Body::from(
                     r#"{"current_password":"wrong-password","new_password":"NewPassword123"}"#,
                 ))?,
@@ -306,19 +461,9 @@ async fn change_password_rejects_weak_new_password() -> TestResult {
         return Ok(());
     };
 
-    let login_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/auth/login")
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    r#"{"username":"admin","password":"admin123456"}"#,
-                ))?,
-        )
-        .await?;
-    let cookie = session_cookie(&login_response);
+    let login_response = login_response(&app, "admin", "admin123456").await?;
+    let (session, csrf_cookie, csrf_token) = auth_cookie_parts(&login_response)?;
+    let cookie = format!("{session}; {csrf_cookie}");
 
     let change_response = app
         .clone()
@@ -328,6 +473,7 @@ async fn change_password_rejects_weak_new_password() -> TestResult {
                 .uri("/api/auth/change-password")
                 .header(header::COOKIE, cookie)
                 .header(header::CONTENT_TYPE, "application/json")
+                .header("x-csrf-token", csrf_token)
                 .body(Body::from(
                     r#"{"current_password":"admin123456","new_password":"aaaaaaaa"}"#,
                 ))?,
@@ -357,26 +503,16 @@ async fn must_change_password_blocks_app_workflows_until_changed() -> TestResult
     .execute(&pool)
     .await?;
 
-    let login_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/auth/login")
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    r#"{"username":"admin","password":"admin123456"}"#,
-                ))?,
-        )
-        .await?;
-    let cookie = session_cookie(&login_response);
+    let login_response = login_response(&app, "admin", "admin123456").await?;
+    let (session, csrf_cookie, csrf_token) = auth_cookie_parts(&login_response)?;
+    let cookie = format!("{session}; {csrf_cookie}");
 
     let projects_response = app
         .clone()
         .oneshot(
             Request::builder()
                 .uri("/api/projects")
-                .header(header::COOKIE, &cookie)
+                .header(header::COOKIE, &session)
                 .body(Body::empty())?,
         )
         .await?;
@@ -390,8 +526,9 @@ async fn must_change_password_blocks_app_workflows_until_changed() -> TestResult
             Request::builder()
                 .method("POST")
                 .uri("/api/auth/change-password")
-                .header(header::COOKIE, cookie.clone())
+                .header(header::COOKIE, &cookie)
                 .header(header::CONTENT_TYPE, "application/json")
+                .header("x-csrf-token", &csrf_token)
                 .body(Body::from(
                     r#"{"current_password":"admin123456","new_password":"NewPassword123"}"#,
                 ))?,
@@ -404,7 +541,7 @@ async fn must_change_password_blocks_app_workflows_until_changed() -> TestResult
         .oneshot(
             Request::builder()
                 .uri("/api/projects")
-                .header(header::COOKIE, cookie)
+                .header(header::COOKIE, session)
                 .body(Body::empty())?,
         )
         .await?;

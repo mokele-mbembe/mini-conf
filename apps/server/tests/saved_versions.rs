@@ -123,18 +123,73 @@ fn session_cookie(response: &axum::response::Response) -> TestResult<String> {
 }
 
 async fn login(app: &axum::Router) -> TestResult<String> {
+    let csrf_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/auth/csrf")
+                .body(Body::empty())?,
+        )
+        .await?;
+    let csrf_cookie = session_cookie(&csrf_response)?;
+    let csrf_token = csrf_cookie
+        .strip_prefix("mini_conf_csrf=")
+        .ok_or("set-cookie should contain a csrf cookie")?;
+
     let response = app
         .clone()
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/api/auth/login")
+                .header(header::COOKIE, &csrf_cookie)
                 .header(header::CONTENT_TYPE, "application/json")
+                .header("x-csrf-token", csrf_token)
                 .body(Body::from(
                     r#"{"username":"admin","password":"admin123456"}"#,
                 ))?,
         )
         .await?;
+    let cookie = session_cookie(&response)?;
+    let _: AuthSessionResponse = read_json(response).await?;
+    Ok(cookie)
+}
+
+async fn login_with_credentials(
+    app: &axum::Router,
+    username: &str,
+    password: &str,
+) -> TestResult<String> {
+    let csrf_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/auth/csrf")
+                .body(Body::empty())?,
+        )
+        .await?;
+    let csrf_cookie = session_cookie(&csrf_response)?;
+    let csrf_token = csrf_cookie
+        .strip_prefix("mini_conf_csrf=")
+        .ok_or("set-cookie should contain a csrf cookie")?;
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/login")
+                .header(header::COOKIE, &csrf_cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-csrf-token", csrf_token)
+                .body(Body::from(format!(
+                    r#"{{"username":{},"password":{}}}"#,
+                    serde_json::to_string(username)?,
+                    serde_json::to_string(password)?,
+                )))?,
+        )
+        .await?;
+
     let cookie = session_cookie(&response)?;
     let _: AuthSessionResponse = read_json(response).await?;
     Ok(cookie)
@@ -684,20 +739,7 @@ async fn non_member_gets_empty_list() -> TestResult {
     .execute(&pool)
     .await?;
 
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/auth/login")
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    r#"{"username":"viewer2","password":"viewer123456"}"#,
-                ))?,
-        )
-        .await?;
-    let viewer_cookie = session_cookie(&response)?;
-    let _: AuthSessionResponse = read_json(response).await?;
+    let viewer_cookie = login_with_credentials(&app, "viewer2", "viewer123456").await?;
 
     // Non-member listing returns empty
     let list = list_saved_versions(&app, &viewer_cookie, deployment_id, config_file_id).await?;
@@ -759,20 +801,7 @@ async fn viewer_cannot_restore_or_delete() -> TestResult {
     .execute(&pool)
     .await?;
 
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/auth/login")
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    r#"{"username":"viewer3","password":"viewer123456"}"#,
-                ))?,
-        )
-        .await?;
-    let viewer_cookie = session_cookie(&response)?;
-    let _: AuthSessionResponse = read_json(response).await?;
+    let viewer_cookie = login_with_credentials(&app, "viewer3", "viewer123456").await?;
 
     // Viewer cannot list saved versions
     let viewer_list =

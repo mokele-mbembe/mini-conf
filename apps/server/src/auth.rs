@@ -10,6 +10,7 @@ use sqlx::Row;
 use uuid::Uuid;
 
 const ADMIN_SESSION_COOKIE: &str = "mini_conf_session";
+const ADMIN_CSRF_COOKIE: &str = "mini_conf_csrf";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AuthenticatedDeployment {
@@ -129,6 +130,10 @@ pub fn generate_session_token() -> String {
     Uuid::new_v4().to_string()
 }
 
+pub fn generate_csrf_token() -> String {
+    Uuid::new_v4().to_string()
+}
+
 pub fn generate_deployment_token() -> String {
     format!("mc_live_{}", Uuid::new_v4().simple())
 }
@@ -141,10 +146,11 @@ pub fn deployment_token_preview(token: &str) -> String {
     }
 }
 
-pub fn session_cookie_header(token: &str) -> HeaderValue {
+pub fn session_cookie_header(token: &str, secure: bool) -> HeaderValue {
     let cookie = Cookie::build((ADMIN_SESSION_COOKIE, token.to_owned()))
         .path("/")
         .http_only(true)
+        .secure(secure)
         .same_site(SameSite::Lax)
         .build();
 
@@ -152,8 +158,36 @@ pub fn session_cookie_header(token: &str) -> HeaderValue {
         .expect("session cookie should always produce a valid header")
 }
 
-pub fn clear_session_cookie_header() -> HeaderValue {
-    HeaderValue::from_static("mini_conf_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0")
+pub fn clear_session_cookie_header(secure: bool) -> HeaderValue {
+    let secure_attr = if secure { "; Secure" } else { "" };
+    HeaderValue::from_str(&format!(
+        "{ADMIN_SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax{secure_attr}; Max-Age=0"
+    ))
+    .expect("clear session cookie should always produce a valid header")
+}
+
+pub fn csrf_cookie_header(token: &str, secure: bool) -> HeaderValue {
+    let cookie = Cookie::build((ADMIN_CSRF_COOKIE, token.to_owned()))
+        .path("/")
+        .http_only(false)
+        .secure(secure)
+        .same_site(SameSite::Lax)
+        .build();
+
+    HeaderValue::from_str(&cookie.encoded().to_string())
+        .expect("csrf cookie should always produce a valid header")
+}
+
+pub fn clear_csrf_cookie_header(secure: bool) -> HeaderValue {
+    let secure_attr = if secure { "; Secure" } else { "" };
+    HeaderValue::from_str(&format!(
+        "{ADMIN_CSRF_COOKIE}=; Path=/; SameSite=Lax{secure_attr}; Max-Age=0"
+    ))
+    .expect("clear csrf cookie should always produce a valid header")
+}
+
+pub fn csrf_token(cookie_header: Option<&str>) -> Option<&str> {
+    cookie_value(cookie_header, ADMIN_CSRF_COOKIE)
 }
 
 pub async fn authenticate_admin_session(
@@ -238,10 +272,14 @@ pub async fn revoke_admin_session(
 }
 
 fn session_token(cookie_header: Option<&str>) -> Option<&str> {
+    cookie_value(cookie_header, ADMIN_SESSION_COOKIE)
+}
+
+fn cookie_value<'a>(cookie_header: Option<&'a str>, cookie_name: &str) -> Option<&'a str> {
     let cookie_header = cookie_header?;
     for part in cookie_header.split(';') {
         let part = part.trim();
-        if let Some(value) = part.strip_prefix(&format!("{ADMIN_SESSION_COOKIE}="))
+        if let Some(value) = part.strip_prefix(&format!("{cookie_name}="))
             && !value.trim().is_empty()
         {
             return Some(value);
@@ -284,8 +322,9 @@ fn bearer_token(headers: &HeaderMap) -> Result<&str, ApiError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        bearer_token, clear_session_cookie_header, deployment_token_preview,
-        generate_deployment_token, hash_bearer_token, session_cookie_header,
+        bearer_token, clear_csrf_cookie_header, clear_session_cookie_header, csrf_cookie_header,
+        csrf_token, deployment_token_preview, generate_csrf_token, generate_deployment_token,
+        hash_bearer_token, session_cookie_header,
     };
     use axum::http::{HeaderMap, HeaderValue, header};
 
@@ -372,24 +411,67 @@ mod tests {
 
     #[test]
     fn session_cookie_header_sets_expected_security_attributes() {
-        let value = session_cookie_header("session-token");
+        let value = session_cookie_header("session-token", true);
         let cookie = value.to_str().expect("session cookie should be ascii");
 
         assert!(cookie.contains("mini_conf_session=session-token"));
         assert!(cookie.contains("Path=/"));
         assert!(cookie.contains("HttpOnly"));
+        assert!(cookie.contains("Secure"));
         assert!(cookie.contains("SameSite=Lax"));
     }
 
     #[test]
     fn clear_session_cookie_header_expires_session_cookie() {
-        let value = clear_session_cookie_header();
+        let value = clear_session_cookie_header(true);
         let cookie = value.to_str().expect("clear cookie should be ascii");
 
         assert!(cookie.contains("mini_conf_session="));
         assert!(cookie.contains("Path=/"));
         assert!(cookie.contains("HttpOnly"));
+        assert!(cookie.contains("Secure"));
         assert!(cookie.contains("SameSite=Lax"));
         assert!(cookie.contains("Max-Age=0"));
+    }
+
+    #[test]
+    fn csrf_cookie_header_sets_expected_attributes() {
+        let value = csrf_cookie_header("csrf-token", true);
+        let cookie = value.to_str().expect("csrf cookie should be ascii");
+
+        assert!(cookie.contains("mini_conf_csrf=csrf-token"));
+        assert!(cookie.contains("Path=/"));
+        assert!(cookie.contains("Secure"));
+        assert!(cookie.contains("SameSite=Lax"));
+        assert!(!cookie.contains("HttpOnly"));
+    }
+
+    #[test]
+    fn clear_csrf_cookie_header_expires_cookie() {
+        let value = clear_csrf_cookie_header(true);
+        let cookie = value.to_str().expect("clear csrf cookie should be ascii");
+
+        assert!(cookie.contains("mini_conf_csrf="));
+        assert!(cookie.contains("Path=/"));
+        assert!(cookie.contains("Secure"));
+        assert!(cookie.contains("SameSite=Lax"));
+        assert!(cookie.contains("Max-Age=0"));
+    }
+
+    #[test]
+    fn csrf_token_extracts_from_cookie_header() {
+        assert_eq!(
+            csrf_token(Some("mini_conf_session=a; mini_conf_csrf=b")),
+            Some("b")
+        );
+    }
+
+    #[test]
+    fn generates_distinct_csrf_tokens() {
+        let first = generate_csrf_token();
+        let second = generate_csrf_token();
+
+        assert!(!first.is_empty());
+        assert_ne!(first, second);
     }
 }
