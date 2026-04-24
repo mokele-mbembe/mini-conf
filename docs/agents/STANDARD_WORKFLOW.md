@@ -331,6 +331,7 @@ GitHub Actions 与工作流层级对应关系：
 
 ## 9. 关联文档
 
+- [Agent 续工入口](./AGENT_START_HERE.md)
 - [WSL 与 Fedora 平台并行对齐说明](./DEV_DUAL_ENV_PARITY.md)
 - [Linux / WSL2 开发环境实录](./DEV_LINUX_WSL2.md)
 - [Fedora 43 开发环境与本地 Agent 约定](./DEV_FEDORA43_WORKSTATION.md)

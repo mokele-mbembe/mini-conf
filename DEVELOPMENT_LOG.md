@@ -12,6 +12,25 @@
 
 ## 1.1 最近完成
 
+2026-04-24 本轮进行文档入口压缩和当前状态同步：
+
+- 新增 [docs/agents/AGENT_START_HERE.md](./docs/agents/AGENT_START_HERE.md)，作为 AI agent 和本地自动化协作者唯一续工入口
+- 将已完成或被合并替代的阶段性文档移入 `docs/archive/`
+- `FRONTEND_TASK_WORKFLOW.md` 已合并前端运行方式、页面测试顺序、当前页面状态和统一 kickoff prompt
+- `KICKOFF.md` 已压缩为当前状态和未完成工作索引，不再维护重复前端 prompt
+- `MVP_LAUNCH_IMPLEMENTATION_CHECKLIST.md` 已补当前实现状态覆盖层，明确平台权限、用户管理、setup 和管理端安全基线的大部分已完成
+- 当前仍未完成的上线前主线是：Open API 限流与失败事件留痕、部署 runbook、projects/config_files 删除能力、项目成员/sync records/heartbeats/audit logs 前端页面、前端单元/组件测试基线、Config Workspace
+
+2026-04-22 至 2026-04-24 当前仓库已有的新实现状态：
+
+- 平台级权限模型已落地：`platform_admin` 与项目 `admin / editor / viewer` 分层，平台管理员默认不自动拥有业务项目可见性
+- 用户管理已落地：`/api/admin/users`、用户创建、启用/禁用、重置密码、强制改密、登录时间和密码更新时间
+- 平台项目创建已落地：`/api/admin/projects`，创建项目时指定首个项目 admin
+- Setup 核心链路已落地：`system_settings`、`/api/setup/status`、`/api/setup/complete`、setup gate、前端 setup 页
+- 管理端安全基线已完成大半：CSRF、session cookie 安全属性、基础安全响应头、登录失败节流、密码强度、强制改密
+- 前端新增平台控制台、用户管理、平台项目创建、setup 和首次改密路径
+- Playwright E2E 已扩展到 setup、admin project create、must-change-password、Saved Versions、Release detail/diff、deployment archive/delete 等路径
+
 2026-04-21 本轮完成 Release 回看、部署实例分区、归档 / 删除生命周期闭环，并提交 `c7563f1 Add deployment archive and deletion lifecycle`：
 
 - Release 详情页和 Diff 页已从占位页补为真实页面，可从发布历史进入只读内容回看和上一版差异回看
@@ -221,7 +240,8 @@
 - [x] active 实例才允许 open API 消费
 - [x] `ConfigFile.code` 是 MVP 唯一客户端配置标识
 - [x] 项目仅对成员可见
-- [x] 项目创建者自动成为项目 `admin`
+- [x] 项目创建改为平台管理员创建并指定首个项目 `admin`
+- [x] 平台管理员默认不自动拥有项目业务可见性
 - [x] 写操作和关键认证事件写入 `audit_logs`
 - [x] 管理端资源访问收口到项目成员角色
 
@@ -274,35 +294,36 @@
 
 ### 3.4 新确认的 MVP 大块
 
-- [ ] 平台级权限模型：引入 `platform_admin`，把平台管理与项目业务访问分层
-- [ ] 用户管理：创建用户、禁用/启用、重置密码、强制改密、项目成员绑定
-- [ ] 项目创建语义调整：由平台管理员创建项目并指定首个项目 `admin`
-- [ ] 系统初始化与首次登录 setup wizard
+- [x] 平台级权限模型：引入 `platform_admin`，把平台管理与项目业务访问分层
+- [x] 用户管理主路径：创建用户、禁用/启用、重置密码、强制改密
+- [ ] 用户管理补齐：从用户详情直接维护项目成员绑定
+- [x] 项目创建语义调整：由平台管理员创建项目并指定首个项目 `admin`
+- [x] 系统初始化与首次登录 setup 核心链路
+- [ ] setup wizard 补齐首个环境、配置文件、模板实例
 - [ ] 上线实施方案：Docker Compose + 通用 Linux runbook
-- [ ] 上线安全基线：CSRF、安全响应头、登录节流、开放接口限流
+- [ ] 上线安全基线剩余项：Open API 限流、失败事件留痕、安全响应头复核
 - [ ] projects / config_files 的删除能力与生命周期文案统一
 - [ ] 低风险管理页面补齐：项目成员、sync records、heartbeats、audit logs
-- [ ] 中间文档压缩整理
+- [x] 中间文档压缩整理第一轮
 - [ ] 配置编辑体验统一升级（延后到上述骨架完成之后）
 
 ## 4. 当前阶段剩余工作
 
 推荐顺序：
 
-1. 平台级权限模型与用户管理：`platform_admin`、用户状态、项目首个管理员指定
-2. 系统初始化与上线实施方案：init 脚本、首次登录 setup wizard、Docker Compose / Linux runbook
-3. 上线安全基线：CSRF、安全响应头、登录节流、开放接口限流、平台级/项目级审计边界
-4. 资源生命周期与文案收口：projects / config_files 删除能力、用户禁用模型、状态词统一
-5. 项目成员页、sync records、heartbeats、audit logs 等低风险管理页面补齐
-6. 前端单元 / 组件测试基线，优先覆盖高状态密度组件
-7. `sqlx-check` 恢复为强制检查的时机评估
-8. 黑盒与覆盖率基线的持续补量
-9. 配置编辑体验统一升级：Draft / Release / Diff / Merge 的 Config Workspace
+1. 上线安全基线剩余项：Open API 限流、失败事件留痕、安全响应头复核
+2. 系统初始化与上线实施方案：init 脚本、Docker Compose / Linux runbook、setup wizard 补齐
+3. 资源生命周期与文案收口：projects / config_files 删除能力、状态词统一
+4. 项目成员页、sync records、heartbeats、audit logs 等低风险管理页面补齐
+5. 前端单元 / 组件测试基线，优先覆盖高状态密度组件
+6. `sqlx-check` 恢复为强制检查的时机评估
+7. 黑盒与覆盖率基线的持续补量
+8. 配置编辑体验统一升级：Draft / Release / Diff / Merge 的 Config Workspace
 
 理由：
 
-- 当前业务主路径已经基本闭环，但距离“可上线、可运营、可长期使用”仍缺平台骨架
-- 当前最大的剩余风险不再是单个业务页面，而是平台权限分层、初始化上线和安全基线
+- 当前业务主路径和平台骨架已经基本闭环，但距离“可上线、可运营、可长期使用”仍缺上线实施、安全剩余项和运维页面
+- 当前最大的剩余风险不再是单个业务页面，而是 Open API 安全、部署 runbook、资源生命周期和运营可见性
 - 项目成员、sync records、heartbeats、audit logs 已有后端接口，但前端仍未形成完整运营闭环
 - 配置编辑体验升级仍然重要，但顺序应后移，避免与平台骨架建设互相打断
 - 详细方向已收口到 `docs/constraints/product-qa/0012-mvp-launch-operability-and-admin-model.md`
@@ -360,12 +381,11 @@ just ci-local-db
 
 ### 必读
 
+- [Agent 续工入口](./docs/agents/AGENT_START_HERE.md)
 - [项目脚手架与启动清单](./docs/public/BOOTSTRAP.md)
 - [质量检查与测试收口计划](./docs/collaboration/QUALITY_CHECK_PLAN.md)
 - [前端任务执行与续工流程](./docs/collaboration/FRONTEND_TASK_WORKFLOW.md)
 - [前端接手说明](./docs/collaboration/FRONTEND_HANDOFF.md)
-- [前端工作区与运行方式](./docs/collaboration/FRONTEND_WORKSPACE.md)
-- [前端页面测试与白屏排查](./docs/collaboration/FRONTEND_PAGE_TESTING.md)
 - [MVP 上线实施清单](./docs/collaboration/MVP_LAUNCH_IMPLEMENTATION_CHECKLIST.md)
 - [产品澄清目录](./docs/constraints/product-qa/README.md)
 - [必选配置与预览澄清](./docs/constraints/product-qa/0002-required-configs-and-preview.md)
@@ -399,12 +419,12 @@ just ci-local-db
 
 ## 8. 建议的交接语句
 
-为避免在多个文档里维护近似但不完全一致的 prompt，完整 kickoff 模板统一以 [docs/collaboration/FRONTEND_TASK_WORKFLOW.md](./docs/collaboration/FRONTEND_TASK_WORKFLOW.md) 第 10 节为准。
+为避免在多个文档里维护近似但不完全一致的 prompt，新会话统一从 [docs/agents/AGENT_START_HERE.md](./docs/agents/AGENT_START_HERE.md) 开始。
 
 如果下一个会话需要快速恢复上下文，可以直接先贴这一段：
 
 ```text
-请先阅读 DEVELOPMENT_LOG.md，然后按 docs/collaboration/FRONTEND_TASK_WORKFLOW.md 第 10 节的统一 kickoff prompt 继续。
+请先阅读 docs/agents/AGENT_START_HERE.md 和 DEVELOPMENT_LOG.md。
 
 本轮任务是：
 [把这里替换成具体页面或模块]

@@ -33,3 +33,8 @@
 - `0010-release-readonly-template-split-and-deployment-archive.md`
 - `0011-merge-workspace-and-visual-config-editor.md`
 - `0012-mvp-launch-operability-and-admin-model.md`
+
+覆盖关系：
+
+- `0012` 覆盖 `0005` 中“任意已登录用户可以创建项目”的旧项目创建语义。
+- 当前真值是：只有 `platform_admin` 可以创建项目，创建时必须指定首个项目 `admin`，平台管理员默认不自动拥有项目业务可见性。

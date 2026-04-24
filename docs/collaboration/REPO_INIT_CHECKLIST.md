@@ -1,6 +1,6 @@
 # 仓库初始化清单
 
-> 注：这份文档主要服务于“从空仓或早期骨架阶段初始化仓库”的场景。当前 `mini-conf` 已经完成初始化并进入前端主路径阶段；继续开发时请优先看 `DEVELOPMENT_LOG.md`、`FRONTEND_TASK_WORKFLOW.md` 和 `FRONTEND_WORKSPACE.md`。
+> 注：这份文档主要服务于“从空仓或换机器恢复环境”的场景。当前 `mini-conf` 已经完成初始化并进入上线前收口阶段；继续开发时请优先看 `docs/agents/AGENT_START_HERE.md` 和 `DEVELOPMENT_LOG.md`。
 
 ## 1. 文档目标
 
@@ -53,7 +53,7 @@
 
 参考文档：
 
-- [docs/collaboration/FRONTEND_WORKSPACE.md](./FRONTEND_WORKSPACE.md)
+- [docs/collaboration/FRONTEND_TASK_WORKFLOW.md](./FRONTEND_TASK_WORKFLOW.md)
 
 ### 4. 初始化 Rust workspace
 

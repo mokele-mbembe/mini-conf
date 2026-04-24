@@ -235,6 +235,7 @@ just db-clean-alpha-runtime-local
 
 - 文档总索引与分类说明：[docs/README.md](./docs/README.md)
 - 未完成工作索引与续工入口：[KICKOFF.md](./KICKOFF.md)
+- AI agent 唯一续工入口：[docs/agents/AGENT_START_HERE.md](./docs/agents/AGENT_START_HERE.md)
 - 单人 `main` 开发每日清单：[MAIN_DEV_CHECKLIST.md](./MAIN_DEV_CHECKLIST.md)
 - 对外公开与使用侧文档：[docs/public/README.md](./docs/public/README.md)
 - 项目约束与产品边界：[docs/constraints/README.md](./docs/constraints/README.md)
@@ -244,33 +245,35 @@ just db-clean-alpha-runtime-local
 
 ## 当前状态
 
-项目目前已经完成后端 MVP 主链路，当前仓库重点转为：
+项目目前已经完成后端 MVP 主链路和前端管理台核心业务链路，当前仓库重点转为：
 
 - 保持后端权限、审计、配置标识和部署实例生命周期主链路稳定
-- 推进前端管理台主路径
-- 围绕咖啡中间件演示案例打通真实业务流程
-- 补齐 alpha 黑盒回归、覆盖率与后续工程收口
-- 继续固化产品边界、协作流程与部署约定
+- 补齐上线安全基线剩余项、部署 runbook 和初始化交付
+- 补齐低风险运营页面与资源生命周期
+- 持续补 alpha 黑盒、覆盖率和前端单元 / 组件测试基线
+- 继续固化产品边界、协作流程与部署约定并压缩过时入口
 
 当前前端基线已经不是“待初始化”状态，而是：
 
 - `apps/web` 已存在并可运行
-- 已有登录页、项目列表页、项目详情骨架页
+- 已有登录、setup、首次改密、平台用户管理、平台项目创建
+- 已有项目列表、配置文件、环境、部署实例、Draft、Saved Versions、preview、publish、Release detail/diff
+- 已有 deployment archive / restore / permanent delete 主路径
 - 已接入前端 `lint / format:check / typecheck / build`
-- 已接入最小 Playwright smoke E2E
-- 前端协作入口已收口到 `docs/collaboration/FRONTEND_*`
+- 已接入覆盖核心管理链路的 Playwright E2E
+- 前端协作入口已收口到 [FRONTEND_TASK_WORKFLOW.md](./docs/collaboration/FRONTEND_TASK_WORKFLOW.md)
 
 ## 后续优先事项
 
 建议按这个顺序推进：
 
-1. 前端 API 类型与 client 跟随后端新生命周期接口收口
-2. 推进部署实例列表 / 详情 / 激活 / 停用 / token reset 页面
-3. 推进模板创建实例、Draft、preview-bundle、发布、Release history / Diff 主路径
-4. 启动咖啡中间件演示案例程序，验证真实业务流程
-5. 持续补 alpha 黑盒、覆盖率和前端单元 / 组件测试基线
-6. 评估 `sqlx-check` 恢复为强制检查的时机
-7. 继续收口部署、协作和环境文档
+1. 文档同步和入口压缩，保持 README / KICKOFF / DEVELOPMENT_LOG / constraints 与真实实现一致
+2. 上线安全基线剩余项：Open API 限流、失败事件留痕、安全响应头复核
+3. 上线实施方案：Docker Compose、通用 Linux runbook、初始化和生产变量清单
+4. 资源生命周期收口：projects / config_files 删除能力与引用检查
+5. 低风险运营页面：项目成员、sync records、heartbeats、audit logs
+6. 前端单元 / 组件测试基线和更完整页面级 E2E
+7. Config Workspace 统一升级
 
 ## License
 

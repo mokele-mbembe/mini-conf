@@ -1,244 +1,198 @@
-# 前端任务执行与续工手册
+# 前端任务执行入口
 
-## 1. 文档目标
+这份文档是当前前端任务的唯一执行入口。
 
-这份文档把前端开发阶段的本地 Codex 执行方式正式收编到仓库里。
+原来的 `FRONTEND_WORKSPACE.md`、`FRONTEND_PAGE_TESTING.md`、`FRONTEND_IMPLEMENTATION_PLAN.md` 已经归档到 [docs/archive/collaboration/](../archive/collaboration/)，其中内容被压缩到本文。业务语义仍以 [FRONTEND_HANDOFF.md](./FRONTEND_HANDOFF.md)、[FRONTEND_MVP_BLUEPRINT.md](../constraints/FRONTEND_MVP_BLUEPRINT.md)、`product-qa/*` 和 OpenAPI 为准。
 
-目标：
+## 1. 当前前端状态
 
-- 固定本地 Codex 在前端阶段的工作顺序
-- 避免每次开工都重复解释“先出规格，再实现，再验收”
-- 让下一次在其他开发主机或新会话里，也能快速恢复这套执行节奏
+当前 `apps/web` 已不是 scaffold：
 
-这份文档是本地 Codex 前端执行工作流的长期入口。
+- Vue 3、Vite、TypeScript、Pinia、Vue Router、Element Plus 已落地。
+- 已有登录、setup、首次改密、平台用户管理、平台项目列表和创建。
+- 项目内主链路已覆盖项目列表、配置文件、环境、部署实例、Draft、Saved Versions、preview-bundle、publish、Release detail/diff。
+- 部署实例页已支持模板/普通实例分区、分页、搜索、激活、停用、token reset、归档、恢复、永久删除。
+- Playwright E2E 已覆盖 setup、admin project create、must-change-password、Saved Versions、clone、Release detail/diff、deployment archive/delete 等主路径。
+- 仍未完成真实页面的是：项目成员、sync records、heartbeats、audit logs。
 
-## 2. 当前已落地状态
+## 2. 任务流程
 
-截至当前仓库状态，前端已经越过初始 scaffold 阶段，管理台核心配置链路已经能闭环运行：
+前端任务默认按这个顺序推进：
 
-- `apps/web` 已初始化
-- 已有登录页、项目列表页、项目详情页、配置文件页、部署实例列表 / 详情页
-- 已有 Draft 编辑、Saved Versions、单配置 clone、preview-bundle、publish、Release 列表 / 详情 / Diff
-- 部署实例列表已拆分模板和普通实例，归档 / 恢复 / 永久删除主路径已接入
-- 已有本地联调说明：`FRONTEND_PAGE_TESTING`
-- 已有前端 build check
-- 已有覆盖核心管理链路的 Playwright smoke E2E
+1. 先输出任务规格：页面范围、接口映射、状态矩阵、权限规则、验收标准。
+2. 再输出执行计划：准备修改的文件、数据获取方式、错误处理、测试命令。
+3. 本地实现。
+4. 自查和验收：类型、构建、lint、必要 E2E 或手工联调。
 
-因此后续前端工作不再是“补核心链路”，而是“围绕 demo、运维可见性、权限管理和体验增强继续补齐”。
+低风险列表页可以直接按现有模式实现；高业务密度页面必须先对齐业务语义。
 
-## 3. 开工前必读
+## 3. 必读文件
 
-前端任务开始前，Codex 至少应该先读这些文件：
+前端任务开始前至少读：
 
+- [docs/agents/AGENT_START_HERE.md](../agents/AGENT_START_HERE.md)
 - [FRONTEND_TASK_WORKFLOW.md](./FRONTEND_TASK_WORKFLOW.md)
 - [FRONTEND_HANDOFF.md](./FRONTEND_HANDOFF.md)
-- [FRONTEND_IMPLEMENTATION_PLAN.md](./FRONTEND_IMPLEMENTATION_PLAN.md)
-- [FRONTEND_WORKSPACE.md](./FRONTEND_WORKSPACE.md)
-- [FRONTEND_PAGE_TESTING.md](./FRONTEND_PAGE_TESTING.md)
 - [FRONTEND_MVP_BLUEPRINT.md](../constraints/FRONTEND_MVP_BLUEPRINT.md)
-- [0001-template-publish-and-clone.md](../constraints/product-qa/0001-template-publish-and-clone.md)
-- [0002-required-configs-and-preview.md](../constraints/product-qa/0002-required-configs-and-preview.md)
-- [0003-release-diff.md](../constraints/product-qa/0003-release-diff.md)
-- [0004-token-reset.md](../constraints/product-qa/0004-token-reset.md)
-- [0005-project-members-permissions-audit.md](../constraints/product-qa/0005-project-members-permissions-audit.md)
-- [0007-config-identity-and-heartbeats.md](../constraints/product-qa/0007-config-identity-and-heartbeats.md)
-- [DEMO_SCENARIO_COFFEE_MIDDLEWARE.md](../constraints/DEMO_SCENARIO_COFFEE_MIDDLEWARE.md)
 - [ADMIN_API.md](../constraints/ADMIN_API.md)
+- [docs/artifacts/openapi.json](../artifacts/openapi.json)
 
-一句话定位：
+涉及部署实例或客户端上报，再读：
 
-- `FRONTEND_TASK_WORKFLOW`：Codex 怎么按规格、实现、验收的顺序推进
-- `FRONTEND_HANDOFF`：前端不能只靠接口猜的业务语义
-- `FRONTEND_IMPLEMENTATION_PLAN`：按什么顺序推进页面最顺
-- `FRONTEND_WORKSPACE`：工程结构、脚本、CI 和本地运行方式
-- `FRONTEND_PAGE_TESTING`：怎么联调、怎么查白屏、怎么复现 smoke
+- [DEMO_SCENARIO_COFFEE_MIDDLEWARE.md](../constraints/DEMO_SCENARIO_COFFEE_MIDDLEWARE.md)
+- [0007-config-identity-and-heartbeats.md](../constraints/product-qa/0007-config-identity-and-heartbeats.md)
 
-## 4. 任务执行总原则
+涉及后续编辑器升级，再读：
 
-前端开发阶段，默认由本地 Codex 直接完成代码实现，但不要第一步就进入写页面代码。
+- [FRONTEND_CONFIG_WORKSPACE_PLAN.md](./FRONTEND_CONFIG_WORKSPACE_PLAN.md)
+- [0011-merge-workspace-and-visual-config-editor.md](../constraints/product-qa/0011-merge-workspace-and-visual-config-editor.md)
 
-优先采用这个节奏：
+## 4. 本地运行
 
-1. 先让 Codex 基于当前仓库状态输出任务规范
-2. 再让 Codex 把任务规范拆成可执行步骤和允许修改范围
-3. 由 Codex 在本地实现
-4. Codex 自查、跑必要检查、补状态分支和风险点
-5. 如果需要浏览器手工测试，再启动服务交给用户验证
+安装依赖：
 
-核心目标：
+```bash
+pnpm install
+```
 
-- 保留“先对齐业务语义和验收标准”的质量门
-- 减少跨模型交接带来的上下文丢失和执行偏差
-- 让实现、联调和验收由同一个本地上下文闭环完成
+本地联调：
 
-## 5. Codex 的职责
+```bash
+just dev-db-prepare-local
+just run-server-local
+just dev-web
+```
 
-### 5.1 规格与设计
+默认地址：
 
-- 页面信息架构、路由结构、导航分层
-- 跨页面状态模型和数据流设计
-- 权限矩阵、错误态矩阵、空态矩阵
-- 后端语义到前端交互的映射
-- Draft / Preview / Publish / Diff 这类高业务密度流程
-- 多页面一致性和抽象边界判断
+- 前端：`http://127.0.0.1:5173`
+- 后端：`http://127.0.0.1:8080`
 
-### 5.2 本地实现
+如果后端端口不同：
 
-- 静态页面骨架和布局实现
-- 明确字段定义的列表页、详情页、筛选栏
-- 表单控件接线和基础校验
-- API client 类型接线
-- 小范围组件拆分
-- 样式细化、响应式修补
-- 已有明确输入输出的小组件
+```bash
+VITE_API_TARGET=http://127.0.0.1:9090 pnpm --dir apps/web dev
+```
 
-### 5.3 验收与收口
+## 5. 页面排查顺序
 
-- 代码审阅
-- 语义一致性检查
-- 状态分支补漏
-- 权限处理检查
-- 风险提示
-- 必要的小修
-- `typecheck / build / lint / smoke` 等检查
+不要一上来只看浏览器。固定按这个顺序排查：
 
-### 5.4 不适合直接开写的任务
+1. 确认 runtime DB 可用。
+2. 确认后端服务监听成功。
+3. 确认 Vite dev server 启动。
+4. 用 `curl` 验证 `/api/auth/me`、登录、项目列表。
+5. 再看浏览器页面和 Console。
 
-- 目标本身还没想清楚
-- 涉及核心业务语义澄清
-- 可能影响多个页面一致性的基础抽象
-- 需要结合后端真实行为判断对错
-- “先看看怎么设计”这一类开放式问题
+最小 API 验证：
 
-## 6. 标准工作流
+```bash
+curl --noproxy '*' -i http://127.0.0.1:8080/api/auth/me
+```
 
-### 阶段 A：Codex 输出任务规范
+未登录时预期返回 `401`。
 
-要求 Codex 产出：
+登录需要先取 CSRF cookie：
 
-- 范围
-- 不做什么
-- 路由建议
-- 接口映射
-- 页面状态清单
-- 权限规则
-- 组件拆分建议
-- 实现顺序
-- 验收标准
+```bash
+tmpdir=$(mktemp -d)
+cookiejar="$tmpdir/cookies.txt"
 
-### 阶段 B：Codex 输出本地执行计划
+curl --noproxy '*' -sS -c "$cookiejar" \
+  http://127.0.0.1:8080/api/auth/csrf >/dev/null
 
-执行计划至少要包含：
+csrf=$(awk '/mini_conf_csrf/ { print $7 }' "$cookiejar")
 
-- 必读文件
-- 目标页面或模块
-- 允许修改的文件范围
-- 数据获取方式
-- 权限和状态分支要求
-- 不允许改动的边界
-- 自测要求
+curl --noproxy '*' -sS -b "$cookiejar" -c "$cookiejar" \
+  -H 'Content-Type: application/json' \
+  -H "X-CSRF-Token: $csrf" \
+  -d '{"username":"admin","password":"admin123456"}' \
+  http://127.0.0.1:8080/api/auth/login
 
-### 阶段 C：Codex 本地实现
+curl --noproxy '*' -sS -b "$cookiejar" \
+  http://127.0.0.1:8080/api/projects
 
-Codex 负责：
+rm -rf "$tmpdir"
+```
 
-- 页面编码
-- 小组件抽取
-- 基础联调
-- 基础测试
-- 样式落地
+## 6. 自测命令
 
-### 阶段 D：Codex 自验与交付
+前端静态检查：
 
-Codex 负责：
+```bash
+pnpm --dir apps/web typecheck
+pnpm --dir apps/web lint
+pnpm --dir apps/web build
+```
 
-- 代码审阅
-- 语义一致性检查
-- 状态分支补漏
-- 权限处理检查
-- 风险提示
-- 必要的小修
+隔离 E2E：
 
-## 7. 下次开工的正确姿势
+```bash
+just test-e2e-local
+```
 
-不要只把“实现某个页面”丢给模型。
+完整本机收口：
 
-下次开工建议顺序：
+```bash
+just ci-local-full
+```
 
-1. 明确让 Codex 先读本文件和 `docs/collaboration/*`
-2. 让 Codex 输出任务规范，不直接写代码
-3. 让 Codex 输出本地执行计划和验收标准
-4. 让 Codex 按计划实现、运行检查、给出交付说明
+裸 `pnpm --dir apps/web test:e2e` 默认拒绝连接共享服务；调试已有服务时必须显式设置：
 
-## 8. 当前阶段最适合的下一批任务
+```bash
+E2E_ALLOW_SHARED_SERVER=1 PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 pnpm --dir apps/web test:e2e
+```
 
-基于当前 scaffold 和页面现状，后续继续推进时，建议优先顺序是：
+## 7. 权限规则
 
-1. 咖啡中间件 demo：demo seed、客户端程序或脚本、从模板复制店铺配置的演示路径
-2. 项目成员页：成员列表、添加成员、角色调整、最后 admin 保护错误提示
-3. sync records / heartbeats 页面：让 demo 中的配置拉取、应用和心跳上报可被管理端观察
-4. audit logs 页面：按项目和事件类型查看关键操作，支撑发布、归档、删除等追溯
-5. Release 详情 / Diff 体验增强：Monaco 只读语法高亮、彩色 diff、复制和跳转体验
-6. 前端单元 / 组件测试基线：覆盖高状态密度组件和错误态分支
+- `platform_admin` 可进入平台控制台、管理用户、创建项目并指定首个项目 admin。
+- `platform_admin` 默认不自动看到未加入的业务项目。
+- 项目 `admin` 可管理项目、成员、配置文件、部署实例、token、audit logs。
+- 项目 `editor` 可编辑 Draft、clone 单配置、preview、publish、查看 release/sync/heartbeat。
+- 项目 `viewer` 只读查看项目、配置文件、部署实例、release、sync、heartbeat。
+- 后端是权限真值，前端隐藏按钮只改善体验。
 
-继续推进时仍然要遵守：
+## 8. 仍未完成的前端批次
 
-- 低风险 CRUD 和列表页也由 Codex 直接落地
-- 高业务密度页面必须先让 Codex 出规格和验收标准
-- 单轮过大的页面要拆成可验证的小批次，不要一次性铺太宽
+当前下一批前端优先级：
 
-## 9. 下次续工的最短 checklist
+1. 项目成员页：成员列表、添加成员、角色调整、删除成员、最后 admin 保护提示。
+2. sync records 页面：按实例、配置、action、status 过滤。
+3. heartbeats 页面：按实例、配置查看最近上报；不要自行定义在线真值。
+4. audit logs 页面：按 action / resource_type / user 过滤，仅 admin 入口。
+5. 前端单元 / 组件测试基线：优先覆盖高状态密度组件和权限交互。
+6. Config Workspace：等平台、上线、安全、低风险页收口后再统一升级。
 
-如果下次是在新会话或其他开发机继续：
+## 9. 常见坑
 
-1. 拉取最新仓库
-2. 执行 `pnpm install`
-3. 执行 `just dev-db-prepare-local`
-4. 执行 `just run-server-local`
-5. 执行 `just dev-web`
-6. 先读本文件、`FRONTEND_HANDOFF`、`FRONTEND_IMPLEMENTATION_PLAN`、`FRONTEND_PAGE_TESTING`
-7. 确认当前要继续的是哪个页面或模块
-8. 先让 Codex 出规格和执行计划，再由 Codex 本地实现
+- 不要把 `publish` 理解成整实例发布；当前是单配置发布。
+- 不要把 Saved Versions 当成并行可编辑 Draft；编辑器只对应 Current Draft。
+- 不要再新增 `process_key`；客户端配置标识统一为 `config`，管理端筛选使用 `config_file_id`。
+- 不要把 deployment archived 加回 `status`；归档用 `is_archived`，删除用 `deleted_at`。
+- token reset / deactivate 没有灰度窗口，旧 token 立即失效。
+- secret 内容展示和 diff 以后端脱敏结果为准，前端不要重新实现脱敏算法。
+- 前端白屏时不要只查 `/api/healthz`；必须同时查 `/api/auth/me`、登录链路和 Console。
 
 ## 10. 统一 kickoff prompt
 
-这个 prompt 作为当前仓库里前端续工的主入口模板。
-
-其他文档如果需要引用 kickoff prompt，优先直接指向这里，不再重复维护一份近似版本。
-
 ```text
-请按以下文件协作：
+请先阅读：
+- docs/agents/AGENT_START_HERE.md
 - docs/collaboration/FRONTEND_TASK_WORKFLOW.md
 - docs/collaboration/FRONTEND_HANDOFF.md
-- docs/collaboration/FRONTEND_IMPLEMENTATION_PLAN.md
-- docs/collaboration/FRONTEND_WORKSPACE.md
-- docs/collaboration/FRONTEND_PAGE_TESTING.md
 - docs/constraints/FRONTEND_MVP_BLUEPRINT.md
-- docs/constraints/product-qa/0001-template-publish-and-clone.md
-- docs/constraints/product-qa/0002-required-configs-and-preview.md
-- docs/constraints/product-qa/0003-release-diff.md
-- docs/constraints/product-qa/0004-token-reset.md
-- docs/constraints/product-qa/0005-project-members-permissions-audit.md
-- docs/constraints/product-qa/0007-config-identity-and-heartbeats.md
-- docs/constraints/DEMO_SCENARIO_COFFEE_MIDDLEWARE.md
 - docs/constraints/ADMIN_API.md
 
 你先不要直接写前端代码。
 
-这轮请按“先规格、再实现、再验收”的本地 Codex 流程推进。优先做这些事：
-1. 基于现有仓库状态，输出本轮任务的页面范围、接口映射、状态矩阵、权限规则和验收标准
-2. 再输出本地执行计划，说明准备修改哪些文件、按什么顺序实现、跑哪些检查
-3. 等我确认或直接要求开始后，你负责本地实现、review、验收、查漏补缺和必要的小修
-
-要求：
-- 以当前仓库真实实现和文档为准
-- 明确指出哪些业务逻辑不是接口设计本身能表达出来的
-- 在输出规格和计划前，不要先直接进入写页面代码
+本轮请先基于当前仓库真实状态，输出：
+1. 页面范围
+2. 接口映射
+3. 状态矩阵
+4. 权限规则
+5. 验收标准
+6. 本地执行计划
 
 本轮任务是：
-[把这里替换成具体页面或模块]
+[替换成具体页面或模块]
 ```
-
-## 11. 一句话策略
-
-把 Codex 当成本地闭环负责人：先对齐规格，再直接实现，最后自验和交付。

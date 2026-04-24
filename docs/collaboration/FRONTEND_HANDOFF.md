@@ -15,32 +15,21 @@
 
 建议按这个顺序阅读：
 
-1. [`docs/collaboration/FRONTEND_TASK_WORKFLOW.md`](./FRONTEND_TASK_WORKFLOW.md)
-2. [`docs/collaboration/FRONTEND_HANDOFF.md`](./FRONTEND_HANDOFF.md)
-3. [`docs/collaboration/FRONTEND_IMPLEMENTATION_PLAN.md`](./FRONTEND_IMPLEMENTATION_PLAN.md)
-4. [`docs/collaboration/FRONTEND_CONFIG_WORKSPACE_PLAN.md`](./FRONTEND_CONFIG_WORKSPACE_PLAN.md)
-5. [`docs/collaboration/FRONTEND_WORKSPACE.md`](./FRONTEND_WORKSPACE.md)
-6. [`docs/collaboration/FRONTEND_PAGE_TESTING.md`](./FRONTEND_PAGE_TESTING.md)
-7. [`docs/constraints/FRONTEND_MVP_BLUEPRINT.md`](../constraints/FRONTEND_MVP_BLUEPRINT.md)
-8. [`docs/constraints/product-qa/README.md`](../constraints/product-qa/README.md)
-9. [`docs/constraints/product-qa/0008-current-draft-saved-versions-and-release-workspace.md`](../constraints/product-qa/0008-current-draft-saved-versions-and-release-workspace.md)
-10. [`docs/constraints/product-qa/0009-saved-versions-api-and-rollout.md`](../constraints/product-qa/0009-saved-versions-api-and-rollout.md)
-11. [`docs/constraints/product-qa/0010-release-readonly-template-split-and-deployment-archive.md`](../constraints/product-qa/0010-release-readonly-template-split-and-deployment-archive.md)
-12. [`docs/constraints/ADMIN_API.md`](../constraints/ADMIN_API.md)
-13. [`docs/artifacts/openapi.json`](../artifacts/openapi.json)
-14. [`docs/constraints/AUTH_AND_SECURITY.md`](../constraints/AUTH_AND_SECURITY.md)
-15. [`docs/public/CLIENT_HTTP_PROTOCOL.md`](../public/CLIENT_HTTP_PROTOCOL.md)
-16. [`docs/constraints/product-qa/0007-config-identity-and-heartbeats.md`](../constraints/product-qa/0007-config-identity-and-heartbeats.md)
-17. [`docs/constraints/DEMO_SCENARIO_COFFEE_MIDDLEWARE.md`](../constraints/DEMO_SCENARIO_COFFEE_MIDDLEWARE.md)
-
-后端实施 Saved Versions 时，建议同时参考：
-
-- [`docs/collaboration/BACKEND_SAVED_VERSIONS_CHECKLIST.md`](./BACKEND_SAVED_VERSIONS_CHECKLIST.md)
+1. [`docs/agents/AGENT_START_HERE.md`](../agents/AGENT_START_HERE.md)
+2. [`docs/collaboration/FRONTEND_TASK_WORKFLOW.md`](./FRONTEND_TASK_WORKFLOW.md)
+3. [`docs/collaboration/FRONTEND_HANDOFF.md`](./FRONTEND_HANDOFF.md)
+4. [`docs/constraints/FRONTEND_MVP_BLUEPRINT.md`](../constraints/FRONTEND_MVP_BLUEPRINT.md)
+5. [`docs/constraints/ADMIN_API.md`](../constraints/ADMIN_API.md)
+6. [`docs/artifacts/openapi.json`](../artifacts/openapi.json)
+7. [`docs/constraints/product-qa/README.md`](../constraints/product-qa/README.md)
+8. [`docs/constraints/AUTH_AND_SECURITY.md`](../constraints/AUTH_AND_SECURITY.md)
+9. [`docs/public/CLIENT_HTTP_PROTOCOL.md`](../public/CLIENT_HTTP_PROTOCOL.md)
+10. [`docs/constraints/DEMO_SCENARIO_COFFEE_MIDDLEWARE.md`](../constraints/DEMO_SCENARIO_COFFEE_MIDDLEWARE.md)
 
 推荐真值优先级：
 
 - 页面流程与交互意图：`FRONTEND_MVP_BLUEPRINT`
-- 具体拆页、排期与按钮权限：`FRONTEND_IMPLEMENTATION_PLAN`
+- 前端执行流程、运行和测试：`FRONTEND_TASK_WORKFLOW`
 - 业务规则与边界：`product-qa/*`
 - 字段、错误码、响应形状：`openapi.json` + `ADMIN_API`
 - 当前到底实现到哪：`DEVELOPMENT_LOG.md`
@@ -53,13 +42,13 @@
 
 ## 2.1 当前前端已落地基线
 
-当前仓库已经有真实前端 scaffold，不再是“只有前端预留 workspace”：
+当前仓库已经有真实前端应用，不再是“只有前端预留 workspace”：
 
 - `apps/web` 已初始化
-- 已有登录页、项目列表页、项目详情骨架页
-- 已有本地联调文档 `FRONTEND_PAGE_TESTING`
-- 已有 frontend build check
-- 已有最小 Playwright smoke E2E
+- 已有登录、setup、首次改密、平台用户管理、平台项目创建
+- 已有项目列表、配置文件、环境、部署实例、Draft、Saved Versions、preview、publish、Release detail/diff
+- 已有 deployment archive / restore / permanent delete 前端路径
+- 已有前端 build check 和覆盖核心管理链路的 Playwright E2E
 
 因此后续前端工作应默认视为“在已有 scaffold 上继续开发”，而不是重新搭项目前端。
 
@@ -91,14 +80,20 @@
 - `sync-record`
 - `heartbeat`
 
-当前不在前端主路径范围内：
+当前仍未完成真实页面的是：
 
-- 用户管理后台
+- 项目成员页
+- sync records 页面
+- heartbeats 页面
+- audit logs 页面
+
+当前不在 MVP 主路径范围内：
+
 - 多候选 Draft
-- Saved Versions 历史保存版本
 - 整实例一键发布
 - 动态 Scope / labels
 - 审批流
+- SSO / OAuth
 
 ## 4. 核心业务模型
 
@@ -134,14 +129,16 @@
 ### 5.2 项目列表 / 详情
 
 - `GET /api/projects`
-- `POST /api/projects`
 - `GET /api/projects/:id`
 - `PUT /api/projects/:id`
+- 平台创建入口使用 `GET /api/admin/projects` / `POST /api/admin/projects`
 
 前端规则：
 
 - 项目只对成员可见
-- 创建项目后，创建者自动成为该项目 `admin`
+- 平台管理员默认不自动拥有业务项目可见性
+- 创建项目必须通过平台创建流程指定首个项目 `admin`
+- `POST /api/projects` 只是后端兼容别名，新前端入口应使用 `/api/admin/projects`
 - 列表默认不需要前端自行做权限过滤
 
 ### 5.3 项目成员

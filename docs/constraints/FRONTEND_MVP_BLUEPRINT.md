@@ -13,7 +13,11 @@
 ## 2. 全局前提
 
 - 管理端登录态基于 HttpOnly Session Cookie
+- 管理端写请求使用 CSRF cookie + `X-CSRF-Token`
 - 前端默认通过 `/api/auth/me` 判断当前登录状态
+- 前端需要先通过 `/api/setup/status` 判断是否进入 setup 流程
+- 平台管理身份 `platform_admin` 与项目角色 `admin / editor / viewer` 分层
+- `platform_admin` 默认不自动拥有项目业务数据可见性
 - 前端第一版就应感知项目角色，并按 `admin / editor / viewer` 控制高风险入口
 - 后端仍然是最终权限真值，前端按钮隐藏只用于改善体验
 - 非成员访问项目资源时，前端按资源未命中处理
@@ -58,33 +62,63 @@
 
 页面目标：
 
-- 浏览项目
-- 创建项目
+- 浏览当前用户已加入的项目
 - 进入项目详情
 
 依赖接口：
 
 - `GET /api/projects`
-- `POST /api/projects`
 
 加载态 / 空状态 / 缺权限状态：
 
-- 空状态引导创建首个项目
+- 普通项目成员空状态提示暂无可见项目
+- `platform_admin` 空状态引导进入平台控制台创建项目或用户
 - 未登录时跳转登录页
+
+表单字段与校验：
+
+- 当前项目列表页不再承载项目创建表单
+
+关键交互：
+
+- 列表按 `code` 展示
+- 点击项目进入项目详情
+- 平台管理员可跳转平台项目创建页
+
+失败提示：
+
+- `auth_session_expired`
+
+## 4.1 平台项目创建页
+
+页面目标：
+
+- 由平台管理员创建项目壳
+- 指定首个项目 `admin`
+
+依赖接口：
+
+- `GET /api/admin/users`
+- `POST /api/admin/projects`
 
 表单字段与校验：
 
 - `code`
 - `name`
 - `description`
+- `initial_admin_user_id`
 
 关键交互：
 
-- 列表按 `code` 展示
-- 创建后刷新列表并进入详情
+- 远程搜索 active 用户作为首个项目管理员
+- 创建成功后展示成功态
+- 如果当前平台管理员不是首个项目管理员，不显示进入业务项目列表的动作
 
 失败提示：
 
+- `platform_permission_denied`
+- `initial_project_admin_required`
+- `user_not_found`
 - `project_code_conflict`
 
 ## 5. 项目详情页

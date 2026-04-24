@@ -723,10 +723,11 @@ source "${XDG_CONFIG_HOME:-$HOME/.config}/mini-conf/dev-env.sh"
 
 - `README.md`
 - `KICKOFF.md`
+- `docs/agents/AGENT_START_HERE.md`
 - `docs/public/BOOTSTRAP.md`
 - `docs/agents/DEV_LINUX_WSL2.md`
 - `docs/collaboration/REPO_INIT_CHECKLIST.md`
-- `docs/collaboration/FRONTEND_WORKSPACE.md`
+- `docs/collaboration/FRONTEND_TASK_WORKFLOW.md`
 
 外部资料：
 

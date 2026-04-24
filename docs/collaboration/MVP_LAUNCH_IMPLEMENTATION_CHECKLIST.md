@@ -20,21 +20,77 @@
 - [AUTH_AND_SECURITY.md](/home/zjj/Projects/mini-conf/docs/constraints/AUTH_AND_SECURITY.md)
 - [DB_SCHEMA.md](/home/zjj/Projects/mini-conf/docs/constraints/DB_SCHEMA.md)
 
-## 2. 本轮之后的固定顺序
+## 2. 当前实现状态
+
+这份清单最初写于平台上线骨架开工前。当前仓库已经完成了前几阶段的大量代码工作，因此后续执行时先看本节状态，再看各 Phase 的细项。
+
+### 2.1 已基本完成
+
+- 平台级权限模型：
+  - `users.is_platform_admin`
+  - 平台管理员默认不自动拥有项目可见性
+  - 项目创建要求平台管理员指定首个项目 `admin`
+  - `/api/admin/projects`
+- 用户管理后端与前端主路径：
+  - 用户列表、创建、启用/禁用
+  - 重置密码
+  - `must_change_password`
+  - `last_login_at`
+  - `password_updated_at`
+  - 禁用用户和重置密码时撤销已有 session
+- Setup 核心链路：
+  - `system_settings`
+  - `GET /api/setup/status`
+  - `POST /api/setup/complete`
+  - 未完成 setup 时阻断业务接口
+  - 前端 setup 页与首次改密页
+- 管理端安全基线大部分：
+  - Session Cookie `HttpOnly / SameSite`
+  - staging / prod 默认 `Secure`
+  - CSRF cookie + `X-CSRF-Token`
+  - 基础安全响应头
+  - 登录失败节流
+  - 密码强度校验
+  - 首次/强制改密
+- 平台级审计主路径：
+  - 用户创建 / 禁用 / 重置密码
+  - 平台项目创建
+  - setup completed
+
+### 2.2 部分完成
+
+- Setup wizard 已覆盖“创建用户、创建首个项目、指定项目管理员、完成 setup”，但尚未覆盖首个环境、配置文件、模板实例。
+- 项目创建兼容别名 `POST /api/projects` 已改成平台管理员创建项目语义，但长期应优先使用 `/api/admin/projects`。
+- 审计日志已有平台级和项目级数据，但前端 audit logs 页面仍是占位。
+- 请求链路有 `TraceLayer`，但 Open API 关键失败事件留痕和限流尚未形成完整安全基线。
+
+### 2.3 尚未完成
+
+- Open API 基础限流。
+- Open API 关键失败事件记录。
+- Docker Compose 交付方案。
+- 通用 Linux 二进制 + PostgreSQL + 反向代理 runbook。
+- projects / config_files 删除能力与引用检查。
+- 项目成员、sync records、heartbeats、audit logs 的真实前端页面。
+- 文档压缩后的最终三层结构。
+- Config Workspace 统一升级。
+
+## 3. 后续固定顺序
 
 按下面顺序推进，避免在编辑器体验或低风险页面上过早分散精力：
 
-1. 平台级权限模型与用户管理
-2. 系统初始化与首次登录 setup
-3. 上线安全基线
-4. 资源生命周期与文案收口
-5. 低风险管理页面补齐
-6. 文档压缩
-7. Config Workspace 统一升级
+1. 上线安全基线剩余项
+2. 上线实施方案
+3. 资源生命周期与文案收口
+4. 低风险管理页面补齐
+5. 文档压缩
+6. Config Workspace 统一升级
 
-## 3. Phase 1: 平台级权限模型与用户管理
+## 4. Phase 1: 平台级权限模型与用户管理
 
-### 3.1 目标
+状态：已基本完成，后续只做文档同步、细节修正和缺口补齐。
+
+### 4.1 目标
 
 把当前“登录用户 + 项目成员”模型扩成两层：
 
@@ -43,7 +99,7 @@
 
 同时补齐 MVP 可长期运营的用户管理模型。
 
-### 3.2 必须完成的设计改动
+### 4.2 必须完成的设计改动
 
 1. 平台管理员默认不自动拥有任何项目可见性
 2. 项目创建只能由 `platform_admin` 发起
@@ -55,7 +111,7 @@
    - `password_updated_at`
 5. 用户不做物理删除
 
-### 3.3 后端实施项
+### 4.3 后端实施项
 
 #### 数据模型
 
@@ -92,7 +148,7 @@
 
 建议把“平台侧创建项目”和“项目内修改项目信息”分开，而不是继续复用同一路由语义。
 
-### 3.4 前端实施项
+### 4.4 前端实施项
 
 新增平台级页面：
 
@@ -107,7 +163,7 @@
   - `platform_admin` -> 平台控制台
   - 普通项目成员 -> 项目列表
 
-### 3.5 测试验收
+### 4.5 测试验收
 
 至少补：
 
@@ -116,39 +172,37 @@
 - 项目创建必须指定首个项目 `admin`
 - 普通项目成员不能调用平台级用户管理接口
 
-## 4. Phase 2: 系统初始化与首次登录 Setup
+## 5. Phase 2: 系统初始化与首次登录 Setup
 
-### 4.1 目标
+状态：核心链路已完成；初始化交付和 wizard 扩展仍需补齐。
+
+### 5.1 目标
 
 交付后的系统不再依赖手工 seed 文件编辑来完成首启。
 
-### 4.2 必须完成的能力
+### 5.2 必须完成的能力
 
 1. 初始化 CLI / init 命令
-2. 首次登录改密
-3. 首次登录 setup wizard
+2. 首次登录改密（已完成）
+3. 首次登录 setup wizard（部分完成）
 4. Docker Compose 启动方案
 5. 通用 Linux runbook
 
-### 4.3 后端实施项
+### 5.3 后端实施项
 
-建议明确系统初始化状态来源，例如：
+系统初始化状态来源已经采用 `system_settings` 表。
 
-- `system_settings` 表
-- 或固定的 bootstrap state 表
-
-建议新增初始化相关 API：
+当前已实现初始化相关 API：
 
 - `GET /api/setup/status`
-- `POST /api/setup/bootstrap-admin`
 - `POST /api/setup/complete`
 
 约束建议：
 
 - 未初始化时，仅开放 setup 相关接口和健康检查
-- 完成初始化后，`bootstrap-admin` 类接口永久关闭
+- 完成初始化后，bootstrap 类能力不应再开放；当前仓库尚未实现独立 `bootstrap-admin` API，而是通过初始化配置 / seed 创建首个平台管理员。
 
-### 4.4 前端实施项
+### 5.4 前端实施项
 
 新增：
 
@@ -156,15 +210,16 @@
 - 首次改密页
 - Setup Wizard
 
-建议 wizard 最小步骤：
+建议 wizard 后续补齐到这些步骤：
 
 1. 修改初始平台管理员密码
 2. 创建首批用户
 3. 创建首个项目
 4. 指定首个项目管理员
 5. 创建首个环境
+6. 创建首个配置文件 / 模板实例
 
-### 4.5 交付物
+### 5.5 交付物
 
 MVP 交付包中应包含：
 
@@ -174,31 +229,33 @@ MVP 交付包中应包含：
 - 通用 Linux 反向代理示例
 - 首次启动排障手册
 
-## 5. Phase 3: 上线安全基线
+## 6. Phase 3: 上线安全基线
 
-### 5.1 目标
+状态：管理端安全基线已完成大半；Open API 限流和失败事件留痕仍是主要缺口。
+
+### 6.1 目标
 
 把当前已经写在规则文档里的安全边界真正落到代码和部署方案中。
 
-### 5.2 必做项
+### 6.2 必做项
 
 #### 管理端
 
 - Session Cookie:
-  - `HttpOnly`
-  - `Secure`
-  - `SameSite`
-- CSRF 防护
-- 基础安全响应头
-- 登录失败节流
-- 密码强度校验
-- 首次改密 / 强制改密逻辑
+  - `HttpOnly`（已完成）
+  - `Secure`（staging / prod 默认启用）
+  - `SameSite`（已完成）
+- CSRF 防护（已完成）
+- 基础安全响应头（已完成，CSP / HSTS 是否纳入 MVP 待定）
+- 登录失败节流（已完成）
+- 密码强度校验（已完成）
+- 首次改密 / 强制改密逻辑（已完成）
 
 #### 开放消费端
 
-- 基础限流
-- 关键失败事件留痕
-- 请求链路日志
+- 基础限流（未完成）
+- 关键失败事件留痕（未完成）
+- 请求链路日志（已有基础 tracing，需安全语义复核）
 
 #### 审计
 
@@ -209,15 +266,15 @@ MVP 交付包中应包含：
   - 初始化完成
   - 项目创建
 
-### 5.3 技术实施项
+### 6.3 技术实施项
 
 - HTTP 层安全 header middleware
 - Session / 登录接口的 CSRF 方案
 - 登录节流实现
-- Open API 限流中间件
+- Open API 限流中间件（待做）
 - 错误日志 / 审计日志脱敏复查
 
-### 5.4 测试验收
+### 6.4 测试验收
 
 - 未携带合法 CSRF 的管理端写请求被拒绝
 - 登录错误达到阈值后被节流
@@ -225,13 +282,15 @@ MVP 交付包中应包含：
 - 响应头包含预期安全 header
 - 审计和 tracing 中不出现明文 secret / token
 
-## 6. Phase 4: 资源生命周期与文案收口
+## 7. Phase 4: 资源生命周期与文案收口
 
-### 6.1 目标
+状态：deployment instance 已完成；projects / config_files 删除能力尚未完成。
+
+### 7.1 目标
 
 不强行把所有资源做成同一种生命周期，但统一“用词、删除边界、错误提示”。
 
-### 6.2 必做的资源模型调整
+### 7.2 必做的资源模型调整
 
 #### Projects
 
@@ -253,7 +312,7 @@ MVP 交付包中应包含：
 - 统一为 `active | disabled`
 - 不物理删除
 
-### 6.3 文案收口
+### 7.3 文案收口
 
 统一这些术语在前端、错误码、文档中的含义：
 
@@ -264,24 +323,26 @@ MVP 交付包中应包含：
 - `delete`
 - `restore`
 
-### 6.4 后端实施项
+### 7.4 后端实施项
 
 - `projects` 删除前引用检查
 - `config_files` 删除前引用检查
 - 相关错误码补齐
 - OpenAPI 与 DB 文档同步
 
-### 6.5 前端实施项
+### 7.5 前端实施项
 
 - 项目页补删除入口和确认逻辑
 - 配置文件页补删除入口和确认逻辑
 - 统一状态 badge、表单选项、错误提示
 
-## 7. Phase 5: 低风险页面补齐
+## 8. Phase 5: 低风险页面补齐
 
 这些页面不应先于前四个阶段，但在骨架完成后应尽快补齐。
 
-### 7.1 必补页面
+状态：路由存在，真实页面尚未实现。
+
+### 8.1 必补页面
 
 - 项目成员页
 - sync records 页面
@@ -289,13 +350,13 @@ MVP 交付包中应包含：
 - audit logs 页面
 - 创建项目入口改造后的平台项目创建流程
 
-### 7.2 前端验收
+### 8.2 前端验收
 
 - admin/editor/viewer 的入口展示符合权限矩阵
 - 非权限用户进入页面时提示明确
 - 从页面可以完成真实项目协作闭环，而不是只存在后端接口
 
-## 8. Phase 6: 文档压缩
+## 9. Phase 6: 文档压缩
 
 前几阶段完成后，把当前文档体系收成三层：
 
@@ -317,7 +378,7 @@ MVP 交付包中应包含：
 - `runbooks/` 只留部署 / 初始化 / 运维 / 恢复
 - 历史阶段文档移到 `archive/`
 
-## 9. Phase 7: 最后推进 Config Workspace
+## 10. Phase 7: 最后推进 Config Workspace
 
 只有在前六阶段完成后，再推进：
 
@@ -331,7 +392,7 @@ MVP 交付包中应包含：
 - 它重要，但不是当前上线运营骨架的 blocker
 - 等平台权限、初始化和安全基线稳定后再做，返工更少
 
-## 10. 明确不在本轮优先推进的事项
+## 11. 明确不在本轮优先推进的事项
 
 以下内容当前不应抢占前述阶段：
 
@@ -342,19 +403,18 @@ MVP 交付包中应包含：
 - 增量拉取
 - 灰度发布
 
-## 11. 建议的提交批次
+## 12. 建议的提交批次
 
 建议按下面批次提交，避免一个分支里混太多横向变化：
 
-1. `platform-admin-and-users`
-2. `setup-bootstrap-and-init`
-3. `security-baseline`
+1. `docs-sync-and-compaction`
+2. `open-api-security-baseline`
+3. `launch-runbooks`
 4. `resource-lifecycle-alignment`
 5. `operations-pages`
-6. `docs-compaction`
-7. `config-workspace`
+6. `config-workspace`
 
-## 12. 最终上线前验收清单
+## 13. 最终上线前验收清单
 
 上线前至少确认：
 

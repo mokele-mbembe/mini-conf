@@ -15,6 +15,7 @@
 ## 2. 表清单
 
 - `users`
+- `system_settings`
 - `projects`
 - `project_members`
 - `config_files`
@@ -35,8 +36,32 @@
 - `username` varchar(64) not null unique
 - `password_hash` varchar(255) not null
 - `status` varchar(32) not null default 'active'
+- `is_platform_admin` boolean not null default false
+- `must_change_password` boolean not null default false
+- `last_login_at` timestamptz null
+- `password_updated_at` timestamptz null
 - `created_at` timestamptz not null default now()
 - `updated_at` timestamptz not null default now()
+
+说明：
+
+- `status` 只采用 `active`、`disabled`
+- `is_platform_admin` 表示平台管理权限，不自动带来任何项目业务可见性
+- 用户不做物理删除，避免破坏审计和历史发布责任链
+
+### system_settings
+
+- `id` smallint pk，固定为 `1`
+- `setup_completed_at` timestamptz null
+- `setup_completed_by_user_id` bigint null references users(id) on delete set null
+- `created_at` timestamptz not null default now()
+- `updated_at` timestamptz not null default now()
+
+说明：
+
+- 当前用于记录系统首次 setup 是否完成
+- setup 未完成时，业务接口会被 `setup_required` 阻断
+- 认证、健康检查、setup 和平台初始化相关接口在 setup 未完成时保持可用
 
 ### projects
 
@@ -61,7 +86,8 @@
 
 - 首版角色只保留 `admin`、`editor`、`viewer`
 - 权限判断以项目成员关系为主，而不是全局角色
-- 引入该表时，将历史项目回填给活动用户 `admin`，角色为 `admin`
+- 平台管理员必须被显式加入项目后，才拥有项目业务可见性
+- 历史迁移阶段曾将历史项目回填给活动用户 `admin`，角色为 `admin`；新项目创建应通过平台项目创建流程指定首个 admin
 
 ### config_files
 

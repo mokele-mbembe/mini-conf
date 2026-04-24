@@ -1,186 +1,140 @@
 # mini-conf Kickoff
 
-这份文档不再承担“项目启动前规划草案”的职责，而是当前仓库的：
+这份文档是根目录的续工索引，只回答“当前做到哪、下一步做什么、从哪里读起”。
 
-- 未完成工作总索引
-- 新会话续工入口
-- 文档导航与 prompt 集合页
+面向 AI agent 的完整入口已经收口到：
 
-角色分工：
+- [docs/agents/AGENT_START_HERE.md](./docs/agents/AGENT_START_HERE.md)
 
-- [README.md](./README.md)：项目定位、核心模型、当前状态总览
-- [DEVELOPMENT_LOG.md](./DEVELOPMENT_LOG.md)：阶段进度、近期完成项、会话交接记录
-- `KICKOFF.md`：接下来还要做什么，以及从哪组文档继续
+不要再从多个 `FRONTEND_*`、handoff 和旧 checklist 中拼启动 prompt。
 
 ## 1. 当前整体状态
 
-截至当前仓库状态：
+截至当前仓库真实状态：
 
-- 后端 MVP 主链路已基本完成
-- 项目级权限、审计日志、开放接口主路径已落地
-- 配置标识已收口为 `ConfigFile.code / open config / config_file_id`，后端主路径不再使用 `process_key`
-- 部署实例生命周期已收口为 `active / inactive`，并已落地 activate / deactivate / token reset 规则
-- `apps/web` 已初始化，已有登录页、项目列表页、项目详情骨架页和配置文件列表 / 编辑页
-- 前端已接入 `lint / format:check / typecheck / build`
-- GitHub Actions 已接入前端 build 和最小 Playwright smoke E2E
+- 后端 MVP 配置中心主链路已基本完成。
+- 项目级权限、平台级权限、审计日志、开放接口主路径已落地。
+- 配置标识已收口为 `ConfigFile.code / open config / config_file_id`，后端主路径不再使用 `process_key`。
+- 部署实例运行态仍是 `active / inactive`；归档和删除通过 `is_archived / deleted_at / deployment_uid` 表达。
+- `apps/web` 已有真实管理台，不再是 scaffold：
+  - 登录、setup、首次改密
+  - 平台用户管理、平台项目列表和创建
+  - 项目列表、配置文件、环境、部署实例
+  - Draft、Saved Versions、preview-bundle、publish
+  - Release history / detail / diff
+  - deployment archive / restore / permanent delete
+- 前端已接入 lint、format check、typecheck、build 和 Playwright E2E。
+- 当前最大的剩余风险已经从“主链路缺页面”转为“上线运营骨架、安全剩余项、文档和 runbook 收口”。
 
-当前真正还在推进的大项，已经不再是“搭骨架”，而是“在现有骨架上继续完成主路径”。
+## 2. 当前未完成大项
 
-## 2. 当前未完成的大项
+按当前优先级排序：
 
-### 2.1 前端管理台主路径
+1. 文档同步与入口压缩：保持 README / KICKOFF / DEVELOPMENT_LOG / constraints 与当前实现一致。
+2. 上线安全基线剩余项：
+   - Open API 基础限流
+   - 关键失败事件留痕
+   - 请求链路日志复核
+   - 安全响应头是否补 CSP / HSTS 的取舍
+3. 上线实施方案：
+   - Docker Compose
+   - 通用 Linux 二进制 + PostgreSQL + 反向代理 runbook
+   - 初始化和生产变量清单
+4. 资源生命周期与文案收口：
+   - projects 删除能力和引用检查
+   - config_files 删除能力和引用检查
+   - 状态词、错误码、前端文案统一
+5. 低风险运营页面：
+   - 项目成员页
+   - sync records 页面
+   - heartbeats 页面
+   - audit logs 页面
+6. 质量补量：
+   - 前端单元 / 组件测试基线
+   - 更完整的页面级 E2E
+   - 覆盖率持续补量
+   - `sqlx-check` 恢复为强制检查的时机评估
+7. Config Workspace 统一升级：
+   - Draft 编辑统一升级
+   - Release 只读代码视图
+   - Diff 统一升级
+   - Merge Workspace
 
-优先级最高，建议继续按模块切片推进：
+## 3. 读文档顺序
 
-- [x] 配置文件列表 / 编辑页
-- [ ] 前端 API 类型与 client 跟随后端生命周期接口收口
-- [ ] 部署实例列表 / 详情页
-- [ ] 部署实例激活 / 停用 / token reset 操作
-- [ ] 模板创建实例流程
-- [ ] Draft 编辑页
-- [ ] preview-bundle 预览页
-- [ ] release history / diff 页
-- [ ] 项目成员页
-- [ ] sync records / heartbeats / audit logs 页面
-- [ ] 前端单元 / 组件测试基线
+通用续工：
 
-### 2.2 质量与 CI 收口
+1. [README.md](./README.md)
+2. [DEVELOPMENT_LOG.md](./DEVELOPMENT_LOG.md)
+3. [MAIN_DEV_CHECKLIST.md](./MAIN_DEV_CHECKLIST.md)
+4. [docs/agents/AGENT_START_HERE.md](./docs/agents/AGENT_START_HERE.md)
 
-- [ ] 前端单元测试基线
-- [ ] 更完整的前端页面级 E2E
-- [ ] 覆盖率持续补量
-- [ ] `sqlx-check` 恢复为强制检查的时机评估
+继续前端任务：
 
-### 2.3 后续后端 / 工程收口
+- [docs/collaboration/FRONTEND_TASK_WORKFLOW.md](./docs/collaboration/FRONTEND_TASK_WORKFLOW.md)
+- [docs/collaboration/FRONTEND_HANDOFF.md](./docs/collaboration/FRONTEND_HANDOFF.md)
+- [docs/constraints/FRONTEND_MVP_BLUEPRINT.md](./docs/constraints/FRONTEND_MVP_BLUEPRINT.md)
+- [docs/constraints/ADMIN_API.md](./docs/constraints/ADMIN_API.md)
 
-- [ ] 持续补 alpha 黑盒回归
-- [ ] 咖啡中间件演示案例程序
-- [ ] 部署与运行文档继续收口
-- [ ] OpenAPI / 文档 / 前端语义持续对齐
+继续接口、权限、数据库或安全任务：
 
-## 3. 按工作主题读哪些文档
+- [docs/constraints/ADMIN_API.md](./docs/constraints/ADMIN_API.md)
+- [docs/constraints/AUTH_AND_SECURITY.md](./docs/constraints/AUTH_AND_SECURITY.md)
+- [docs/constraints/DB_SCHEMA.md](./docs/constraints/DB_SCHEMA.md)
+- [docs/constraints/product-qa/0012-mvp-launch-operability-and-admin-model.md](./docs/constraints/product-qa/0012-mvp-launch-operability-and-admin-model.md)
+- [docs/artifacts/openapi.json](./docs/artifacts/openapi.json)
 
-### 3.1 如果继续前端任务
+继续部署实例、客户端上报或 demo 任务：
 
-优先读这些：
+- [docs/public/CLIENT_HTTP_PROTOCOL.md](./docs/public/CLIENT_HTTP_PROTOCOL.md)
+- [docs/constraints/DEMO_SCENARIO_COFFEE_MIDDLEWARE.md](./docs/constraints/DEMO_SCENARIO_COFFEE_MIDDLEWARE.md)
+- [docs/constraints/product-qa/0007-config-identity-and-heartbeats.md](./docs/constraints/product-qa/0007-config-identity-and-heartbeats.md)
 
-- [DEVELOPMENT_LOG.md](./DEVELOPMENT_LOG.md)
-- [FRONTEND_TASK_WORKFLOW.md](./docs/collaboration/FRONTEND_TASK_WORKFLOW.md)
-- [FRONTEND_HANDOFF.md](./docs/collaboration/FRONTEND_HANDOFF.md)
-- [FRONTEND_WORKSPACE.md](./docs/collaboration/FRONTEND_WORKSPACE.md)
-- [FRONTEND_PAGE_TESTING.md](./docs/collaboration/FRONTEND_PAGE_TESTING.md)
-- [FRONTEND_IMPLEMENTATION_PLAN.md](./docs/collaboration/FRONTEND_IMPLEMENTATION_PLAN.md)
-- [FRONTEND_MVP_BLUEPRINT.md](./docs/constraints/FRONTEND_MVP_BLUEPRINT.md)
-- [ADMIN_API.md](./docs/constraints/ADMIN_API.md)
-- [0001-template-publish-and-clone.md](./docs/constraints/product-qa/0001-template-publish-and-clone.md)
-- [0002-required-configs-and-preview.md](./docs/constraints/product-qa/0002-required-configs-and-preview.md)
-- [0003-release-diff.md](./docs/constraints/product-qa/0003-release-diff.md)
-- [0004-token-reset.md](./docs/constraints/product-qa/0004-token-reset.md)
-- [0005-project-members-permissions-audit.md](./docs/constraints/product-qa/0005-project-members-permissions-audit.md)
-- [0006-config-file-format-and-ux-alignment.md](./docs/constraints/product-qa/0006-config-file-format-and-ux-alignment.md)
-- [0007-config-identity-and-heartbeats.md](./docs/constraints/product-qa/0007-config-identity-and-heartbeats.md)
-- [DEMO_SCENARIO_COFFEE_MIDDLEWARE.md](./docs/constraints/DEMO_SCENARIO_COFFEE_MIDDLEWARE.md)
+## 4. 常用恢复命令
 
-### 3.2 如果继续后端 / 接口 / 黑盒 / 质量工作
-
-优先读这些：
-
-- [DEVELOPMENT_LOG.md](./DEVELOPMENT_LOG.md)
-- [QUALITY_CHECK_PLAN.md](./docs/collaboration/QUALITY_CHECK_PLAN.md)
-- [ADMIN_API.md](./docs/constraints/ADMIN_API.md)
-- [CLIENT_HTTP_PROTOCOL.md](./docs/public/CLIENT_HTTP_PROTOCOL.md)
-- [DB_SCHEMA.md](./docs/constraints/DB_SCHEMA.md)
-- [AUTH_AND_SECURITY.md](./docs/constraints/AUTH_AND_SECURITY.md)
-- [DEMO_SCENARIO_COFFEE_MIDDLEWARE.md](./docs/constraints/DEMO_SCENARIO_COFFEE_MIDDLEWARE.md)
-- [product-qa/README.md](./docs/constraints/product-qa/README.md)
-
-### 3.3 如果要恢复本地环境或换机器续工
-
-优先读这些：
-
-- [BOOTSTRAP.md](./docs/public/BOOTSTRAP.md)
-- [DEV_LINUX_WSL2.md](./docs/agents/DEV_LINUX_WSL2.md)
-- [DEV_FEDORA43_WORKSTATION.md](./docs/agents/DEV_FEDORA43_WORKSTATION.md)
-- [REPO_INIT_CHECKLIST.md](./docs/collaboration/REPO_INIT_CHECKLIST.md)
-
-## 4. 下次开工建议命令
-
-### 4.1 恢复上下文
+只恢复上下文：
 
 ```bash
-git status --short
-cargo test --workspace
-bash scripts/export-openapi.sh
-just coverage-check
+git status --short --branch
 ```
 
-### 4.2 继续前端主路径
+非 DB 基线：
 
 ```bash
-pnpm install
+just ci-local
+```
+
+数据库主路径：
+
+```bash
+just ci-local-db
+```
+
+完整本机收口：
+
+```bash
+just ci-local-full
+```
+
+前端联调：
+
+```bash
 just dev-db-prepare-local
 just run-server-local
 just dev-web
 ```
 
-### 4.3 按接近 CI 的方式复现前端 smoke
+隔离 Web E2E：
 
 ```bash
-pnpm --dir apps/web build
-PLAYWRIGHT_BASE_URL=http://127.0.0.1:4173 pnpm --dir apps/web test:e2e
+just test-e2e-local
 ```
 
-## 5. 续工 prompt 集合
+## 5. 使用规则
 
-### 5.1 前端续工主入口
-
-前端续工不要再在多个文档里找 prompt，统一以 [FRONTEND_TASK_WORKFLOW.md](./docs/collaboration/FRONTEND_TASK_WORKFLOW.md) 第 10 节为准。
-
-下次可以直接先贴这一段：
-
-```text
-请先阅读 DEVELOPMENT_LOG.md，然后按 docs/collaboration/FRONTEND_TASK_WORKFLOW.md 第 10 节的统一 kickoff prompt 继续。
-
-本轮任务是：
-[把这里替换成具体页面或模块；当前推荐从“前端 API 类型与 client 收口”或“部署实例列表 / 详情 / 生命周期操作”开始]
-```
-
-### 5.2 通用续工入口
-
-如果下次不是只做前端，而是先让模型帮你判断“当前最该推进哪一块”，可以直接贴这段：
-
-```text
-请先阅读：
-- README.md
-- KICKOFF.md
-- DEVELOPMENT_LOG.md
-
-对仓库的分支使用策略请参照规范:
-- MAIN_DEV_CHECKLIST.md
-
-如果本轮涉及前端，再补读：
-- docs/collaboration/FRONTEND_TASK_WORKFLOW.md
-- docs/collaboration/FRONTEND_HANDOFF.md
-- docs/collaboration/FRONTEND_WORKSPACE.md
-- docs/collaboration/FRONTEND_PAGE_TESTING.md
-- docs/collaboration/QUALITY_CHECK_PLAN.md
-- docs/constraints/FRONTEND_MVP_BLUEPRINT.md
-- docs/constraints/ADMIN_API.md
-
-你先不要直接写代码。
-
-请先基于当前仓库真实状态，总结：
-1. 当前已经完成了什么
-2. 还有哪些大项未完成
-3. 本轮最值得推进哪一项
-4. 如果继续前端，应该先输出什么任务规范和验收标准
-```
-
-## 6. 使用规则
-
-- 如果要继续前端任务，默认先走任务规范和执行计划，再由 Codex 本地实现并自验
-- 如果产品语义要改，先更新 `docs/constraints/product-qa/*` 或相关约束文档，再改代码
-- 如果涉及部署实例或客户端上报，必须先确认 `0007-config-identity-and-heartbeats.md` 与 `DEMO_SCENARIO_COFFEE_MIDDLEWARE.md`
-- 如果继续收口配置文件页的格式、状态、schema 痕迹、中文字段命名或后续 i18n 入口，先看 `0006-config-file-format-and-ux-alignment.md`
-- 如果前端出现白屏或联调异常，不要只看 `/api/healthz`，至少同时验证 `/api/auth/me`、登录链路和浏览器 Console
-- 如果复现前端 smoke，本地和 CI 都要保证后端真正建立 `db_pool`
+- 当前单人 MVP 前开发默认遵守 `main-first`，细则见 [MAIN_DEV_CHECKLIST.md](./MAIN_DEV_CHECKLIST.md)。
+- 如果产品语义要改，先更新 `docs/constraints/` 或 `docs/constraints/product-qa/*`，再改代码。
+- 如果接口或 schema 改动影响 OpenAPI，必须同步 `docs/artifacts/openapi.json`。
+- 如果继续前端任务，默认先按 [FRONTEND_TASK_WORKFLOW.md](./docs/collaboration/FRONTEND_TASK_WORKFLOW.md) 输出任务规范和验收标准，再实现。
+- 如果前端白屏或联调异常，不要只看 `/api/healthz`；至少验证 `/api/auth/me`、登录链路和浏览器 Console。
+- `docs/archive/` 中的文档只保留历史上下文，不作为当前执行入口。

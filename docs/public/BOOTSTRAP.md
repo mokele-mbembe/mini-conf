@@ -1,5 +1,7 @@
 # 项目脚手架与启动清单
 
+> 注：这份文档保留项目脚手架、环境变量和启动命令的总览。当前续工入口以 [docs/agents/AGENT_START_HERE.md](../agents/AGENT_START_HERE.md) 为准；接口语义以 [ADMIN_API.md](../constraints/ADMIN_API.md) 和 OpenAPI 产物为准。
+
 ## 1. Rust workspace
 
 建议结构：
@@ -95,8 +97,19 @@ OPENAPI_EXPORT_PATH=docs/artifacts/openapi.json
 - `POST /api/auth/login`
 - `POST /api/auth/logout`
 - `GET /api/auth/me`
+- `GET /api/auth/csrf`
+- `POST /api/auth/change-password`
+- `GET /api/setup/status`
+- `POST /api/setup/complete`
+- `GET /api/admin/users`
+- `POST /api/admin/users`
+- `GET /api/admin/users/:id`
+- `PATCH /api/admin/users/:id`
+- `POST /api/admin/users/:id/reset-password`
+- `GET /api/admin/projects`
+- `POST /api/admin/projects`
 - `GET /api/projects`
-- `POST /api/projects`
+- `POST /api/projects`（兼容别名，优先使用 `/api/admin/projects`）
 - `GET /api/projects/:id`
 - `PUT /api/projects/:id`
 - `GET /api/projects/:id/members`
@@ -137,23 +150,16 @@ OPENAPI_EXPORT_PATH=docs/artifacts/openapi.json
 
 ## 6. 前端页面顺序
 
-建议按这个顺序开发：
+当前核心页面主链路已经完成。后续建议按这个顺序补齐：
 
-1. 登录页
-2. 项目列表页
-3. 配置文件列表页
-4. 前端 API 类型与 client 收口
-5. 部署实例列表 / 详情页
-6. 部署实例激活 / 停用 / token reset
-7. 模板创建实例流程
-8. Draft 编辑页
-9. Preview bundle 预览页
-10. Release 历史页
-11. Diff 对比页
-12. 项目成员页
-13. 部署实例同步记录 / 心跳 / 审计页
+1. 项目成员页
+2. sync records 页面
+3. heartbeats 页面
+4. audit logs 页面
+5. 前端单元 / 组件测试基线
+6. Config Workspace 统一升级
 
-在继续推进前端页面前，建议先补一套本机长期保留的 runtime DB，用于观察真实页面状态，而不是一直复用测试库。
+已有页面和运行方式见 [FRONTEND_TASK_WORKFLOW.md](../collaboration/FRONTEND_TASK_WORKFLOW.md)。
 
 ## 7. 自动化命令建议
 

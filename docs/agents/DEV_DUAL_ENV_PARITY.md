@@ -11,7 +11,7 @@
 
 标准工作流以 [docs/STANDARD_WORKFLOW.md](./STANDARD_WORKFLOW.md) 为准；本文只负责回答 WSL 与 Fedora 两个平台如何保持同一套规范实现。
 
-如果你需要按 2026-04-09 这次调整快速把另一台 Fedora 机器跟上，直接看 [2026-04-09 工作流迁移说明](./WORKFLOW_MIGRATION_2026-04-09.md)。
+如果你需要按 2026-04-09 这次调整快速把另一台 Fedora 机器跟上，历史说明已归档到 [2026-04-09 工作流迁移说明](../archive/agents/WORKFLOW_MIGRATION_2026-04-09.md)。当前续工优先看 [AGENT_START_HERE.md](./AGENT_START_HERE.md)。
 
 目标是避免出现：
 

@@ -14,3 +14,8 @@
 - [product-qa/0007-config-identity-and-heartbeats.md](./product-qa/0007-config-identity-and-heartbeats.md)
 - [product-qa/0011-merge-workspace-and-visual-config-editor.md](./product-qa/0011-merge-workspace-and-visual-config-editor.md)
 - [product-qa/0012-mvp-launch-operability-and-admin-model.md](./product-qa/0012-mvp-launch-operability-and-admin-model.md)
+
+注意：
+
+- 平台管理、用户管理、项目创建和上线前优先级以 `product-qa/0012` 为准。
+- 如果早期文档与 `0012` 冲突，按 `0012` 和当前 OpenAPI / 测试实现判断。

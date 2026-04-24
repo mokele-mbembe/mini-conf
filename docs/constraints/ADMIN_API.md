@@ -18,7 +18,9 @@
 - 管理端 API 与开放消费端 API 分离
 - 管理端默认面向浏览器和受信任内部调用
 - 所有写操作默认要求登录
-- 所有权限判断以项目级成员关系为主
+- 平台管理权限和项目业务权限分层
+- 平台级操作要求 `platform_admin`
+- 项目业务资源访问以项目级成员关系为主
 - 当前所有列表接口统一返回 `{ "items": [...] }`
 - 所有错误响应使用统一错误格式
 
@@ -61,13 +63,12 @@
 
 ## 5. 列表与筛选约定
 
-当前首版列表接口不做分页统一约定。
-
-- 统一返回 `{ "items": [...] }`
+- 简单列表统一返回 `{ "items": [...] }`
+- 已分页列表返回 `{ "items": [...], "total": 0, "page": 1, "page_size": 20 }`
+- 当前已分页的主列表包括 deployment instances、admin users、admin projects
 - 按需支持查询参数过滤
-- 如果后续需要分页，再单独做协议升级
 
-## 6. 管理端认证接口
+## 6. 管理端认证与 Setup 接口
 
 首版支持两种模式的设计入口：
 
@@ -80,13 +81,21 @@
 
 ### `POST /api/auth/login`
 
+说明：
+
+- 登录前需要先调用 `GET /api/auth/csrf` 获取 CSRF cookie。
+- 登录请求需要携带同名 cookie 和 `X-CSRF-Token` header。
+
 成功响应：
 
 ```json
 {
   "user": {
     "id": 1,
-    "username": "admin"
+    "username": "admin",
+    "is_platform_admin": true,
+    "status": "active",
+    "must_change_password": false
   },
   "auth_mode": "session"
 }
@@ -101,7 +110,113 @@
 
 ### `GET /api/auth/me`
 
-## 7. Project API
+### `GET /api/auth/csrf`
+
+用途：
+
+- 签发前端可读取的 CSRF cookie。
+- 管理端写请求通过 CSRF cookie + `X-CSRF-Token` header 校验。
+
+### `POST /api/auth/change-password`
+
+用途：
+
+- 当前用户修改密码。
+- 修改成功后清除 `must_change_password`。
+- 修改密码会撤销该用户其他活跃 session。
+
+### `GET /api/setup/status`
+
+用途：
+
+- 查询系统是否完成首次 setup。
+
+### `POST /api/setup/complete`
+
+用途：
+
+- 由 `platform_admin` 标记系统 setup 完成。
+- 未完成 setup 前，业务接口会被 `setup_required` 阻断；认证、健康检查、setup、平台初始化相关接口保持可用。
+
+## 7. Platform Admin API
+
+平台 API 面向 `platform_admin`，不代表项目业务可见性。
+
+### `GET /api/admin/users`
+
+说明：
+
+- 支持按 `keyword / status / is_platform_admin / page / page_size` 查询。
+- 返回用户状态、平台管理员标记、强制改密标记、最近登录时间、密码更新时间和加入项目数量。
+
+### `POST /api/admin/users`
+
+请求体：
+
+```json
+{
+  "username": "alice",
+  "password": "TempPassword123!",
+  "is_platform_admin": false,
+  "must_change_password": true,
+  "status": "active"
+}
+```
+
+说明：
+
+- 密码需要满足基础强度要求。
+- 用户不做物理删除，生命周期使用 `active | disabled`。
+
+### `GET /api/admin/users/:id`
+
+### `PATCH /api/admin/users/:id`
+
+可更新：
+
+- `status`
+- `is_platform_admin`
+- `must_change_password`
+
+说明：
+
+- 禁用用户会撤销该用户已有活跃 session。
+- 系统至少保留一个 active platform admin。
+
+### `POST /api/admin/users/:id/reset-password`
+
+说明：
+
+- 重置密码后会撤销该用户已有活跃 session。
+- 可同时设置 `must_change_password`。
+
+### `GET /api/admin/projects`
+
+说明：
+
+- 平台侧查看项目壳列表。
+- 这是平台管理视角，不等价于 `/api/projects` 的当前用户项目列表。
+
+### `POST /api/admin/projects`
+
+请求体：
+
+```json
+{
+  "code": "coffee-main",
+  "name": "Coffee Main",
+  "description": "Coffee config center",
+  "initial_admin_user_id": 7
+}
+```
+
+说明：
+
+- 只有 `platform_admin` 可调用。
+- 必须指定一个 active 用户作为首个项目 `admin`。
+- 创建项目后，平台管理员默认不会自动加入该项目。
+
+## 8. Project API
 
 ### `GET /api/projects`
 
@@ -114,8 +229,11 @@
 
 说明：
 
-- 任意已登录用户都可以创建项目
-- 创建成功后，创建者自动成为该项目 `admin`
+- 这是 `/api/admin/projects` 的兼容别名。
+- 仅 `platform_admin` 可调用。
+- 必须提供 `initial_admin_user_id`。
+- 创建成功后，平台管理员默认不自动成为项目成员。
+- 新代码和前端入口应优先使用 `/api/admin/projects`。
 
 ### `GET /api/projects/:id`
 
@@ -126,7 +244,7 @@
 - `GET` 需要当前用户是该项目成员
 - `PUT` 仅项目 `admin` 可调用
 
-## 8. Project Member API
+## 9. Project Member API
 
 ### `GET /api/projects/:id/members`
 
@@ -178,7 +296,7 @@
 - 重复成员返回 `409 project_member_conflict`
 - 不允许删除或降级最后一个项目 `admin`
 
-## 9. Config File API
+## 10. Config File API
 
 ### `GET /api/config-files`
 
@@ -212,7 +330,7 @@
 - `GET` 需要项目成员身份
 - `POST / PUT` 仅项目 `admin` 可调用
 
-## 10. Project Environment API
+## 11. Project Environment API
 
 ### `GET /api/projects/:id/environments`
 
@@ -243,7 +361,7 @@
 - 被部署实例引用的环境删除时返回 `409 project_environment_in_use`
 - `POST / PUT / DELETE` 仅项目 `admin` 可调用
 
-## 11. Deployment Instance API
+## 12. Deployment Instance API
 
 ### `GET /api/deployment-instances`
 
@@ -354,7 +472,7 @@
 - `GET` 需要项目成员身份
 - `POST / PUT / clone` 仅项目 `admin` 可调用
 
-## 12. Draft API
+## 13. Draft API
 
 ### `GET /api/drafts/:deploymentId/:configFileId`
 
@@ -414,7 +532,7 @@
 - 前端通过多次调用这个接口完成批量 clone
 - `GET / PUT / clone` 仅项目 `admin` 和 `editor` 可调用
 
-## 12. Release API
+## 14. Release API
 
 ### `POST /api/releases/publish`
 
@@ -469,7 +587,7 @@
 - `diff_summary` 只返回轻量摘要，不返回 unified diff / patch 文本
 - `GET /api/releases*` 需要项目成员身份
 
-## 13. Deployment Credential API
+## 15. Deployment Credential API
 
 ### `POST /api/deployment-instances/:id/activate`
 
@@ -525,7 +643,7 @@
 - 仅允许 `active` 普通实例调用
 - 仅项目 `admin` 可调用
 
-## 14. Deployment Sync Record API
+## 16. Deployment Sync Record API
 
 ### `GET /api/deployment-sync-records`
 
@@ -567,7 +685,7 @@
 }
 ```
 
-## 15. Audit Log API
+## 17. Deployment Heartbeat API
 
 ### `GET /api/deployment-heartbeats`
 
@@ -604,7 +722,7 @@
 }
 ```
 
-## 16. Audit Log API
+## 18. Audit Log API
 
 ### `GET /api/audit-logs`
 
@@ -617,9 +735,10 @@
 
 说明：
 
-- 仅项目 `admin` 可查看
+- 项目级 audit logs 仅项目 `admin` 可查看
+- 平台级 audit logs 可由 `platform_admin` 查看
 - 当传入 `project_id` 时，返回该项目日志
-- 当不传 `project_id` 时，返回当前用户具备 `admin` 权限的项目日志，以及该用户自己的全局认证日志
+- 当不传 `project_id` 时，返回当前用户具备 `admin` 权限的项目日志，以及该用户自己的全局认证日志；`platform_admin` 还可看到平台级日志
 
 成功响应示例：
 
@@ -643,7 +762,7 @@
 }
 ```
 
-## 17. 状态码建议
+## 19. 状态码建议
 
 - `200 OK`
 - `201 Created`
@@ -656,10 +775,15 @@
 - `422 Unprocessable Entity`
 - `429 Too Many Requests`
 
-## 17. 首版错误码建议
+## 20. 首版错误码建议
 
 - `auth_invalid_credentials`
 - `auth_session_expired`
+- `csrf_token_missing`
+- `csrf_token_invalid`
+- `password_change_required`
+- `platform_permission_denied`
+- `setup_required`
 - `project_code_conflict`
 - `project_member_conflict`
 - `project_permission_denied`
@@ -678,7 +802,7 @@
 - `deployment_not_found`
 - `deployment_token_reset_failed`
 
-## 18. 实现建议
+## 21. 实现建议
 
 - 后端直接基于这些结构生成 OpenAPI
 - 在 CI 中检查导出的 OpenAPI 产物是否与仓库内版本一致
