@@ -114,6 +114,11 @@ Authorization: Bearer <token>
 }
 ```
 
+Open API 启用基础限流。高频请求超过当前窗口阈值时返回：
+
+- HTTP `429 Too Many Requests`
+- `code = "open_api_rate_limited"`
+
 ## 5. 版本检查与配置解析
 
 ### `GET /api/open/configs/resolve`

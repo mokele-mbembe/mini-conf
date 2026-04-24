@@ -1,9 +1,9 @@
 pub(crate) mod api;
 
-use crate::{error::ApiError, state::AppState};
+use crate::{config::AppEnv, error::ApiError, state::AppState};
 use axum::{
     Router,
-    extract::Request,
+    extract::{Request, State},
     middleware::{self, Next},
     response::Response,
     routing::get_service,
@@ -19,9 +19,9 @@ pub fn router(state: AppState) -> Router {
     let router = Router::new()
         .merge(crate::openapi::router())
         .nest("/api", api::router(state.clone()))
-        .with_state(state)
+        .with_state(state.clone())
         .layer(TraceLayer::new_for_http())
-        .layer(middleware::from_fn(add_security_headers));
+        .layer(middleware::from_fn_with_state(state, add_security_headers));
 
     if static_dir.is_dir() {
         let static_service = get_service(
@@ -36,8 +36,14 @@ pub fn router(state: AppState) -> Router {
     }
 }
 
-async fn add_security_headers(request: Request, next: Next) -> Response {
+async fn add_security_headers(
+    State(state): State<AppState>,
+    request: Request,
+    next: Next,
+) -> Response {
     let mut response = next.run(request).await;
-    crate::security::apply_security_headers(response.headers_mut());
+    let include_hsts = matches!(state.config().app_env, AppEnv::Staging | AppEnv::Prod);
+
+    crate::security::apply_security_headers(response.headers_mut(), include_hsts);
     response
 }

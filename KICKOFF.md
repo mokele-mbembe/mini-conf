@@ -24,37 +24,32 @@
   - Release history / detail / diff
   - deployment archive / restore / permanent delete
 - 前端已接入 lint、format check、typecheck、build 和 Playwright E2E。
-- 当前最大的剩余风险已经从“主链路缺页面”转为“上线运营骨架、安全剩余项、文档和 runbook 收口”。
+- 当前最大的剩余风险已经从“主链路缺页面”转为“上线运营骨架、文档和 runbook 收口”。
 
 ## 2. 当前未完成大项
 
 按当前优先级排序：
 
 1. 文档同步与入口压缩：保持 README / KICKOFF / DEVELOPMENT_LOG / constraints 与当前实现一致。
-2. 上线安全基线剩余项：
-   - Open API 基础限流
-   - 关键失败事件留痕
-   - 请求链路日志复核
-   - 安全响应头是否补 CSP / HSTS 的取舍
-3. 上线实施方案：
+2. 上线实施方案：
    - Docker Compose
    - 通用 Linux 二进制 + PostgreSQL + 反向代理 runbook
    - 初始化和生产变量清单
-4. 资源生命周期与文案收口：
+3. 资源生命周期与文案收口：
    - projects 删除能力和引用检查
    - config_files 删除能力和引用检查
    - 状态词、错误码、前端文案统一
-5. 低风险运营页面：
+4. 低风险运营页面：
    - 项目成员页
    - sync records 页面
    - heartbeats 页面
    - audit logs 页面
-6. 质量补量：
+5. 质量补量：
    - 前端单元 / 组件测试基线
    - 更完整的页面级 E2E
    - 覆盖率持续补量
    - `sqlx-check` 恢复为强制检查的时机评估
-7. Config Workspace 统一升级：
+6. Config Workspace 统一升级：
    - Draft 编辑统一升级
    - Release 只读代码视图
    - Diff 统一升级

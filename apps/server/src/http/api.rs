@@ -53,10 +53,9 @@ pub fn router(state: AppState) -> Router<AppState> {
             require_completed_setup,
         ));
 
-    let gated_open_routes = open::router().route_layer(middleware::from_fn_with_state(
-        state,
-        require_completed_setup,
-    ));
+    let gated_open_routes = open::router(state.clone()).route_layer(
+        middleware::from_fn_with_state(state, require_completed_setup),
+    );
 
     setup_free_routes
         .merge(gated_session_routes)

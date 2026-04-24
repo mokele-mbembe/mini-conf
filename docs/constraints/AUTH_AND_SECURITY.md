@@ -219,13 +219,19 @@ Setup 状态由 `system_settings` 记录。setup 未完成时，业务接口应�
 
 - Bearer Token 校验已落地。
 - 基础 HTTP tracing 已接入。
-- 基础限流和关键失败事件留痕仍是上线前缺口。
+- Open API 基础限流已落地，默认固定窗口为 60 秒 60 次请求。
+- Open API 失败事件审计已落地，4xx / 5xx 失败响应写入 `audit_logs`，action 为 `open_api.request_failed`。
 
-首版建议限流维度：
+首版限流维度：
 
-- 按 IP
-- 按 `deployment_key`
-- 按 token hash
+- 已实现：同一请求同时按客户端 IP 与 Bearer token hash 指纹分桶；无 token 请求同时按客户端 IP 与 anonymous 分桶。
+- 暂不实现：按 `deployment_key` 分桶。原因是当前统一中间件不解析 query / path / body 业务字段，后续只有在需要更精细租户隔离或高频客户端保护时再引入。
+
+失败事件审计约束：
+
+- 不记录 token 明文。
+- 不记录配置内容。
+- detail 只记录 method、path、status、client_ip、是否携带 bearer token、限流参数和安全错误码。
 
 ## 11. 敏感配置最小安全方案
 
@@ -268,7 +274,7 @@ MVP 阶段建议这样落地：
 - 已登录会话的写操作使用 CSRF cookie + `X-CSRF-Token` header 校验（已落地）
 - 所有输出默认按文本处理
 - 编辑内容不直接作为 HTML 渲染
-- 设置基础安全响应头（已落地；CSP / HSTS 是否纳入 MVP 仍需取舍）
+- 设置基础安全响应头（已落地，包含 CSP；staging / prod 启用 HSTS）
 - 登录失败节流（已落地）
 
 ## 14. 发布安全

@@ -3964,6 +3964,16 @@
               }
             }
           },
+          "429": {
+            "description": "Open API rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "500": {
             "description": "Internal server error",
             "content": {
@@ -4051,6 +4061,16 @@
           },
           "404": {
             "description": "Deployment, config file, or release not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Open API rate limit exceeded",
             "content": {
               "application/json": {
                 "schema": {
@@ -4171,6 +4191,16 @@
               }
             }
           },
+          "429": {
+            "description": "Open API rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "500": {
             "description": "Internal server error",
             "content": {
@@ -4258,6 +4288,16 @@
           },
           "404": {
             "description": "Deployment not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Open API rate limit exceeded",
             "content": {
               "application/json": {
                 "schema": {
@@ -4375,6 +4415,16 @@
           },
           "404": {
             "description": "Release not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Open API rate limit exceeded",
             "content": {
               "application/json": {
                 "schema": {

@@ -48,10 +48,15 @@
   - Session Cookie `HttpOnly / SameSite`
   - staging / prod 默认 `Secure`
   - CSRF cookie + `X-CSRF-Token`
-  - 基础安全响应头
+  - CSP / HSTS 等基础安全响应头
   - 登录失败节流
   - 密码强度校验
   - 首次/强制改密
+- Open API 安全基线：
+  - Bearer token 校验
+  - 基础限流
+  - 失败事件审计
+  - 基础 HTTP tracing
 - 平台级审计主路径：
   - 用户创建 / 禁用 / 重置密码
   - 平台项目创建
@@ -61,13 +66,10 @@
 
 - Setup wizard 已覆盖“创建用户、创建首个项目、指定项目管理员、完成 setup”，但尚未覆盖首个环境、配置文件、模板实例。
 - 项目创建兼容别名 `POST /api/projects` 已改成平台管理员创建项目语义，但长期应优先使用 `/api/admin/projects`。
-- 审计日志已有平台级和项目级数据，但前端 audit logs 页面仍是占位。
-- 请求链路有 `TraceLayer`，但 Open API 关键失败事件留痕和限流尚未形成完整安全基线。
+- 审计日志已有平台级、项目级和 Open API 失败数据，但前端 audit logs 页面仍是占位。
 
 ### 2.3 尚未完成
 
-- Open API 基础限流。
-- Open API 关键失败事件记录。
 - Docker Compose 交付方案。
 - 通用 Linux 二进制 + PostgreSQL + 反向代理 runbook。
 - projects / config_files 删除能力与引用检查。
@@ -79,12 +81,11 @@
 
 按下面顺序推进，避免在编辑器体验或低风险页面上过早分散精力：
 
-1. 上线安全基线剩余项
-2. 上线实施方案
-3. 资源生命周期与文案收口
-4. 低风险管理页面补齐
-5. 文档压缩
-6. Config Workspace 统一升级
+1. 上线实施方案
+2. 资源生命周期与文案收口
+3. 低风险管理页面补齐
+4. 文档压缩
+5. Config Workspace 统一升级
 
 ## 4. Phase 1: 平台级权限模型与用户管理
 
@@ -231,7 +232,7 @@ MVP 交付包中应包含：
 
 ## 6. Phase 3: 上线安全基线
 
-状态：管理端安全基线已完成大半；Open API 限流和失败事件留痕仍是主要缺口。
+状态：MVP 代码侧安全基线已完成；后续主要进入上线实施 runbook 和运维页面。
 
 ### 6.1 目标
 
@@ -246,16 +247,16 @@ MVP 交付包中应包含：
   - `Secure`（staging / prod 默认启用）
   - `SameSite`（已完成）
 - CSRF 防护（已完成）
-- 基础安全响应头（已完成，CSP / HSTS 是否纳入 MVP 待定）
+- 基础安全响应头（已完成，包含 CSP；staging / prod 启用 HSTS）
 - 登录失败节流（已完成）
 - 密码强度校验（已完成）
 - 首次改密 / 强制改密逻辑（已完成）
 
 #### 开放消费端
 
-- 基础限流（未完成）
-- 关键失败事件留痕（未完成）
-- 请求链路日志（已有基础 tracing，需安全语义复核）
+- 基础限流（已完成）
+- 关键失败事件留痕（已完成，写入 `audit_logs`）
+- 请求链路日志（已有基础 tracing，失败事件进入审计）
 
 #### 审计
 
@@ -271,8 +272,8 @@ MVP 交付包中应包含：
 - HTTP 层安全 header middleware
 - Session / 登录接口的 CSRF 方案
 - 登录节流实现
-- Open API 限流中间件（待做）
-- 错误日志 / 审计日志脱敏复查
+- Open API 限流中间件（已完成）
+- 错误日志 / 审计日志脱敏复查（Open API 失败审计不记录 token 明文）
 
 ### 6.4 测试验收
 
@@ -405,14 +406,17 @@ MVP 交付包中应包含：
 
 ## 12. 建议的提交批次
 
-建议按下面批次提交，避免一个分支里混太多横向变化：
+已完成批次：
 
 1. `docs-sync-and-compaction`
 2. `open-api-security-baseline`
-3. `launch-runbooks`
-4. `resource-lifecycle-alignment`
-5. `operations-pages`
-6. `config-workspace`
+
+后续建议按下面批次推进，避免一个分支里混太多横向变化：
+
+1. `launch-runbooks`
+2. `resource-lifecycle-alignment`
+3. `operations-pages`
+4. `config-workspace`
 
 ## 13. 最终上线前验收清单
 

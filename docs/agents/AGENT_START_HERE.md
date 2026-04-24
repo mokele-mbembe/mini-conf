@@ -11,8 +11,8 @@
 - 前端管理台主链路已打通：登录、setup、首次改密、平台用户管理、平台项目创建、项目列表、配置文件、环境、部署实例、Draft、Saved Versions、preview、publish、Release detail/diff、实例归档/恢复/永久删除。
 - 平台级权限模型已落地：`platform_admin` 与项目角色 `admin / editor / viewer` 分层；平台管理员默认不自动获得项目业务可见性。
 - Setup 核心链路已落地：`system_settings`、setup status、setup gate、setup complete、前端 setup 页。
-- 管理端安全基线已落地大半：HttpOnly session cookie、CSRF、基础安全响应头、登录失败节流、密码强度、强制改密、禁用用户撤销 session、审计脱敏。
-- 当前仍缺：Open API 基础限流与失败事件留痕、Docker Compose / 通用 Linux runbook、projects/config_files 删除能力、项目成员/sync records/heartbeats/audit logs 的真实前端页面、前端单元/组件测试基线、文档继续压缩。
+- 安全基线已覆盖管理端和 Open API：HttpOnly session cookie、CSRF、CSP/HSTS 等安全响应头、登录失败节流、Open API 基础限流、Open API 失败事件审计、密码强度、强制改密、禁用用户撤销 session、审计脱敏。
+- 当前仍缺：Docker Compose / 通用 Linux runbook、projects/config_files 删除能力、项目成员/sync records/heartbeats/audit logs 的真实前端页面、前端单元/组件测试基线、文档继续压缩。
 
 ## 2. 必读顺序
 
@@ -49,12 +49,11 @@
 按下面顺序推进，避免回到旧的“先补任意页面”模式：
 
 1. 文档同步和入口压缩：保持 README / KICKOFF / DEVELOPMENT_LOG / constraints 与真实实现一致。
-2. 上线安全基线剩余项：Open API 限流、关键失败事件留痕、请求链路日志复核、安全响应头复核。
-3. 上线实施交付：Docker Compose、通用 Linux 二进制部署 runbook、初始化和生产变量清单。
-4. 资源生命周期收口：projects / config_files 删除能力、引用检查、文案和错误码统一。
-5. 低风险运营页：项目成员、sync records、heartbeats、audit logs。
-6. 测试补量：前端单元/组件测试基线、更完整页面级 E2E、覆盖率持续补量。
-7. Config Workspace：Draft / Release / Diff / Merge 的统一编辑和阅读体验。
+2. 上线实施交付：Docker Compose、通用 Linux 二进制部署 runbook、初始化和生产变量清单。
+3. 资源生命周期收口：projects / config_files 删除能力、引用检查、文案和错误码统一。
+4. 低风险运营页：项目成员、sync records、heartbeats、audit logs。
+5. 测试补量：前端单元/组件测试基线、更完整页面级 E2E、覆盖率持续补量。
+6. Config Workspace：Draft / Release / Diff / Merge 的统一编辑和阅读体验。
 
 ## 4. 执行规则
 

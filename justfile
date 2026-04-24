@@ -154,11 +154,17 @@ sqlx-check:
 
 openapi-check:
   @if [ -f scripts/export-openapi.sh ]; then \
+    before_hash=""; \
+    if [ -f docs/artifacts/openapi.json ]; then \
+      before_hash="$(git hash-object docs/artifacts/openapi.json)"; \
+    fi; \
     bash scripts/export-openapi.sh; \
     if [ -f docs/artifacts/openapi.json ]; then \
-      if ! git diff --quiet -- docs/artifacts/openapi.json; then \
+      after_hash="$(git hash-object docs/artifacts/openapi.json)"; \
+      if [ "$before_hash" != "$after_hash" ]; then \
         echo "OpenAPI spec changed:"; \
         git status --short -- docs/artifacts/openapi.json || true; \
+        git diff -- docs/artifacts/openapi.json || true; \
         exit 1; \
       fi; \
     else \

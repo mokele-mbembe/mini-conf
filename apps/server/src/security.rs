@@ -1,5 +1,5 @@
 use crate::error::ApiError;
-use axum::http::{HeaderMap, HeaderName, HeaderValue};
+use axum::http::{HeaderMap, HeaderName, HeaderValue, header};
 use std::{
     collections::{HashMap, VecDeque},
     sync::{Arc, Mutex},
@@ -10,7 +10,12 @@ const FAILURE_WINDOW: Duration = Duration::from_secs(10 * 60);
 const BLOCK_WINDOW: Duration = Duration::from_secs(15 * 60);
 const MAX_FAILURES: usize = 5;
 
-const SECURITY_HEADERS: [(&str, &str); 5] = [
+pub const OPEN_API_RATE_LIMIT: usize = 60;
+pub const OPEN_API_RATE_WINDOW_SECS: u64 = 60;
+
+const OPEN_API_RATE_WINDOW: Duration = Duration::from_secs(OPEN_API_RATE_WINDOW_SECS);
+
+const SECURITY_HEADERS: [(&str, &str); 8] = [
     ("x-content-type-options", "nosniff"),
     ("x-frame-options", "DENY"),
     ("referrer-policy", "no-referrer"),
@@ -19,7 +24,18 @@ const SECURITY_HEADERS: [(&str, &str); 5] = [
         "camera=(), microphone=(), geolocation=()",
     ),
     ("cross-origin-opener-policy", "same-origin"),
+    ("cross-origin-resource-policy", "same-origin"),
+    ("x-permitted-cross-domain-policies", "none"),
+    (
+        "content-security-policy",
+        "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'",
+    ),
 ];
+
+const STRICT_TRANSPORT_SECURITY: (&str, &str) = (
+    "strict-transport-security",
+    "max-age=31536000; includeSubDomains",
+);
 
 #[derive(Debug, Default)]
 pub struct LoginThrottle {
@@ -27,9 +43,19 @@ pub struct LoginThrottle {
 }
 
 #[derive(Debug, Default)]
+pub struct OpenApiRateLimiter {
+    entries: Mutex<HashMap<String, OpenApiRateLimitEntry>>,
+}
+
+#[derive(Debug, Default)]
 struct LoginThrottleEntry {
     failures: VecDeque<Instant>,
     blocked_until: Option<Instant>,
+}
+
+#[derive(Debug, Default)]
+struct OpenApiRateLimitEntry {
+    requests: VecDeque<Instant>,
 }
 
 impl LoginThrottle {
@@ -42,7 +68,7 @@ impl LoginThrottle {
         let now = Instant::now();
 
         if let Some(entry) = entries.get_mut(key) {
-            prune_failures(entry, now);
+            prune_login_failures(entry, now);
 
             if let Some(blocked_until) = entry.blocked_until {
                 if blocked_until > now {
@@ -67,7 +93,7 @@ impl LoginThrottle {
         if let Ok(mut entries) = self.entries.lock() {
             let now = Instant::now();
             let entry = entries.entry(key.to_owned()).or_default();
-            prune_failures(entry, now);
+            prune_login_failures(entry, now);
             entry.failures.push_back(now);
 
             if entry.failures.len() >= MAX_FAILURES {
@@ -84,27 +110,101 @@ impl LoginThrottle {
     }
 }
 
+impl OpenApiRateLimiter {
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self::default())
+    }
+
+    pub fn ensure_request_allowed(&self, key: &str) -> Result<(), ApiError> {
+        self.ensure_request_allowed_for_keys(&[key.to_owned()])
+    }
+
+    pub fn ensure_request_allowed_for_keys(&self, keys: &[String]) -> Result<(), ApiError> {
+        let mut entries = self.entries.lock().map_err(|_| ApiError::internal())?;
+        let now = Instant::now();
+
+        for key in keys {
+            let entry = entries.entry(key.to_owned()).or_default();
+            prune_open_api_requests(entry, now);
+
+            if entry.requests.len() >= OPEN_API_RATE_LIMIT {
+                return Err(ApiError::too_many_requests(
+                    "open_api_rate_limited",
+                    "Too many Open API requests; try again later",
+                ));
+            }
+        }
+
+        for key in keys {
+            entries
+                .entry(key.to_owned())
+                .or_default()
+                .requests
+                .push_back(now);
+        }
+
+        Ok(())
+    }
+}
+
 pub fn login_throttle_key(headers: &HeaderMap, username: &str) -> String {
     let client = client_ip(headers).unwrap_or("unknown");
     format!("{}|{}", username.trim().to_ascii_lowercase(), client)
 }
 
-pub fn apply_security_headers(headers: &mut HeaderMap) {
+pub fn open_api_rate_limit_keys(headers: &HeaderMap) -> Vec<String> {
+    let client = request_client_ip(headers);
+    let mut keys = vec![format!("ip:{client}")];
+
+    match bearer_token_fingerprint(headers) {
+        Some(fingerprint) => keys.push(format!("token:{fingerprint}")),
+        None => keys.push(format!("anonymous:{client}")),
+    }
+
+    keys
+}
+
+pub fn request_client_ip(headers: &HeaderMap) -> String {
+    client_ip(headers).unwrap_or("unknown").to_owned()
+}
+
+pub fn has_bearer_token(headers: &HeaderMap) -> bool {
+    bearer_token(headers).is_some()
+}
+
+pub fn apply_security_headers(headers: &mut HeaderMap, include_hsts: bool) {
     for (name, value) in SECURITY_HEADERS {
         headers.insert(
             HeaderName::from_static(name),
             HeaderValue::from_static(value),
         );
     }
+
+    if include_hsts {
+        headers.insert(
+            HeaderName::from_static(STRICT_TRANSPORT_SECURITY.0),
+            HeaderValue::from_static(STRICT_TRANSPORT_SECURITY.1),
+        );
+    }
 }
 
-fn prune_failures(entry: &mut LoginThrottleEntry, now: Instant) {
+fn prune_login_failures(entry: &mut LoginThrottleEntry, now: Instant) {
     while let Some(failed_at) = entry.failures.front() {
         if now.duration_since(*failed_at) <= FAILURE_WINDOW {
             break;
         }
 
         entry.failures.pop_front();
+    }
+}
+
+fn prune_open_api_requests(entry: &mut OpenApiRateLimitEntry, now: Instant) {
+    while let Some(requested_at) = entry.requests.front() {
+        if now.duration_since(*requested_at) <= OPEN_API_RATE_WINDOW {
+            break;
+        }
+
+        entry.requests.pop_front();
     }
 }
 
@@ -125,9 +225,30 @@ fn client_ip(headers: &HeaderMap) -> Option<&str> {
     })
 }
 
+fn bearer_token(headers: &HeaderMap) -> Option<&str> {
+    let value = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())?;
+
+    let token = value.strip_prefix("Bearer ")?;
+    let token = token.trim();
+
+    if token.is_empty() { None } else { Some(token) }
+}
+
+fn bearer_token_fingerprint(headers: &HeaderMap) -> Option<String> {
+    let token = bearer_token(headers)?;
+    let hash = crate::auth::hash_bearer_token(token);
+
+    Some(hash.chars().take(16).collect())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{LoginThrottle, apply_security_headers, login_throttle_key};
+    use super::{
+        LoginThrottle, OPEN_API_RATE_LIMIT, OpenApiRateLimiter, apply_security_headers,
+        has_bearer_token, login_throttle_key, open_api_rate_limit_keys, request_client_ip,
+    };
     use axum::http::{HeaderMap, HeaderValue};
 
     #[test]
@@ -148,7 +269,7 @@ mod tests {
     fn security_headers_are_applied() {
         let mut headers = HeaderMap::new();
 
-        apply_security_headers(&mut headers);
+        apply_security_headers(&mut headers, false);
 
         assert_eq!(
             headers.get("x-content-type-options"),
@@ -158,6 +279,82 @@ mod tests {
             headers.get("x-frame-options"),
             Some(&HeaderValue::from_static("DENY"))
         );
+        assert_eq!(
+            headers.get("content-security-policy"),
+            Some(&HeaderValue::from_static(
+                "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'"
+            ))
+        );
+        assert!(headers.get("strict-transport-security").is_none());
+    }
+
+    #[test]
+    fn hsts_header_is_optional() {
+        let mut headers = HeaderMap::new();
+
+        apply_security_headers(&mut headers, true);
+
+        assert_eq!(
+            headers.get("strict-transport-security"),
+            Some(&HeaderValue::from_static(
+                "max-age=31536000; includeSubDomains"
+            ))
+        );
+    }
+
+    #[test]
+    fn open_api_key_uses_client_ip_and_token_fingerprint() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-real-ip", HeaderValue::from_static("198.51.100.20"));
+        headers.insert(
+            "authorization",
+            HeaderValue::from_static("Bearer mini-conf-token"),
+        );
+
+        let keys = open_api_rate_limit_keys(&headers);
+
+        assert!(keys.contains(&"ip:198.51.100.20".to_owned()));
+        assert!(keys.iter().any(|key| key.starts_with("token:")));
+        assert!(has_bearer_token(&headers));
+        assert_eq!(request_client_ip(&headers), "198.51.100.20");
+    }
+
+    #[test]
+    fn open_api_key_supports_anonymous_requests() {
+        let headers = HeaderMap::new();
+
+        assert_eq!(
+            open_api_rate_limit_keys(&headers),
+            vec!["ip:unknown".to_owned(), "anonymous:unknown".to_owned()]
+        );
+        assert!(!has_bearer_token(&headers));
+    }
+
+    #[test]
+    fn open_api_key_treats_invalid_bearer_headers_as_anonymous() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-real-ip", HeaderValue::from_static("192.0.2.30"));
+        headers.insert("authorization", HeaderValue::from_static("Basic abc"));
+
+        assert_eq!(
+            open_api_rate_limit_keys(&headers),
+            vec![
+                "ip:192.0.2.30".to_owned(),
+                "anonymous:192.0.2.30".to_owned()
+            ]
+        );
+        assert!(!has_bearer_token(&headers));
+
+        headers.insert("authorization", HeaderValue::from_static("Bearer   "));
+
+        assert_eq!(
+            open_api_rate_limit_keys(&headers),
+            vec![
+                "ip:192.0.2.30".to_owned(),
+                "anonymous:192.0.2.30".to_owned()
+            ]
+        );
+        assert!(!has_bearer_token(&headers));
     }
 
     #[test]
@@ -186,5 +383,70 @@ mod tests {
         throttle.record_success(key);
 
         assert!(throttle.ensure_allowed(key).is_ok());
+    }
+
+    #[test]
+    fn open_api_rate_limiter_blocks_after_threshold() {
+        let limiter = OpenApiRateLimiter::default();
+        let key = "unknown|anonymous";
+
+        for _ in 0..OPEN_API_RATE_LIMIT {
+            assert!(limiter.ensure_request_allowed(key).is_ok());
+        }
+
+        assert_eq!(
+            limiter
+                .ensure_request_allowed(key)
+                .map_err(|error| error.into_body().code),
+            Err("open_api_rate_limited".to_owned())
+        );
+    }
+
+    #[test]
+    fn open_api_rate_limiter_blocks_when_any_bucket_is_full() {
+        let limiter = OpenApiRateLimiter::default();
+        let ip_key = "ip:203.0.113.20".to_owned();
+
+        for index in 0..OPEN_API_RATE_LIMIT {
+            assert!(
+                limiter
+                    .ensure_request_allowed_for_keys(&[
+                        ip_key.clone(),
+                        format!("token:fingerprint-{index}")
+                    ])
+                    .is_ok()
+            );
+        }
+
+        assert_eq!(
+            limiter
+                .ensure_request_allowed_for_keys(&[ip_key, "token:fingerprint-new".to_owned(),])
+                .map_err(|error| error.into_body().code),
+            Err("open_api_rate_limited".to_owned())
+        );
+    }
+
+    #[test]
+    fn open_api_rate_limiter_records_all_keys_for_one_request() {
+        let limiter = OpenApiRateLimiter::default();
+        let token_key = "token:shared".to_owned();
+
+        for index in 0..OPEN_API_RATE_LIMIT {
+            assert!(
+                limiter
+                    .ensure_request_allowed_for_keys(&[
+                        format!("ip:198.51.100.{index}"),
+                        token_key.clone(),
+                    ])
+                    .is_ok()
+            );
+        }
+
+        assert_eq!(
+            limiter
+                .ensure_request_allowed_for_keys(&["ip:198.51.100.200".to_owned(), token_key,])
+                .map_err(|error| error.into_body().code),
+            Err("open_api_rate_limited".to_owned())
+        );
     }
 }

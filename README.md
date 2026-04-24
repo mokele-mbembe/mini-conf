@@ -248,7 +248,7 @@ just db-clean-alpha-runtime-local
 项目目前已经完成后端 MVP 主链路和前端管理台核心业务链路，当前仓库重点转为：
 
 - 保持后端权限、审计、配置标识和部署实例生命周期主链路稳定
-- 补齐上线安全基线剩余项、部署 runbook 和初始化交付
+- 补齐部署 runbook、初始化交付和上线运营页面
 - 补齐低风险运营页面与资源生命周期
 - 持续补 alpha 黑盒、覆盖率和前端单元 / 组件测试基线
 - 继续固化产品边界、协作流程与部署约定并压缩过时入口
@@ -268,12 +268,11 @@ just db-clean-alpha-runtime-local
 建议按这个顺序推进：
 
 1. 文档同步和入口压缩，保持 README / KICKOFF / DEVELOPMENT_LOG / constraints 与真实实现一致
-2. 上线安全基线剩余项：Open API 限流、失败事件留痕、安全响应头复核
-3. 上线实施方案：Docker Compose、通用 Linux runbook、初始化和生产变量清单
-4. 资源生命周期收口：projects / config_files 删除能力与引用检查
-5. 低风险运营页面：项目成员、sync records、heartbeats、audit logs
-6. 前端单元 / 组件测试基线和更完整页面级 E2E
-7. Config Workspace 统一升级
+2. 上线实施方案：Docker Compose、通用 Linux runbook、初始化和生产变量清单
+3. 资源生命周期收口：projects / config_files 删除能力与引用检查
+4. 低风险运营页面：项目成员、sync records、heartbeats、audit logs
+5. 前端单元 / 组件测试基线和更完整页面级 E2E
+6. Config Workspace 统一升级
 
 ## License
 

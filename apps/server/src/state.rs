@@ -1,4 +1,7 @@
-use crate::{config::AppConfig, security::LoginThrottle};
+use crate::{
+    config::AppConfig,
+    security::{LoginThrottle, OpenApiRateLimiter},
+};
 use infra::AppIdentity;
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -9,6 +12,7 @@ pub struct AppState {
     config: AppConfig,
     db_pool: Option<PgPool>,
     login_throttle: Arc<LoginThrottle>,
+    open_api_rate_limiter: Arc<OpenApiRateLimiter>,
 }
 
 impl AppState {
@@ -18,6 +22,7 @@ impl AppState {
             config,
             db_pool,
             login_throttle: LoginThrottle::new(),
+            open_api_rate_limiter: OpenApiRateLimiter::new(),
         }
     }
 
@@ -35,6 +40,10 @@ impl AppState {
 
     pub fn login_throttle(&self) -> &Arc<LoginThrottle> {
         &self.login_throttle
+    }
+
+    pub fn open_api_rate_limiter(&self) -> &Arc<OpenApiRateLimiter> {
+        &self.open_api_rate_limiter
     }
 }
 
@@ -93,5 +102,21 @@ mod tests {
         );
 
         assert!(state.db_pool().is_none());
+    }
+
+    #[test]
+    fn exposes_open_api_rate_limiter() {
+        let state = AppState::new(
+            AppIdentity::new("mini-conf-server", "0.1.0"),
+            AppConfig::default(),
+            None,
+        );
+
+        assert!(
+            state
+                .open_api_rate_limiter()
+                .ensure_request_allowed("ip:unknown")
+                .is_ok()
+        );
     }
 }

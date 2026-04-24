@@ -65,6 +65,7 @@ pub fn router() -> Router<AppState> {
         (status = 401, description = "Missing or invalid bearer token", body = crate::error::ErrorResponse),
         (status = 403, description = "Bearer token does not match target deployment", body = crate::error::ErrorResponse),
         (status = 404, description = "Deployment, config file, or release not found", body = crate::error::ErrorResponse),
+        (status = 429, description = "Open API rate limit exceeded", body = crate::error::ErrorResponse),
         (status = 503, description = "Database bootstrap disabled", body = crate::error::ErrorResponse),
         (status = 500, description = "Internal server error", body = crate::error::ErrorResponse),
     )

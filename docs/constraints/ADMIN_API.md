@@ -801,6 +801,7 @@
 - `release_not_found`
 - `deployment_not_found`
 - `deployment_token_reset_failed`
+- `open_api_rate_limited`
 
 ## 21. 实现建议
 
