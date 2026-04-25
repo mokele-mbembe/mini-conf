@@ -1,6 +1,6 @@
 # Docs Index
 
-`docs/` 现在按受众和用途分成 6 类：
+`docs/` 现在按受众和用途分成 7 类：
 
 - [`public/`](./public/README.md)
   面向项目外部阅读者、使用者和部署者的说明文档。
@@ -8,6 +8,8 @@
   面向产品边界、系统设计约束和实现语义收口的文档。
 - [`agents/`](./agents/README.md)
   面向 AI agent 或本地自动化执行环境的工作流与环境约定。新会话统一从 [`AGENT_START_HERE.md`](./agents/AGENT_START_HERE.md) 进入。
+- [`runbooks/`](./runbooks/README.md)
+  面向生产和准生产环境的部署、初始化、运维与恢复流程。
 - [`collaboration/`](./collaboration/README.md)
   面向潜在协作者、贡献者和仍在使用的工程协作流程文档。
 - [`artifacts/`](./artifacts/README.md)

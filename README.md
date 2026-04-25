@@ -268,7 +268,7 @@ just db-clean-alpha-runtime-local
 建议按这个顺序推进：
 
 1. 文档同步和入口压缩，保持 README / KICKOFF / DEVELOPMENT_LOG / constraints 与真实实现一致
-2. 上线实施方案：Docker Compose、通用 Linux runbook、初始化和生产变量清单
+2. 上线实施方案：Linux binary 发布包、外部 PostgreSQL、`config-center.mycompany.com` 入口域名、反向代理/TLS、初始化和生产变量清单
 3. 资源生命周期收口：projects / config_files 删除能力与引用检查
 4. 低风险运营页面：项目成员、sync records、heartbeats、audit logs
 5. 前端单元 / 组件测试基线和更完整页面级 E2E

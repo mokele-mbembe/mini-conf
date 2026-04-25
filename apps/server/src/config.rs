@@ -80,6 +80,7 @@ impl AppConfig {
         F: FnMut(&str) -> Option<String>,
     {
         let mut config = Self::default();
+        let mut database_url_was_set = false;
 
         if let Some(value) = lookup("APP_ENV") {
             config.app_env = AppEnv::parse(&value)?;
@@ -91,6 +92,7 @@ impl AppConfig {
 
         if let Some(value) = lookup("DATABASE_URL") {
             config.database_url = value;
+            database_url_was_set = true;
         }
 
         if let Some(value) = lookup("INIT_DB_ON_BOOT") {
@@ -127,7 +129,15 @@ impl AppConfig {
             return Err(ConfigError::unsupported_db_boot(config.app_env));
         }
 
+        if matches!(config.app_env, AppEnv::Staging | AppEnv::Prod) && !database_url_was_set {
+            return Err(ConfigError::missing_database_url(config.app_env));
+        }
+
         Ok(config)
+    }
+
+    pub const fn should_connect_database_on_boot(&self) -> bool {
+        self.init_db_on_boot || matches!(self.app_env, AppEnv::Staging | AppEnv::Prod)
     }
 
     pub fn static_dir(&self) -> &Path {
@@ -174,6 +184,16 @@ impl ConfigError {
             field: "INIT_DB_ON_BOOT",
             message: format!(
                 "INIT_DB_ON_BOOT=true is only supported for APP_ENV=dev or APP_ENV=test, got {}",
+                app_env.as_str()
+            ),
+        }
+    }
+
+    fn missing_database_url(app_env: AppEnv) -> Self {
+        Self {
+            field: "DATABASE_URL",
+            message: format!(
+                "DATABASE_URL is required when APP_ENV={} because production-like environments connect to an external PostgreSQL on boot",
                 app_env.as_str()
             ),
         }
@@ -305,6 +325,9 @@ mod tests {
         ] {
             let config = AppConfig::from_lookup(|key| match key {
                 "APP_ENV" => Some(raw.to_owned()),
+                "DATABASE_URL" if matches!(expected, AppEnv::Staging | AppEnv::Prod) => {
+                    Some("postgres://db.example/mini_conf".to_owned())
+                }
                 _ => None,
             })
             .expect("config should load");
@@ -399,11 +422,46 @@ mod tests {
     fn from_lookup_enables_secure_cookies_in_prod_by_default() {
         let config = AppConfig::from_lookup(|key| match key {
             "APP_ENV" => Some("prod".to_owned()),
+            "DATABASE_URL" => Some("postgres://db.example/mini_conf".to_owned()),
             _ => None,
         })
         .expect("config should load");
 
         assert!(config.session_cookie_secure);
+    }
+
+    #[test]
+    fn from_lookup_requires_database_url_in_production_like_envs() {
+        for app_env in ["staging", "prod"] {
+            let error = AppConfig::from_lookup(|key| match key {
+                "APP_ENV" => Some(app_env.to_owned()),
+                _ => None,
+            })
+            .expect_err("config should require database url in production-like envs");
+
+            assert_eq!(error.field(), "DATABASE_URL");
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "DATABASE_URL: DATABASE_URL is required when APP_ENV={app_env} because production-like environments connect to an external PostgreSQL on boot"
+                )
+            );
+        }
+    }
+
+    #[test]
+    fn production_like_envs_connect_database_on_boot_without_db_boot() {
+        for app_env in ["staging", "prod"] {
+            let config = AppConfig::from_lookup(|key| match key {
+                "APP_ENV" => Some(app_env.to_owned()),
+                "DATABASE_URL" => Some("postgres://db.example/mini_conf".to_owned()),
+                _ => None,
+            })
+            .expect("config should load");
+
+            assert!(!config.init_db_on_boot);
+            assert!(config.should_connect_database_on_boot());
+        }
     }
 
     #[test]

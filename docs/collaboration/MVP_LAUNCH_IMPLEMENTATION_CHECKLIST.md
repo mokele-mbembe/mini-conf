@@ -70,8 +70,8 @@
 
 ### 2.3 尚未完成
 
-- Docker Compose 交付方案。
-- 通用 Linux 二进制 + PostgreSQL + 反向代理 runbook。
+- Linux binary 发布包方案。
+- 生产部署 runbook：外部 PostgreSQL、`config-center.mycompany.com`、反向代理/TLS、环境变量、迁移与初始化。
 - projects / config_files 删除能力与引用检查。
 - 项目成员、sync records、heartbeats、audit logs 的真实前端页面。
 - 文档压缩后的最终三层结构。
@@ -186,8 +186,8 @@
 1. 初始化 CLI / init 命令
 2. 首次登录改密（已完成）
 3. 首次登录 setup wizard（部分完成）
-4. Docker Compose 启动方案
-5. 通用 Linux runbook
+4. Linux binary 发布包方案
+5. 生产部署 runbook：外部 PostgreSQL + 独立入口域名 + 反向代理/TLS
 
 ### 5.3 后端实施项
 
@@ -226,8 +226,9 @@ MVP 交付包中应包含：
 
 - 初始化命令说明
 - 生产部署变量清单
-- Docker Compose 示例
-- 通用 Linux 反向代理示例
+- Linux binary 发布包布局与构建说明
+- 外部 PostgreSQL 连接、迁移和备份边界说明
+- `config-center.mycompany.com` 这类独立入口域名下的反向代理/TLS 示例
 - 首次启动排障手册
 
 ## 6. Phase 3: 上线安全基线

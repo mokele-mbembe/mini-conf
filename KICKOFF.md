@@ -32,8 +32,9 @@
 
 1. 文档同步与入口压缩：保持 README / KICKOFF / DEVELOPMENT_LOG / constraints 与当前实现一致。
 2. 上线实施方案：
-   - Docker Compose
-   - 通用 Linux 二进制 + PostgreSQL + 反向代理 runbook
+   - Linux binary 发布包：server binary + web dist + migrations
+   - 外部 PostgreSQL 16+ 作为必备基础设施
+   - `config-center.mycompany.com` 独立入口域名 + 反向代理/TLS runbook
    - 初始化和生产变量清单
 3. 资源生命周期与文案收口：
    - projects 删除能力和引用检查

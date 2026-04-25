@@ -12,7 +12,7 @@
 - 平台级权限模型已落地：`platform_admin` 与项目角色 `admin / editor / viewer` 分层；平台管理员默认不自动获得项目业务可见性。
 - Setup 核心链路已落地：`system_settings`、setup status、setup gate、setup complete、前端 setup 页。
 - 安全基线已覆盖管理端和 Open API：HttpOnly session cookie、CSRF、CSP/HSTS 等安全响应头、登录失败节流、Open API 基础限流、Open API 失败事件审计、密码强度、强制改密、禁用用户撤销 session、审计脱敏。
-- 当前仍缺：Docker Compose / 通用 Linux runbook、projects/config_files 删除能力、项目成员/sync records/heartbeats/audit logs 的真实前端页面、前端单元/组件测试基线、文档继续压缩。
+- 当前仍缺：Linux binary 发布包、外部 PostgreSQL + 独立入口域名反向代理/TLS runbook、projects/config_files 删除能力、项目成员/sync records/heartbeats/audit logs 的真实前端页面、前端单元/组件测试基线、文档继续压缩。
 
 ## 2. 必读顺序
 
@@ -49,7 +49,7 @@
 按下面顺序推进，避免回到旧的“先补任意页面”模式：
 
 1. 文档同步和入口压缩：保持 README / KICKOFF / DEVELOPMENT_LOG / constraints 与真实实现一致。
-2. 上线实施交付：Docker Compose、通用 Linux 二进制部署 runbook、初始化和生产变量清单。
+2. 上线实施交付：Linux binary 发布包、外部 PostgreSQL、`config-center.mycompany.com` 入口域名、反向代理/TLS、初始化和生产变量清单。
 3. 资源生命周期收口：projects / config_files 删除能力、引用检查、文案和错误码统一。
 4. 低风险运营页：项目成员、sync records、heartbeats、audit logs。
 5. 测试补量：前端单元/组件测试基线、更完整页面级 E2E、覆盖率持续补量。

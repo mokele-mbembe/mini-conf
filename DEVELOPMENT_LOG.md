@@ -12,6 +12,18 @@
 
 ## 1.1 最近完成
 
+2026-04-25 本轮裁剪生产部署目标并补齐 binary 主路径：
+
+- 生产部署主路径改为 Linux binary 发布包，不再把 Dockerfile / 容器镜像作为默认生产目标
+- 新增 [docs/runbooks/PRODUCTION_BINARY.md](./docs/runbooks/PRODUCTION_BINARY.md)，覆盖发布包布局、构建步骤、外部 PostgreSQL、生产变量、systemd、反向代理、首次启动、smoke 和回滚
+- 新增 [docs/runbooks/README.md](./docs/runbooks/README.md)，并把 `docs/README.md` / `docs/public/README.md` 接入 runbook 入口
+- `APP_ENV=staging|prod` 现在要求显式 `DATABASE_URL`，服务启动时会连接外部 PostgreSQL，但仍禁止 `INIT_DB_ON_BOOT=true`
+- `INIT_DB_ON_BOOT` 继续只用于 dev/test 的自动迁移和 seed；生产迁移、seed 和初始化独立执行
+- 本轮验证通过：
+  - `cargo test -p server config::tests`
+  - `cargo test -p server bootstrap::tests`
+  - `cargo test -p server state::tests`
+
 2026-04-25 本轮完成上线安全基线剩余代码项：
 
 - Open API 入口已增加固定窗口基础限流，默认同时按客户端 IP 与 Bearer token hash 指纹分桶，超限返回 `429 open_api_rate_limited`
@@ -312,7 +324,7 @@
 - [x] 项目创建语义调整：由平台管理员创建项目并指定首个项目 `admin`
 - [x] 系统初始化与首次登录 setup 核心链路
 - [ ] setup wizard 补齐首个环境、配置文件、模板实例
-- [ ] 上线实施方案：Docker Compose + 通用 Linux runbook
+- [ ] 上线实施方案：Linux binary 发布包 + 外部 PostgreSQL + 独立入口域名反向代理/TLS runbook
 - [x] 上线安全基线剩余项：Open API 限流、失败事件留痕、安全响应头复核
 - [ ] projects / config_files 的删除能力与生命周期文案统一
 - [ ] 低风险管理页面补齐：项目成员、sync records、heartbeats、audit logs
@@ -323,7 +335,7 @@
 
 推荐顺序：
 
-1. 系统初始化与上线实施方案：init 脚本、Docker Compose / Linux runbook、setup wizard 补齐
+1. 系统初始化与上线实施方案：init 脚本、Linux binary 发布包、外部 PostgreSQL、独立入口域名反向代理/TLS runbook、setup wizard 补齐
 2. 资源生命周期与文案收口：projects / config_files 删除能力、状态词统一
 3. 项目成员页、sync records、heartbeats、audit logs 等低风险管理页面补齐
 4. 前端单元 / 组件测试基线，优先覆盖高状态密度组件
@@ -426,7 +438,7 @@ just ci-local-db
 - 当前工作区还有未提交改动时，不要只提交代码不提交 OpenAPI 产物
 - 前端后续任务默认先按 `FRONTEND_TASK_WORKFLOW.md` 输出任务规范和执行计划，再由 Codex 本地实现并自验
 - 前端白屏或联调异常时，不要只看 `/api/healthz`；至少同时验证 `/api/auth/me`、登录链路和浏览器 Console
-- 前端 smoke 依赖后端真正建立 `db_pool`；CI / 本地复现都不要把 `INIT_DB_ON_BOOT` 设成会禁用数据库初始化的值
+- 前端 smoke 依赖后端真正建立 `db_pool`；dev/test 通过 `INIT_DB_ON_BOOT=true` 连接并初始化数据库，staging/prod 通过显式 `DATABASE_URL` 连接外部 PostgreSQL，且不允许自动迁移/seed
 
 ## 8. 建议的交接语句
 

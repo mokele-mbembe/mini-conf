@@ -159,10 +159,24 @@ MVP 交付时必须附带完整的初始化和上线实施方案，而不再假�
 
 ### 部署交付要求
 
-MVP 至少应给出两种可执行部署方案：
+MVP 生产部署目标裁剪为一条主路径：
 
-1. `Docker Compose`
-2. 通用 Linux 二进制 + PostgreSQL + 反向代理 runbook
+1. 项目提供 Linux binary 发布包，包含 server binary、前端 `web/` 静态产物和 `migrations/`
+2. 部署方准备外部 PostgreSQL 16+，项目不负责创建或管理 PostgreSQL 实例
+3. 部署方在现有 DNS / TLS 体系下提供独立入口域名，例如 `config-center.mycompany.com`
+4. 反向代理负责 TLS 终止、域名转发和常规 HTTP 运维策略，应用只监听内部 HTTP 地址
+5. runbook 只覆盖发布包构建、环境变量、数据库迁移、初始化、健康检查和回滚排障
+
+明确不作为 MVP 生产交付目标：
+
+- `docker-compose.yml`
+- 将 PostgreSQL 纳入项目初始化或编排流程
+- 自动管理 DNS、证书或反向代理基础设施
+- 将 Docker image 作为唯一生产发布格式
+
+可选项：
+
+- Dockerfile / 容器镜像可以后续补充为可选包装形式，用于接入容器平台或统一镜像发布流程；即使使用镜像，也不把 PostgreSQL 纳入 Compose。
 
 结论：
 

@@ -104,6 +104,7 @@
 
 - 显式 `APP_ENV=prod`
 - 显式 `DATABASE_URL`
+- Linux binary 发布包：server binary、`web/`、`migrations/`
 - 启动前独立执行迁移
 - 部署后健康检查和回滚策略
 
@@ -112,6 +113,7 @@
 - `staging` 和 `prod` 都不允许 `INIT_DB_ON_BOOT=true`
 - 不依赖 `~/.config/mini-conf/dev-env.sh`
 - 不依赖 `secret-tool`
+- 不要求 `docker-compose.yml`
 
 ## 4. 环境变量契约
 
@@ -127,6 +129,11 @@
 - `INIT_DB_ON_BOOT`
 - `INIT_ADMIN_USERNAME`
 - `INIT_ADMIN_PASSWORD`
+
+补充约束：
+
+- `APP_ENV=staging|prod` 时必须显式提供 `DATABASE_URL`，服务会在启动时连接外部 PostgreSQL。
+- `APP_ENV=staging|prod` 时 `INIT_DB_ON_BOOT` 必须保持 `false`；迁移、seed 和初始化独立执行。
 
 ### 4.2 测试契约
 

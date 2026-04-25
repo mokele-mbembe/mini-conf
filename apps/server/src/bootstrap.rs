@@ -100,17 +100,25 @@ pub fn init_tracing() {
 }
 
 pub async fn build_state(config: AppConfig) -> Result<AppState, StartupError> {
-    let db_pool: Option<PgPool> = if config.init_db_on_boot {
-        tracing::info!("database bootstrap enabled; connecting to postgres");
+    let db_pool: Option<PgPool> = if config.should_connect_database_on_boot() {
+        if config.init_db_on_boot {
+            tracing::info!("database bootstrap enabled; connecting to postgres");
+        } else {
+            tracing::info!("database connection enabled; connecting to external postgres");
+        }
 
         let pool = infra::db::connect(&config.database_url).await?;
 
-        tracing::info!("database connected; applying migrations");
-        MIGRATOR.run(&pool).await?;
-        tracing::info!("database migrations applied");
-        seed_admin_if_configured(&pool, &config).await?;
-        seed_users_from_file_if_configured(&pool, &config).await?;
-        ensure_system_settings_row(&pool).await?;
+        if config.init_db_on_boot {
+            tracing::info!("database connected; applying migrations");
+            MIGRATOR.run(&pool).await?;
+            tracing::info!("database migrations applied");
+            seed_admin_if_configured(&pool, &config).await?;
+            seed_users_from_file_if_configured(&pool, &config).await?;
+            ensure_system_settings_row(&pool).await?;
+        } else {
+            tracing::info!("database connected; migrations and seed are managed externally");
+        }
 
         Some(pool)
     } else {
@@ -447,6 +455,26 @@ mod tests {
         assert!(
             result.is_err(),
             "state build should fail when db boot is enabled and url is invalid"
+        );
+        assert!(
+            matches!(result, Err(StartupError::Database(_))),
+            "invalid url should surface as a database startup error"
+        );
+    }
+
+    #[tokio::test]
+    async fn build_state_connects_database_for_prod_without_db_boot() {
+        let config = AppConfig {
+            app_env: crate::config::AppEnv::Prod,
+            database_url: "not-a-postgres-url".to_owned(),
+            ..AppConfig::default()
+        };
+
+        let result = build_state(config).await;
+
+        assert!(
+            result.is_err(),
+            "prod state build should attempt to connect to the external database"
         );
         assert!(
             matches!(result, Err(StartupError::Database(_))),
