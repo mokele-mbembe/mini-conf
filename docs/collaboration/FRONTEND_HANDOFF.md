@@ -48,6 +48,7 @@
 - 已有登录、setup、首次改密、平台用户管理、平台项目创建
 - 已有项目列表、配置文件、环境、部署实例、Draft、Saved Versions、preview、publish、Release detail/diff
 - 已有 deployment archive / restore / permanent delete 前端路径
+- 已有项目成员列表、添加成员、角色调整、删除成员前端路径
 - 已有前端 build check 和覆盖核心管理链路的 Playwright E2E
 
 因此后续前端工作应默认视为“在已有 scaffold 上继续开发”，而不是重新搭项目前端。
@@ -82,7 +83,6 @@
 
 当前仍未完成真实页面的是：
 
-- 项目成员页
 - sync records 页面
 - heartbeats 页面
 - audit logs 页面
@@ -343,12 +343,11 @@
 
 建议这样排：
 
-1. 项目成员
-2. sync records / heartbeats
-3. audit logs
-4. 咖啡中间件 demo 管理端辅助入口
-5. Release 详情 / Diff 体验增强
-6. 前端组件测试基线
+1. sync records / heartbeats
+2. audit logs
+3. 咖啡中间件 demo 管理端辅助入口
+4. Release 详情 / Diff 体验增强
+5. 前端组件测试基线
 
 原因：
 

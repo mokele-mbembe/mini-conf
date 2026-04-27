@@ -72,7 +72,7 @@
 
 - Linux binary 发布包方案已收口为 `just release-package` / `just release-package-check`，GitHub Actions `Release Package` workflow 已可生成并自检 artifact；后续只需要按正式版本策略决定是否创建 GitHub Release。
 - 生产部署 runbook 已覆盖外部 PostgreSQL、`config-center.example.com` 示例域名、反向代理/TLS、环境变量、迁移与初始化；`just staging-smoke` 已提供真实环境只读探测，后续需要按真实 staging 试部署结果补充排障项。
-- 项目成员、sync records、heartbeats、audit logs 的真实前端页面。
+- sync records、heartbeats、audit logs 的真实前端页面。
 - 文档压缩后的最终三层结构。
 - Config Workspace 统一升级。
 
@@ -342,15 +342,15 @@ MVP 交付包中应包含：
 
 这些页面不应先于前四个阶段，但在骨架完成后应尽快补齐。
 
-状态：路由存在，真实页面尚未实现。
+状态：项目成员页已完成；其余低风险运营页仍是占位路由。
 
 ### 8.1 必补页面
 
-- 项目成员页
+- 项目成员页（已完成）
 - sync records 页面
 - heartbeats 页面
 - audit logs 页面
-- 创建项目入口改造后的平台项目创建流程
+- 创建项目入口改造后的平台项目创建流程（已完成）
 
 ### 8.2 前端验收
 

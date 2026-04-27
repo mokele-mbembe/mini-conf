@@ -562,6 +562,51 @@ test("resource lifecycle: delete unused config file and empty projects", async (
   expect(countResponse.status()).toBe(404);
 });
 
+test("project members: add, change role, and remove member", async ({
+  page,
+}) => {
+  const suffix = Date.now().toString();
+  const memberUsername = `e2e-member-${suffix}`;
+
+  await loginAsPlatformAdmin(page);
+  await createAdminUser(page, memberUsername);
+  const projectId = await createProject(page, `${suffix}-members`);
+
+  await page.goto(`/projects/${projectId}/members`);
+  await expect(page.getByText("项目成员绑定已有启用用户")).toBeVisible();
+
+  await page.getByRole("button", { name: "添加成员" }).click();
+  const createDialog = page.getByRole("dialog", { name: "添加项目成员" });
+  await expect(createDialog).toBeVisible();
+  await createDialog.getByPlaceholder("输入已存在用户名").fill(memberUsername);
+  await createDialog.getByRole("button", { name: "添加" }).click();
+  await expect(
+    page.locator(".el-message", { hasText: "项目成员已添加" }),
+  ).toBeVisible({ timeout: 5_000 });
+
+  const memberRow = page.locator(".el-table__row", {
+    hasText: memberUsername,
+  });
+  await expect(memberRow).toBeVisible();
+  await expect(memberRow).toContainText("只读成员");
+
+  await memberRow.locator(".el-select__wrapper").click();
+  await page.getByRole("option", { name: "编辑者" }).click();
+  await expect(
+    page.locator(".el-message", { hasText: "项目成员角色已更新" }),
+  ).toBeVisible({ timeout: 5_000 });
+  await expect(memberRow).toContainText("编辑者");
+
+  await memberRow.getByRole("button", { name: "删除" }).click();
+  const deleteDialog = page.getByRole("dialog", { name: "移除项目成员" });
+  await expect(deleteDialog).toContainText(memberUsername);
+  await deleteDialog.getByRole("button", { name: "删除" }).click();
+  await expect(
+    page.locator(".el-message", { hasText: "项目成员已移除" }),
+  ).toBeVisible({ timeout: 5_000 });
+  await expect(memberRow).toHaveCount(0, { timeout: 5_000 });
+});
+
 test("admin project create path: other initial admin hides project-list action", async ({
   page,
 }) => {

@@ -2,7 +2,10 @@ import { client } from "./client";
 import type {
   ProjectSummary,
   ProjectListResponse,
+  ProjectMember,
+  ProjectMemberCreateRequest,
   ProjectMemberListResponse,
+  ProjectMemberUpdateRequest,
 } from "./types/project";
 
 export function listProjects(): Promise<ProjectListResponse> {
@@ -23,4 +26,29 @@ export function getProjectMembers(
   return client.get<ProjectMemberListResponse>(
     `/projects/${projectId}/members`,
   );
+}
+
+export function createProjectMember(
+  projectId: number,
+  body: ProjectMemberCreateRequest,
+): Promise<ProjectMember> {
+  return client.post<ProjectMember>(`/projects/${projectId}/members`, body);
+}
+
+export function updateProjectMember(
+  projectId: number,
+  memberId: number,
+  body: ProjectMemberUpdateRequest,
+): Promise<ProjectMember> {
+  return client.put<ProjectMember>(
+    `/projects/${projectId}/members/${memberId}`,
+    body,
+  );
+}
+
+export function deleteProjectMember(
+  projectId: number,
+  memberId: number,
+): Promise<void> {
+  return client.delete<void>(`/projects/${projectId}/members/${memberId}`);
 }

@@ -25,3 +25,12 @@ export interface ProjectMember {
 export interface ProjectMemberListResponse {
   items: ProjectMember[];
 }
+
+export interface ProjectMemberCreateRequest {
+  username: string;
+  role: ProjectRole;
+}
+
+export interface ProjectMemberUpdateRequest {
+  role: ProjectRole;
+}

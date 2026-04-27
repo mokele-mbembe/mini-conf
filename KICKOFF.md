@@ -24,6 +24,7 @@
   - Release history / detail / diff
   - deployment archive / restore / permanent delete
   - projects / config_files delete with reference checks
+  - project members list / add / role update / remove
 - 前端已接入 lint、format check、typecheck、build 和 Playwright E2E。
 - 当前最大的剩余风险已经从“主链路缺页面”转为“上线运营骨架、文档和 runbook 收口”。
 
@@ -41,7 +42,6 @@
    - projects / config_files 删除能力与引用检查已落地
    - 下一步主要是继续检查状态词、错误码和前端文案是否还有边角不一致
 4. 低风险运营页面：
-   - 项目成员页
    - sync records 页面
    - heartbeats 页面
    - audit logs 页面

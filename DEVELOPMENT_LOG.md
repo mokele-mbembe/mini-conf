@@ -12,6 +12,14 @@
 
 ## 1.1 最近完成
 
+2026-04-27 本轮完成项目成员前端页面：
+
+- 项目成员页已从占位页替换为真实页面，支持成员列表、添加已有启用用户、角色调整和移除成员
+- 前端按项目 `admin` 显示成员管理入口；非 admin 进入成员页时展示权限不足
+- 最后一个项目 admin 在前端禁用降级 / 移除入口，后端 `last_project_admin_required` 仍是最终保护
+- 同步新增 `project_member_conflict / project_member_not_found / last_project_admin_required` 前端错误码文案
+- Playwright E2E 已覆盖添加成员、调整角色、移除成员主路径
+
 2026-04-27 本轮完成 projects / config_files 删除能力与引用检查：
 
 - 新增 `DELETE /api/projects/:id`，项目 `admin` 可删除未被业务资源引用的空项目
@@ -65,7 +73,7 @@
 - `FRONTEND_TASK_WORKFLOW.md` 已合并前端运行方式、页面测试顺序、当前页面状态和统一 kickoff prompt
 - `KICKOFF.md` 已压缩为当前状态和未完成工作索引，不再维护重复前端 prompt
 - `MVP_LAUNCH_IMPLEMENTATION_CHECKLIST.md` 已补当前实现状态覆盖层，明确平台权限、用户管理、setup 和管理端安全基线的大部分已完成
-- 当前仍未完成的上线前主线是：部署 runbook、projects/config_files 删除能力、项目成员/sync records/heartbeats/audit logs 前端页面、前端单元/组件测试基线、Config Workspace
+- 当前仍未完成的上线前主线是：sync records/heartbeats/audit logs 前端页面、前端单元/组件测试基线、Config Workspace
 
 2026-04-22 至 2026-04-24 当前仓库已有的新实现状态：
 
@@ -346,10 +354,10 @@
 - [x] 项目创建语义调整：由平台管理员创建项目并指定首个项目 `admin`
 - [x] 系统初始化与首次登录 setup 核心链路
 - [ ] setup wizard 补齐首个环境、配置文件、模板实例
-- [ ] 上线实施方案：Linux binary 发布包 + 外部 PostgreSQL + 独立入口域名反向代理/TLS runbook
+- [x] 上线实施方案：Linux binary 发布包 + 外部 PostgreSQL + 独立入口域名反向代理/TLS runbook
 - [x] 上线安全基线剩余项：Open API 限流、失败事件留痕、安全响应头复核
-- [ ] projects / config_files 的删除能力与生命周期文案统一
-- [ ] 低风险管理页面补齐：项目成员、sync records、heartbeats、audit logs
+- [x] projects / config_files 的删除能力与生命周期文案统一
+- [ ] 低风险管理页面补齐：sync records、heartbeats、audit logs
 - [x] 中间文档压缩整理第一轮
 - [ ] 配置编辑体验统一升级（延后到上述骨架完成之后）
 
@@ -357,31 +365,26 @@
 
 推荐顺序：
 
-1. 系统初始化与上线实施方案：init 脚本、Linux binary 发布包、外部 PostgreSQL、独立入口域名反向代理/TLS runbook、setup wizard 补齐
-2. 资源生命周期与文案收口：projects / config_files 删除能力、状态词统一
-3. 项目成员页、sync records、heartbeats、audit logs 等低风险管理页面补齐
-4. 前端单元 / 组件测试基线，优先覆盖高状态密度组件
-5. `sqlx-check` 恢复为强制检查的时机评估
-6. 黑盒与覆盖率基线的持续补量
-7. 配置编辑体验统一升级：Draft / Release / Diff / Merge 的 Config Workspace
+1. sync records、heartbeats、audit logs 等低风险管理页面补齐
+2. 前端单元 / 组件测试基线，优先覆盖高状态密度组件
+3. `sqlx-check` 恢复为强制检查的时机评估
+4. 黑盒与覆盖率基线的持续补量
+5. 配置编辑体验统一升级：Draft / Release / Diff / Merge 的 Config Workspace
 
 理由：
 
-- 当前业务主路径和平台骨架已经基本闭环，但距离“可上线、可运营、可长期使用”仍缺上线实施、资源生命周期和运维页面
-- 当前最大的剩余风险不再是单个业务页面，而是部署 runbook、资源生命周期和运营可见性
-- 项目成员、sync records、heartbeats、audit logs 已有后端接口，但前端仍未形成完整运营闭环
+- 当前业务主路径、平台骨架、上线 runbook 和资源生命周期已经基本闭环，剩余主要是运营可见性和测试补量
+- 当前最大的剩余风险不再是单个业务页面，而是 sync records、heartbeats、audit logs 的运营观察面
+- sync records、heartbeats、audit logs 已有后端接口，但前端仍未形成完整运营闭环
 - 配置编辑体验升级仍然重要，但顺序应后移，避免与平台骨架建设互相打断
 - 详细方向已收口到 `docs/constraints/product-qa/0012-mvp-launch-operability-and-admin-model.md`
 
 前端下一批推荐顺序：
 
-1. 平台初始化与登录后首屏：初始密码修改、系统未初始化 / 已初始化分流
-2. 用户管理页：用户列表、创建、禁用、重置密码、强制改密
-3. 项目创建入口改造：由平台管理员创建并指定首个项目管理员
-4. 项目成员页：成员列表、添加成员、角色调整、最后 admin 保护错误提示
-5. sync records / heartbeats / audit logs 页面：形成完整运营可见性
-6. 前端组件测试基线：优先覆盖高风险状态页和权限相关交互
-7. 配置编辑体验统一升级：最后再收束到统一 Config Workspace
+1. sync records / heartbeats 页面：形成客户端消费和上报观察面
+2. audit logs 页面：形成项目级操作追踪
+3. 前端组件测试基线：优先覆盖高风险状态页和权限相关交互
+4. 配置编辑体验统一升级：最后再收束到统一 Config Workspace
 
 ## 5. 下一个会话建议先跑的命令
 
