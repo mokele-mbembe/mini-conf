@@ -12,6 +12,15 @@
 
 ## 1.1 最近完成
 
+2026-04-27 本轮完成 heartbeats / audit logs 前端低风险页面：
+
+- `heartbeats` 页已从占位页替换为真实页面，支持按部署实例和配置文件筛选
+- 页面展示 `config / reported_at / metadata`，展开行展示实例 ID、配置文件 ID 和 metadata JSON；前端只展示最近心跳，不推断在线/离线
+- `audit logs` 页已从占位页替换为真实页面，仅项目 `admin` 可查看，支持按用户 ID、action、resource_type 筛选
+- 审计详情只展示后端返回的安全元数据，不渲染 Draft / Release 明文、原始 token 或完整 diff
+- 项目页 tabs 已按项目角色隐藏成员管理和审计日志入口，非 admin 直接进入审计页时展示权限不足
+- Playwright E2E 已覆盖 Open API 心跳上报后的列表/筛选，以及项目创建审计日志的列表/筛选
+
 2026-04-27 本轮完成项目成员前端页面：
 
 - 项目成员页已从占位页替换为真实页面，支持成员列表、添加已有启用用户、角色调整和移除成员
@@ -80,7 +89,7 @@
 - `FRONTEND_TASK_WORKFLOW.md` 已合并前端运行方式、页面测试顺序、当前页面状态和统一 kickoff prompt
 - `KICKOFF.md` 已压缩为当前状态和未完成工作索引，不再维护重复前端 prompt
 - `MVP_LAUNCH_IMPLEMENTATION_CHECKLIST.md` 已补当前实现状态覆盖层，明确平台权限、用户管理、setup 和管理端安全基线的大部分已完成
-- 当前仍未完成的上线前主线是：heartbeats/audit logs 前端页面、前端单元/组件测试基线、Config Workspace
+- 当前仍未完成的上线前主线是：真实 staging 试部署反馈、前端单元/组件测试基线、Config Workspace
 
 2026-04-22 至 2026-04-24 当前仓库已有的新实现状态：
 
@@ -364,7 +373,7 @@
 - [x] 上线实施方案：Linux binary 发布包 + 外部 PostgreSQL + 独立入口域名反向代理/TLS runbook
 - [x] 上线安全基线剩余项：Open API 限流、失败事件留痕、安全响应头复核
 - [x] projects / config_files 的删除能力与生命周期文案统一
-- [ ] 低风险管理页面补齐：heartbeats、audit logs
+- [x] 低风险管理页面补齐：heartbeats、audit logs
 - [x] 中间文档压缩整理第一轮
 - [ ] 配置编辑体验统一升级（延后到上述骨架完成之后）
 
@@ -372,26 +381,24 @@
 
 推荐顺序：
 
-1. heartbeats、audit logs 等低风险管理页面补齐
-2. 前端单元 / 组件测试基线，优先覆盖高状态密度组件
+1. 前端单元 / 组件测试基线，优先覆盖高状态密度组件
+2. 真实 staging 试部署反馈与 runbook 排障补充
 3. `sqlx-check` 恢复为强制检查的时机评估
 4. 黑盒与覆盖率基线的持续补量
 5. 配置编辑体验统一升级：Draft / Release / Diff / Merge 的 Config Workspace
 
 理由：
 
-- 当前业务主路径、平台骨架、上线 runbook 和资源生命周期已经基本闭环，剩余主要是运营可见性和测试补量
-- 当前最大的剩余风险不再是单个业务页面，而是 heartbeats、audit logs 的运营观察面
-- heartbeats、audit logs 已有后端接口，但前端仍未形成完整运营闭环
+- 当前业务主路径、平台骨架、上线 runbook、资源生命周期和运营观察面已经基本闭环，剩余主要是真实部署反馈和测试补量
+- heartbeats、audit logs 已补齐运营观察面，下一步应把质量基线和真实部署反馈补上
 - 配置编辑体验升级仍然重要，但顺序应后移，避免与平台骨架建设互相打断
 - 详细方向已收口到 `docs/constraints/product-qa/0012-mvp-launch-operability-and-admin-model.md`
 
 前端下一批推荐顺序：
 
-1. heartbeats 页面：形成客户端上报观察面
-2. audit logs 页面：形成项目级操作追踪
-3. 前端组件测试基线：优先覆盖高风险状态页和权限相关交互
-4. 配置编辑体验统一升级：最后再收束到统一 Config Workspace
+1. 前端组件测试基线：优先覆盖高风险状态页和权限相关交互
+2. 页面级 E2E 继续补边角权限矩阵
+3. 配置编辑体验统一升级：最后再收束到统一 Config Workspace
 
 ## 5. 下一个会话建议先跑的命令
 

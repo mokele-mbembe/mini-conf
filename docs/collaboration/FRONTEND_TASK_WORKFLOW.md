@@ -14,9 +14,11 @@
 - 已有 projects / config_files 删除入口、引用冲突提示和页面级 E2E 覆盖。
 - 已有项目成员列表、添加成员、角色调整、删除成员和最后 admin 保护提示。
 - 已有 sync records 列表、实例 / 配置 / action / status 筛选和页面级 E2E 覆盖。
+- 已有 heartbeats 列表、实例 / 配置筛选和页面级 E2E 覆盖。
+- 已有 audit logs 列表、用户 / action / resource_type 筛选、admin 权限入口和页面级 E2E 覆盖。
 - 部署实例页已支持模板/普通实例分区、分页、搜索、激活、停用、token reset、归档、恢复、永久删除。
 - Playwright E2E 已覆盖 setup、admin project create、resource lifecycle、must-change-password、Saved Versions、clone、Release detail/diff、deployment archive/delete 等主路径。
-- 仍未完成真实页面的是：heartbeats、audit logs。
+- 低风险运营页已从占位路由补齐为真实页面。
 
 ## 2. 任务流程
 
@@ -159,10 +161,9 @@ E2E_ALLOW_SHARED_SERVER=1 PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 pnpm --dir a
 
 当前下一批前端优先级：
 
-1. heartbeats 页面：按实例、配置查看最近上报；不要自行定义在线真值。
-2. audit logs 页面：按 action / resource_type / user 过滤，仅 admin 入口。
-3. 前端单元 / 组件测试基线：优先覆盖高状态密度组件和权限交互。
-4. Config Workspace：等平台、上线、安全、低风险页收口后再统一升级。
+1. 前端单元 / 组件测试基线：优先覆盖高状态密度组件和权限交互。
+2. 页面级 E2E 继续补权限矩阵和异常分支。
+3. Config Workspace：等平台、上线、安全、低风险页收口后再统一升级。
 
 ## 9. 常见坑
 

@@ -744,6 +744,111 @@ test("sync records: list and filter reported client events", async ({
   await expect(recordRow).toBeVisible({ timeout: 10_000 });
 });
 
+test("heartbeats: list and filter latest client reports", async ({ page }) => {
+  const suffix = `${Date.now()}-heartbeat`;
+  const projectCode = `e2e-project-${suffix}`;
+  const configCode = `heartbeat-main-${Date.now()}`;
+
+  await loginAsPlatformAdmin(page);
+  const projectId = await createProject(page, suffix);
+  const environment = await createProjectEnvironment(page, projectId, suffix);
+  const deployment = await createDeploymentInstance(
+    page,
+    projectId,
+    environment.id,
+    suffix,
+  );
+  const token = await activateDeploymentInstance(page, deployment.id);
+
+  const configResponse = await postWithCsrf(page, "/api/config-files", {
+    data: {
+      project_id: projectId,
+      code: configCode,
+      name: `Heartbeat Main ${suffix}`,
+      format: "yaml",
+      sensitivity: "normal",
+      is_required: false,
+    },
+  });
+  expect(configResponse.ok()).toBeTruthy();
+
+  const heartbeatResponse = await page.request.post("/api/open/heartbeats", {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    data: {
+      project: projectCode,
+      environment: environment.code,
+      deployment_key: deployment.deployment_key,
+      config: configCode,
+      metadata: {
+        status: "ok",
+        version: "1.2.3",
+        source: "playwright",
+      },
+      reported_at: "2026-04-27T12:03:00Z",
+    },
+  });
+  expect(heartbeatResponse.ok()).toBeTruthy();
+
+  await page.goto(`/projects/${projectId}/heartbeats`);
+  await expect(page.getByRole("heading", { name: `E2E Project` })).toBeVisible({
+    timeout: 10_000,
+  });
+  await expect(
+    page.getByText("这里只展示客户端最近一次心跳上报").first(),
+  ).toBeVisible();
+
+  const heartbeatRow = page.locator(".el-table__row", { hasText: configCode });
+  await expect(heartbeatRow).toBeVisible({ timeout: 10_000 });
+  await expect(heartbeatRow).toContainText("1.2.3");
+
+  await page
+    .locator(".project-heartbeat-list-page__filters .el-select__wrapper")
+    .nth(1)
+    .click();
+  await page.getByRole("option", { name: new RegExp(configCode) }).click();
+  await page.getByRole("button", { name: "查询" }).click();
+  await expect(heartbeatRow).toBeVisible({ timeout: 10_000 });
+
+  await page.getByRole("button", { name: "重置" }).click();
+  await expect(heartbeatRow).toBeVisible({ timeout: 10_000 });
+});
+
+test("audit logs: project admins can list and filter audit events", async ({
+  page,
+}) => {
+  const suffix = `${Date.now()}-audit`;
+  const action = "project.created_by_platform_admin";
+
+  await loginAsPlatformAdmin(page);
+  const projectId = await createProject(page, suffix);
+
+  await page.goto(`/projects/${projectId}/audit-logs`);
+  await expect(page.getByRole("heading", { name: `E2E Project` })).toBeVisible({
+    timeout: 10_000,
+  });
+  await expect(
+    page.getByText("审计详情只展示安全元数据").first(),
+  ).toBeVisible();
+
+  const auditRow = page.locator(".el-table__row", { hasText: action });
+  await expect(auditRow).toBeVisible({ timeout: 10_000 });
+  await expect(auditRow).toContainText("project");
+  await expect(auditRow).toContainText(String(projectId));
+
+  await page.getByPlaceholder("按动作筛选").fill(action);
+  await page.getByRole("button", { name: "查询" }).click();
+  await expect(auditRow).toBeVisible({ timeout: 10_000 });
+
+  await page.getByPlaceholder("按资源类型筛选").fill("config_file");
+  await page.getByRole("button", { name: "查询" }).click();
+  await expect(page.getByText("暂无审计日志")).toBeVisible();
+
+  await page.getByRole("button", { name: "重置" }).click();
+  await expect(auditRow).toBeVisible({ timeout: 10_000 });
+});
+
 test("admin project create path: other initial admin hides project-list action", async ({
   page,
 }) => {

@@ -4,7 +4,6 @@ import { ROUTE_NAMES, ROUTE_PATHS } from "@/shared/constants/routes";
 import AuthLayout from "@/app/layouts/AuthLayout.vue";
 import AppShell from "@/app/layouts/AppShell.vue";
 import AdminLayout from "@/app/layouts/AdminLayout.vue";
-import ProjectSectionPlaceholderPage from "@/modules/projects/pages/ProjectSectionPlaceholderPage.vue";
 
 const LoginPage = () => import("@/modules/auth/pages/LoginPage.vue");
 const ChangePasswordPage = () =>
@@ -36,6 +35,10 @@ const ProjectMemberListPage = () =>
   import("@/modules/projects/pages/ProjectMemberListPage.vue");
 const ProjectSyncRecordListPage = () =>
   import("@/modules/projects/pages/ProjectSyncRecordListPage.vue");
+const ProjectHeartbeatListPage = () =>
+  import("@/modules/projects/pages/ProjectHeartbeatListPage.vue");
+const ProjectAuditLogListPage = () =>
+  import("@/modules/projects/pages/ProjectAuditLogListPage.vue");
 
 // Admin pages
 const AdminUserListPage = () =>
@@ -161,12 +164,12 @@ export const routes: RouteRecordRaw[] = [
       {
         path: ROUTE_PATHS.HEARTBEAT_LIST,
         name: ROUTE_NAMES.HEARTBEAT_LIST,
-        component: ProjectSectionPlaceholderPage,
+        component: ProjectHeartbeatListPage,
       },
       {
         path: ROUTE_PATHS.AUDIT_LOG_LIST,
         name: ROUTE_NAMES.AUDIT_LOG_LIST,
-        component: ProjectSectionPlaceholderPage,
+        component: ProjectAuditLogListPage,
       },
     ],
   },

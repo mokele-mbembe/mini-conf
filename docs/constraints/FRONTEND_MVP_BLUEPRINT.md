@@ -651,6 +651,12 @@
 - 当前接口只返回最近状态，不直接给出在线/离线结论
 - `admin / editor / viewer` 都可查看
 
+当前实现：
+
+- 已接入真实页面和路由，支持按部署实例、配置文件筛选
+- 已展示 `config / reported_at / metadata`，展开行展示实例 ID、配置文件 ID 与 metadata JSON
+- 已通过 Playwright 覆盖 Open API 心跳上报后的列表与筛选主路径
+
 ## 18. 审计日志页
 
 页面目标：
@@ -670,3 +676,10 @@
 
 - 仅项目 `admin` 可查看
 - 不展示或拼接 Draft / Release 明文、原始 token、完整 diff 文本
+
+当前实现：
+
+- 已接入真实页面和路由，非项目 `admin` 进入时显示权限不足
+- 项目 tabs 会对非 admin 隐藏成员管理和审计日志入口
+- 已支持按用户 ID、`action`、`resource_type` 筛选
+- 已通过 Playwright 覆盖项目创建审计日志列表与筛选主路径

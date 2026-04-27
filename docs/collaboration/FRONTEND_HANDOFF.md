@@ -50,6 +50,8 @@
 - 已有 deployment archive / restore / permanent delete 前端路径
 - 已有项目成员列表、添加成员、角色调整、删除成员前端路径
 - 已有 sync records 列表与实例 / 配置 / action / status 筛选前端路径
+- 已有 heartbeats 列表与实例 / 配置筛选前端路径
+- 已有 audit logs 列表与用户 / action / resource_type 筛选前端路径
 - 已有前端 build check 和覆盖核心管理链路的 Playwright E2E
 
 因此后续前端工作应默认视为“在已有 scaffold 上继续开发”，而不是重新搭项目前端。
@@ -82,10 +84,7 @@
 - `sync-record`
 - `heartbeat`
 
-当前仍未完成真实页面的是：
-
-- heartbeats 页面
-- audit logs 页面
+低风险运营页面当前已补齐真实实现，不再是占位路由。
 
 当前不在 MVP 主路径范围内：
 
@@ -333,8 +332,8 @@
 4. 发布确认是抽屉、弹窗，还是独立页面。
 5. preview-bundle 更偏“工程工具页”还是“业务可读页”。
 6. secret 内容是否要在前端加二次复制确认或额外遮罩。
-7. 心跳页面是否需要前端自行定义“离线阈值”。
-8. 审计页是否只给 `admin`，以及是否需要事件类型筛选器。
+7. 心跳页面是否需要前端自行定义“离线阈值”：当前不定义，只展示后端最近一次上报。
+8. 审计页是否只给 `admin`，以及是否需要事件类型筛选器：当前仅项目 `admin` 可见，提供 action / resource_type / user 过滤。
 9. 配置工作台是否继续保留在 Draft 编辑页内，还是升级为独立三栏工作台路由。
 10. Release 详情页恢复到 Current Draft 后是否自动跳转编辑页，还是停留在只读详情页。
 11. deleted 历史实例在 Release / audit 页面展示为“已删除于 ...”还是更短的状态标签。
@@ -343,11 +342,11 @@
 
 建议这样排：
 
-1. heartbeats
-2. audit logs
+1. 前端组件测试基线
+2. 权限矩阵和异常分支 E2E 补量
 3. 咖啡中间件 demo 管理端辅助入口
 4. Release 详情 / Diff 体验增强
-5. 前端组件测试基线
+5. Config Workspace 统一升级
 
 原因：
 

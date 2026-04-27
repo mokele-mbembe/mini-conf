@@ -66,14 +66,14 @@
 
 - Setup wizard 已覆盖“创建用户、创建首个项目、指定项目管理员、完成 setup”，但尚未覆盖首个环境、配置文件、模板实例。
 - 项目创建兼容别名 `POST /api/projects` 已改成平台管理员创建项目语义，但长期应优先使用 `/api/admin/projects`。
-- 审计日志已有平台级、项目级和 Open API 失败数据，但前端 audit logs 页面仍是占位。
+- 审计日志已有平台级、项目级和 Open API 失败数据，前端 audit logs 页面已接入项目级查询与筛选。
 
 ### 2.3 尚未完成
 
 - Linux binary 发布包方案已收口为 `just release-package` / `just release-package-check`，GitHub Actions `Release Package` workflow 已可生成并自检 artifact；后续只需要按正式版本策略决定是否创建 GitHub Release。
 - 生产部署 runbook 已覆盖外部 PostgreSQL、`config-center.example.com` 示例域名、反向代理/TLS、环境变量、迁移与初始化；`just staging-smoke` 已提供真实环境只读探测，后续需要按真实 staging 试部署结果补充排障项。
-- heartbeats、audit logs 的真实前端页面。
 - 文档压缩后的最终三层结构。
+- 前端单元 / 组件测试基线。
 - Config Workspace 统一升级。
 
 ## 3. 后续固定顺序
@@ -82,7 +82,7 @@
 
 1. 上线实施方案
 2. 资源生命周期与文案收口
-3. 低风险管理页面补齐
+3. 前端单元 / 组件测试基线
 4. 文档压缩
 5. Config Workspace 统一升级
 
@@ -342,14 +342,14 @@ MVP 交付包中应包含：
 
 这些页面不应先于前四个阶段，但在骨架完成后应尽快补齐。
 
-状态：项目成员页和 sync records 页已完成；其余低风险运营页仍是占位路由。
+状态：项目成员页、sync records、heartbeats、audit logs 均已完成真实页面和主路径 E2E。
 
 ### 8.1 必补页面
 
 - 项目成员页（已完成）
 - sync records 页面（已完成）
-- heartbeats 页面
-- audit logs 页面
+- heartbeats 页面（已完成）
+- audit logs 页面（已完成）
 - 创建项目入口改造后的平台项目创建流程（已完成）
 
 ### 8.2 前端验收
