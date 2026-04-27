@@ -43,6 +43,17 @@
           </el-descriptions-item>
         </el-descriptions>
 
+        <el-alert
+          v-if="setupBlockedByRole"
+          :title="t('setup.platformAdminRequiredTitle')"
+          type="error"
+          show-icon
+          :closable="false"
+          class="setup-page__alert"
+        >
+          {{ t("setup.platformAdminRequiredDescription") }}
+        </el-alert>
+
         <template
           v-if="setupStatus.setupRequired && authSession.isPlatformAdmin"
         >
@@ -228,8 +239,16 @@
           >
             {{ t("setup.actions.completeSetup") }}
           </el-button>
-          <el-button type="primary" @click="goToLogin">
+          <el-button v-if="!isLoggedIn" type="primary" @click="goToLogin">
             {{ t("setup.actions.goToLogin") }}
+          </el-button>
+          <el-button
+            v-if="isLoggedIn"
+            type="primary"
+            :loading="loggingOut"
+            @click="handleLogout"
+          >
+            {{ t("app.logout") }}
           </el-button>
           <el-button v-if="!setupStatus.setupRequired" @click="goToProjects">
             {{ t("setup.actions.goToProjects") }}
@@ -276,6 +295,7 @@ const completing = ref(false);
 const creatingAdmin = ref(false);
 const creatingProject = ref(false);
 const adminSearchLoading = ref(false);
+const loggingOut = ref(false);
 const adminFormRef = ref<FormInstance>();
 const projectFormRef = ref<FormInstance>();
 const createdProjectAdmin = ref<AdminUserSummary | null>(null);
@@ -285,6 +305,15 @@ let adminSearchRequestSeq = 0;
 
 const showWizard = computed(
   () => setupStatus.setupRequired && authSession.isPlatformAdmin,
+);
+
+const isLoggedIn = computed(() => authSession.isLoggedIn());
+
+const setupBlockedByRole = computed(
+  () =>
+    setupStatus.setupRequired &&
+    isLoggedIn.value &&
+    !authSession.isPlatformAdmin,
 );
 
 const showLegacyCompleteAction = computed(
@@ -403,6 +432,18 @@ function goToLogin() {
 
 function goToProjects() {
   router.push({ name: ROUTE_NAMES.PROJECTS });
+}
+
+async function handleLogout() {
+  loggingOut.value = true;
+  try {
+    await authSession.logout();
+    await router.replace({ name: ROUTE_NAMES.LOGIN });
+  } catch {
+    ElMessage.error(t("login.sessionCheckFailed"));
+  } finally {
+    loggingOut.value = false;
+  }
 }
 
 async function handleCompleteSetup() {

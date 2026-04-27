@@ -35,6 +35,9 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "setup.completedTitle": "系统已完成初始化",
     "setup.completedDescription":
       "初始化标记已经存在，可以继续进入现有管理流程。",
+    "setup.platformAdminRequiredTitle": "当前账号不能执行初始化",
+    "setup.platformAdminRequiredDescription":
+      "系统初始化必须由平台管理员完成。请登出后使用平台管理员账号登录。",
     "setup.statusLoadFailed": "加载初始化状态失败",
     "setup.completeFailed": "标记初始化完成失败",
     "setup.completedToast": "系统初始化已标记为完成",
@@ -700,6 +703,9 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "setup.completedTitle": "System setup is complete",
     "setup.completedDescription":
       "A setup completion marker already exists. You can continue using the current management flow.",
+    "setup.platformAdminRequiredTitle": "Current account cannot complete setup",
+    "setup.platformAdminRequiredDescription":
+      "System setup must be completed by a platform admin. Log out and sign in with a platform admin account.",
     "setup.statusLoadFailed": "Failed to load setup status",
     "setup.completeFailed": "Failed to mark setup as complete",
     "setup.completedToast": "System setup has been marked as complete",

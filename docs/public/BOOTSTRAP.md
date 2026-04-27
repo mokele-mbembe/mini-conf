@@ -227,6 +227,7 @@ OPENAPI_EXPORT_PATH=docs/artifacts/openapi.json
 
 - 对 runtime DB 执行迁移
 - 写入可重复执行的 demo 用户、项目、配置、部署实例、Draft、Release、sync records、heartbeats、audit logs
+- 将本地 demo 数据库标记为已完成 setup，便于直接进入管理台联调
 - 输出本地可直接登录的账号和 open API demo token
 
 ## 8. 代码质量与 TDD 基线

@@ -56,6 +56,8 @@ async fn main() -> SeedResult {
     println!("  - prod store-001: {}", summary.store_001_token);
     println!("  - prod store-002: {}", summary.store_002_token);
     println!("  - staging stage-001: {}", summary.staging_token);
+    println!("Setup state:");
+    println!("  - completed for local frontend preview");
 
     Ok(())
 }
@@ -63,10 +65,13 @@ async fn main() -> SeedResult {
 async fn seed_demo_data(pool: &PgPool) -> SeedResult<SeedSummary> {
     let mut tx = pool.begin().await?;
 
-    let admin_user_id = upsert_user(&mut tx, ADMIN_USERNAME, ADMIN_PASSWORD, "active").await?;
-    let alice_user_id = upsert_user(&mut tx, ALICE_USERNAME, ALICE_PASSWORD, "active").await?;
-    let bob_user_id = upsert_user(&mut tx, BOB_USERNAME, BOB_PASSWORD, "active").await?;
-    let carol_user_id = upsert_user(&mut tx, CAROL_USERNAME, CAROL_PASSWORD, "active").await?;
+    let admin_user_id =
+        upsert_user(&mut tx, ADMIN_USERNAME, ADMIN_PASSWORD, "active", true).await?;
+    let alice_user_id =
+        upsert_user(&mut tx, ALICE_USERNAME, ALICE_PASSWORD, "active", false).await?;
+    let bob_user_id = upsert_user(&mut tx, BOB_USERNAME, BOB_PASSWORD, "active", false).await?;
+    let carol_user_id =
+        upsert_user(&mut tx, CAROL_USERNAME, CAROL_PASSWORD, "active", false).await?;
 
     let coffee_project_id = upsert_project(
         &mut tx,
@@ -673,6 +678,8 @@ async fn seed_demo_data(pool: &PgPool) -> SeedResult<SeedSummary> {
     )
     .await?;
 
+    mark_setup_completed(&mut tx, admin_user_id).await?;
+
     tx.commit().await?;
 
     Ok(SeedSummary {
@@ -775,18 +782,29 @@ async fn upsert_user(
     username: &str,
     password: &str,
     status: &str,
+    is_platform_admin: bool,
 ) -> SeedResult<i64> {
     let password_hash =
         hash_password(password).map_err(|error| io::Error::other(error.into_body().message))?;
 
     let user_id = sqlx::query_scalar(
         r#"
-        INSERT INTO users (username, password_hash, status)
-        VALUES ($1, $2, $3)
+        INSERT INTO users (
+            username,
+            password_hash,
+            status,
+            is_platform_admin,
+            must_change_password,
+            password_updated_at
+        )
+        VALUES ($1, $2, $3, $4, FALSE, NOW())
         ON CONFLICT (username)
         DO UPDATE SET
             password_hash = EXCLUDED.password_hash,
             status = EXCLUDED.status,
+            is_platform_admin = EXCLUDED.is_platform_admin,
+            must_change_password = EXCLUDED.must_change_password,
+            password_updated_at = NOW(),
             updated_at = NOW()
         RETURNING id
         "#,
@@ -794,10 +812,40 @@ async fn upsert_user(
     .bind(username)
     .bind(password_hash)
     .bind(status)
+    .bind(is_platform_admin)
     .fetch_one(tx.as_mut())
     .await?;
 
     Ok(user_id)
+}
+
+async fn mark_setup_completed(
+    tx: &mut Transaction<'_, Postgres>,
+    completed_by_user_id: i64,
+) -> SeedResult {
+    sqlx::query(
+        r#"
+        INSERT INTO system_settings (
+            id,
+            setup_completed_at,
+            setup_completed_by_user_id
+        )
+        VALUES (1, NOW(), $1)
+        ON CONFLICT (id)
+        DO UPDATE SET
+            setup_completed_at = COALESCE(system_settings.setup_completed_at, NOW()),
+            setup_completed_by_user_id = COALESCE(
+                system_settings.setup_completed_by_user_id,
+                EXCLUDED.setup_completed_by_user_id
+            ),
+            updated_at = NOW()
+        "#,
+    )
+    .bind(completed_by_user_id)
+    .execute(tx.as_mut())
+    .await?;
+
+    Ok(())
 }
 
 async fn upsert_project(
@@ -954,6 +1002,7 @@ async fn upsert_deployment_instance(
         )
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         ON CONFLICT (project_id, environment_id, deployment_key)
+        WHERE deleted_at IS NULL
         DO UPDATE SET
             name = EXCLUDED.name,
             description = EXCLUDED.description,
