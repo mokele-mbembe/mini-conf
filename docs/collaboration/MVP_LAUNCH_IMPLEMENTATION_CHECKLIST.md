@@ -70,8 +70,8 @@
 
 ### 2.3 尚未完成
 
-- Linux binary 发布包方案已收口为 `just release-package`，GitHub Actions `Release Package` workflow 已可生成 artifact；后续只需要按正式版本策略决定是否创建 GitHub Release。
-- 生产部署 runbook 已覆盖外部 PostgreSQL、`config-center.mycompany.com`、反向代理/TLS、环境变量、迁移与初始化；后续需要按真实 staging 试部署结果补充排障项。
+- Linux binary 发布包方案已收口为 `just release-package` / `just release-package-check`，GitHub Actions `Release Package` workflow 已可生成并自检 artifact；后续只需要按正式版本策略决定是否创建 GitHub Release。
+- 生产部署 runbook 已覆盖外部 PostgreSQL、`config-center.example.com` 示例域名、反向代理/TLS、环境变量、迁移与初始化；`just staging-smoke` 已提供真实环境只读探测，后续需要按真实 staging 试部署结果补充排障项。
 - projects / config_files 删除能力与引用检查。
 - 项目成员、sync records、heartbeats、audit logs 的真实前端页面。
 - 文档压缩后的最终三层结构。
@@ -228,7 +228,7 @@ MVP 交付包中应包含：
 - 生产部署变量清单
 - Linux binary 发布包布局与构建说明
 - 外部 PostgreSQL 连接、迁移和备份边界说明
-- `config-center.mycompany.com` 这类独立入口域名下的反向代理/TLS 示例
+- `config-center.example.com` 这类独立入口域名下的反向代理/TLS 示例
 - 首次启动排障手册
 
 ## 6. Phase 3: 上线安全基线

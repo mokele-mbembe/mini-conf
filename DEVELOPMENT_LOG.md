@@ -16,6 +16,8 @@
 
 - 生产部署主路径改为 Linux binary 发布包，不再把 Dockerfile / 容器镜像作为默认生产目标
 - 新增 `just release-package` 和 [scripts/release-package.sh](./scripts/release-package.sh)，默认生成 `dist/mini-conf-linux-x86_64.tar.gz`
+- 新增 `just release-package-check` 和 [scripts/release-package-check.sh](./scripts/release-package-check.sh)，用于发布包上传或部署前结构自检
+- 新增 `just staging-smoke` 和 [scripts/staging-smoke.sh](./scripts/staging-smoke.sh)，用于真实 staging / production-like 环境的只读 HTTP smoke
 - 新增 `.github/workflows/release-package.yml`，支持手动触发或 `v*` tag 生成并上传发布包 artifact
 - 新增 [deploy/mini-conf.env.example](./deploy/mini-conf.env.example) 与 [deploy/mini-conf.service.example](./deploy/mini-conf.service.example)，发布包会复制到 `config/` 和 `systemd/`
 - 新增 [docs/runbooks/PRODUCTION_BINARY.md](./docs/runbooks/PRODUCTION_BINARY.md)，覆盖发布包布局、构建步骤、外部 PostgreSQL、生产变量、systemd、反向代理、首次启动、smoke 和回滚

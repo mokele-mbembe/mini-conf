@@ -8,7 +8,7 @@ MVP 生产部署主路径是：
 - 前端静态构建产物 `web/`
 - 数据库迁移目录 `migrations/`
 - 外部 PostgreSQL 16+
-- 独立入口域名，例如 `config-center.mycompany.com`
+- 独立入口域名，例如 `config-center.example.com`
 - 由现有反向代理 / TLS 基础设施负责 HTTPS、证书和域名转发
 
 不把 PostgreSQL、DNS、证书或反向代理纳入项目编排。`docker-compose.yml` 不作为 MVP 生产交付目标。
@@ -43,6 +43,7 @@ mini-conf/
 ```bash
 pnpm install --frozen-lockfile
 just release-package
+just release-package-check
 ```
 
 默认输出：
@@ -52,6 +53,8 @@ dist/mini-conf-linux-x86_64.tar.gz
 ```
 
 可用 `MINI_CONF_RELEASE_NAME` 覆盖包名，用 `MINI_CONF_DIST_DIR` 覆盖输出目录。
+
+`just release-package-check` 默认检查 `dist/mini-conf-linux-x86_64.tar.gz`，可用 `MINI_CONF_RELEASE_ARCHIVE` 指向其他归档文件。
 
 GitHub Actions 也提供 `Release Package` workflow，可手动触发，或在推送 `v*` tag 时生成并上传同名 artifact。
 
@@ -135,7 +138,7 @@ sudo systemctl status mini-conf
 入口域名建议：
 
 ```text
-config-center.mycompany.com
+config-center.example.com
 ```
 
 Nginx 示例：
@@ -143,10 +146,10 @@ Nginx 示例：
 ```nginx
 server {
     listen 443 ssl http2;
-    server_name config-center.mycompany.com;
+    server_name config-center.example.com;
 
-    ssl_certificate     /etc/nginx/certs/config-center.mycompany.com.crt;
-    ssl_certificate_key /etc/nginx/certs/config-center.mycompany.com.key;
+    ssl_certificate     /etc/nginx/certs/config-center.example.com.crt;
+    ssl_certificate_key /etc/nginx/certs/config-center.example.com.key;
 
     client_max_body_size 2m;
 
@@ -163,24 +166,41 @@ server {
 
 如果公司已有通配符证书或统一网关，应优先复用现有 TLS 和路由能力。
 
+`config-center.example.com` 只作为文档和 CI 中的保留示例域名。替换成真实公司域名时，需要同步完成：
+
+- 在公司 DNS 中创建真实域名记录，指向统一网关、负载均衡器或反向代理入口。
+- 为真实域名签发或接入 TLS 证书；如使用通配符证书，确认该子域名被覆盖。
+- 将反向代理 `server_name`、证书路径和上游转发规则改为真实域名。
+- 用真实域名运行 `STAGING_BASE_URL=https://<real-domain> just staging-smoke`。
+- 如果客户端 SDK、业务系统或部署脚本写死了 base URL，同步替换为真实域名。
+
 ## 8. First Boot
 
 首次部署顺序：
 
-1. 准备外部 PostgreSQL database 和账号。
-2. 上传并解压 release artifact 到 `/opt/mini-conf`。
-3. 写入 `/etc/mini-conf/mini-conf.env`。
-4. 运行 migrations。
-5. 启动 `mini-conf.service`。
-6. 访问 `https://config-center.mycompany.com/api/healthz`。
-7. 访问管理台完成 setup。
+1. 在发布机运行 `just release-package-check`。
+2. 准备外部 PostgreSQL database 和账号。
+3. 上传并解压 release artifact 到 `/opt/mini-conf`。
+4. 写入 `/etc/mini-conf/mini-conf.env`。
+5. 运行 migrations。
+6. 启动 `mini-conf.service`。
+7. 访问 `https://config-center.example.com/api/healthz`。
+8. 访问管理台完成 setup。
 
 ## 9. Smoke Checks
 
 ```bash
-curl -fsS https://config-center.mycompany.com/api/healthz
-curl -fsSI https://config-center.mycompany.com/
+STAGING_BASE_URL=https://config-center.example.com just staging-smoke
+curl -fsS https://config-center.example.com/api/healthz
+curl -fsSI https://config-center.example.com/
 ```
+
+`just staging-smoke` 会检查：
+
+- `/api/healthz` 返回 `200`
+- `/` 能返回前端入口 HTML
+- 生产安全响应头存在
+- Open API 未带 Bearer token 时返回 `401 missing_token`
 
 完成 setup 后再验证：
 

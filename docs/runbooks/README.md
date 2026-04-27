@@ -10,8 +10,15 @@
 
 ```bash
 just release-package
+just release-package-check
 ```
 
 也可以通过 GitHub Actions 的 `Release Package` workflow 手动生成，或推送 `v*` tag 自动生成。
+
+真实 staging / production-like 环境上线后，用下面的只读 smoke 验证入口：
+
+```bash
+STAGING_BASE_URL=https://config-center.example.com just staging-smoke
+```
 
 当前不把 `docker-compose.yml` 作为 MVP 生产交付目标。Docker image 可以作为后续可选包装形式，但不是默认运行模型。

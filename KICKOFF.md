@@ -32,10 +32,10 @@
 
 1. 文档同步与入口压缩：保持 README / KICKOFF / DEVELOPMENT_LOG / constraints 与当前实现一致。
 2. 上线实施方案：
-   - Linux binary 发布包已提供 `just release-package`
+   - Linux binary 发布包已提供 `just release-package` / `just release-package-check`
    - 外部 PostgreSQL 16+ 作为必备基础设施
-   - `config-center.mycompany.com` 独立入口域名 + 反向代理/TLS runbook 已成文
-   - GitHub Actions `Release Package` workflow 已可生成 artifact，下一步是真实 staging 试部署
+   - `config-center.example.com` 示例入口域名 + 反向代理/TLS runbook 已成文
+   - GitHub Actions `Release Package` workflow 已可生成 artifact，`just staging-smoke` 已提供真实环境只读探测，下一步是真实 staging 试部署
 3. 资源生命周期与文案收口：
    - projects 删除能力和引用检查
    - config_files 删除能力和引用检查

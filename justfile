@@ -245,6 +245,12 @@ perf-ci:
 release-package:
   @bash scripts/release-package.sh
 
+release-package-check:
+  @bash scripts/release-package-check.sh
+
+staging-smoke:
+  @bash scripts/staging-smoke.sh
+
 ci-local:
   @just lint
   @just sqlx-check

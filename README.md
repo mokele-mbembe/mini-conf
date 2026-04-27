@@ -172,11 +172,18 @@ MVP 生产部署主路径是 Linux binary 发布包，不把 PostgreSQL、DNS、
 ```bash
 pnpm install --frozen-lockfile
 just release-package
+just release-package-check
 ```
 
 默认产物是 `dist/mini-conf-linux-x86_64.tar.gz`，包含 `bin/mini-conf-server`、`web/`、`migrations/`、生产 env 示例和 systemd 示例。完整部署步骤见 [docs/runbooks/PRODUCTION_BINARY.md](./docs/runbooks/PRODUCTION_BINARY.md)。
 
 GitHub Actions 的 `Release Package` workflow 可手动触发，也会在推送 `v*` tag 时上传同名 artifact。
+
+真实 staging 或 production-like 环境部署后，可以用只读 smoke 验证入口：
+
+```bash
+STAGING_BASE_URL=https://config-center.example.com just staging-smoke
+```
 
 ## 本机联调启动
 
@@ -283,7 +290,7 @@ just db-clean-alpha-runtime-local
 建议按这个顺序推进：
 
 1. 文档同步和入口压缩，保持 README / KICKOFF / DEVELOPMENT_LOG / constraints 与真实实现一致
-2. 上线实施方案：Linux binary 发布包、外部 PostgreSQL、`config-center.mycompany.com` 入口域名、反向代理/TLS、初始化和生产变量清单
+2. 上线实施方案：Linux binary 发布包、外部 PostgreSQL、`config-center.example.com` 示例入口域名、反向代理/TLS、初始化和生产变量清单
 3. 资源生命周期收口：projects / config_files 删除能力与引用检查
 4. 低风险运营页面：项目成员、sync records、heartbeats、audit logs
 5. 前端单元 / 组件测试基线和更完整页面级 E2E

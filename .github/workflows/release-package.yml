@@ -43,6 +43,9 @@ jobs:
       - name: Build release package
         run: just release-package
 
+      - name: Check release package
+        run: just release-package-check
+
       - name: Upload release package
         uses: actions/upload-artifact@v6
         with:
