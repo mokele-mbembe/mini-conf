@@ -12,6 +12,16 @@
 
 ## 1.1 最近完成
 
+2026-04-27 本轮完成 projects / config_files 删除能力与引用检查：
+
+- 新增 `DELETE /api/projects/:id`，项目 `admin` 可删除未被业务资源引用的空项目
+- 新增 `DELETE /api/admin/projects/:id`，平台管理员可从平台项目列表删除空项目壳，即使自己不是该项目成员
+- 新增 `DELETE /api/config-files/:id`，项目 `admin` 可删除未被 Draft、Saved Version、Release、同步记录或心跳引用的配置文件
+- 删除项目时清理项目成员关系；历史项目审计解除 `project_id` 外键关联，并写入全局 `project.deleted` 审计
+- 删除配置文件写入 `config_file.deleted` 审计
+- 前端项目概览、平台项目列表和配置文件列表已补删除入口、确认弹窗和错误码文案
+- OpenAPI artifact 与 `ADMIN_API / FRONTEND_MVP_BLUEPRINT / KICKOFF / MVP_LAUNCH_IMPLEMENTATION_CHECKLIST` 已同步
+
 2026-04-27 本轮修复本地前端联调 setup 死路：
 
 - `dev-seed-demo` 现在会把 `admin / admin123456` 设为平台管理员，并将本地 demo 数据库标记为已完成 setup

@@ -26,7 +26,17 @@
         :subtitle="project.description ?? undefined"
       >
         <template #actions>
-          <StatusBadge :status="project.status" />
+          <el-space wrap>
+            <StatusBadge :status="project.status" />
+            <el-button
+              v-if="isAdmin"
+              type="danger"
+              :loading="deleting"
+              @click="handleDeleteProject"
+            >
+              {{ t("project.action.delete") }}
+            </el-button>
+          </el-space>
         </template>
       </PageHeader>
 
@@ -48,10 +58,13 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, watch } from "vue";
-import { useRoute } from "vue-router";
+import { computed, onMounted, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { useProjectContext } from "../composables/useProjectContext";
 import ProjectTabs from "../components/ProjectTabs.vue";
+import * as projectsApi from "@/api/projects";
+import { isApiError } from "@/api/error";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import StatusBadge from "@/shared/components/StatusBadge.vue";
 import LoadingState from "@/shared/states/LoadingState.vue";
@@ -60,15 +73,53 @@ import ForbiddenState from "@/shared/states/ForbiddenState.vue";
 import ErrorState from "@/shared/states/ErrorState.vue";
 import { useI18nText } from "@/shared/i18n";
 import { getErrorMessage } from "@/shared/constants/error-messages";
+import { ROUTE_NAMES } from "@/shared/constants/routes";
 
 const route = useRoute();
+const router = useRouter();
 const { project, loading, error, fetchProject } = useProjectContext();
 const { t } = useI18nText();
+const deleting = ref(false);
+const isAdmin = computed(() => project.value?.current_user_role === "admin");
 
 function loadProject() {
   const id = Number(route.params.projectId);
   if (!isNaN(id)) {
     fetchProject(id);
+  }
+}
+
+async function handleDeleteProject() {
+  if (!project.value) return;
+
+  try {
+    await ElMessageBox.confirm(
+      t("project.delete.confirm", { code: project.value.code }),
+      t("project.delete.title"),
+      {
+        confirmButtonText: t("common.delete"),
+        cancelButtonText: t("common.cancel"),
+        type: "warning",
+        confirmButtonClass: "el-button--danger",
+      },
+    );
+  } catch {
+    return;
+  }
+
+  deleting.value = true;
+  try {
+    await projectsApi.deleteProject(project.value.id);
+    ElMessage.success(t("project.delete.success"));
+    router.replace({ name: ROUTE_NAMES.PROJECTS });
+  } catch (err) {
+    if (isApiError(err)) {
+      ElMessage.error(getErrorMessage(err.code, err.message));
+    } else {
+      ElMessage.error(t("project.delete.failed"));
+    }
+  } finally {
+    deleting.value = false;
   }
 }
 

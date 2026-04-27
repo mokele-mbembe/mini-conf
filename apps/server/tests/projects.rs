@@ -606,3 +606,92 @@ async fn create_project_alias_does_not_grant_platform_admin_project_visibility()
 
     teardown(&database_url, &schema, pool).await
 }
+
+#[tokio::test]
+async fn delete_project_removes_empty_project_and_writes_global_audit() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    let project_id: i64 = sqlx::query_scalar(
+        "INSERT INTO projects (code, name, status) VALUES ('empty-project', 'Empty Project', 'active') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await?;
+    grant_admin_membership(&pool, project_id).await?;
+
+    let cookie = login(&app).await?;
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/api/projects/{project_id}"))
+                .header(header::COOKIE, cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+    let project_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM projects WHERE id = $1")
+        .bind(project_id)
+        .fetch_one(&pool)
+        .await?;
+    assert_eq!(project_count, 0);
+
+    let member_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM project_members WHERE project_id = $1")
+            .bind(project_id)
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!(member_count, 0);
+
+    let audit_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM audit_logs WHERE action = 'project.deleted' AND resource_id = $1 AND project_id IS NULL",
+    )
+    .bind(project_id.to_string())
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(audit_count, 1);
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn delete_project_rejects_project_with_dependent_config_files() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    let project_id: i64 = sqlx::query_scalar(
+        "INSERT INTO projects (code, name, status) VALUES ('used-project', 'Used Project', 'active') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await?;
+    grant_admin_membership(&pool, project_id).await?;
+    sqlx::query(
+        "INSERT INTO config_files (project_id, code, name, format, sensitivity, status) VALUES ($1, 'main', 'Main', 'yaml', 'normal', 'active')",
+    )
+    .bind(project_id)
+    .execute(&pool)
+    .await?;
+
+    let cookie = login(&app).await?;
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/api/projects/{project_id}"))
+                .header(header::COOKIE, cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let payload: ErrorResponse = read_json(response).await?;
+    assert_eq!(payload.code, "project_delete_conflict");
+    assert_eq!(payload.message, "project has dependent resources");
+
+    teardown(&database_url, &schema, pool).await
+}

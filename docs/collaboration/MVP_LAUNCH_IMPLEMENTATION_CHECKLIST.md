@@ -72,7 +72,6 @@
 
 - Linux binary 发布包方案已收口为 `just release-package` / `just release-package-check`，GitHub Actions `Release Package` workflow 已可生成并自检 artifact；后续只需要按正式版本策略决定是否创建 GitHub Release。
 - 生产部署 runbook 已覆盖外部 PostgreSQL、`config-center.example.com` 示例域名、反向代理/TLS、环境变量、迁移与初始化；`just staging-smoke` 已提供真实环境只读探测，后续需要按真实 staging 试部署结果补充排障项。
-- projects / config_files 删除能力与引用检查。
 - 项目成员、sync records、heartbeats、audit logs 的真实前端页面。
 - 文档压缩后的最终三层结构。
 - Config Workspace 统一升级。
@@ -286,7 +285,7 @@ MVP 交付包中应包含：
 
 ## 7. Phase 4: 资源生命周期与文案收口
 
-状态：deployment instance 已完成；projects / config_files 删除能力尚未完成。
+状态：deployment instance 已完成；projects / config_files 删除能力和引用检查已完成，后续只做状态词与边角文案复核。
 
 ### 7.1 目标
 
@@ -297,12 +296,12 @@ MVP 交付包中应包含：
 #### Projects
 
 - 保持 `active | archived`
-- 新增“可删除但需未被引用”的删除能力
+- 已新增“可删除但需未被引用”的删除能力
 
 #### ConfigFiles
 
 - 保持 `active | archived`
-- 新增“可删除但需未被引用”的删除能力
+- 已新增“可删除但需未被引用”的删除能力
 
 #### ProjectEnvironments
 
@@ -327,16 +326,17 @@ MVP 交付包中应包含：
 
 ### 7.4 后端实施项
 
-- `projects` 删除前引用检查
-- `config_files` 删除前引用检查
-- 相关错误码补齐
-- OpenAPI 与 DB 文档同步
+- `projects` 删除前引用检查已完成
+- `config_files` 删除前引用检查已完成
+- 相关错误码已补齐
+- OpenAPI 与接口文档已同步
 
 ### 7.5 前端实施项
 
-- 项目页补删除入口和确认逻辑
-- 配置文件页补删除入口和确认逻辑
-- 统一状态 badge、表单选项、错误提示
+- 项目页已补删除入口和确认逻辑
+- 平台项目列表已补删除入口和确认逻辑
+- 配置文件页已补删除入口和确认逻辑
+- 后续继续复核状态 badge、表单选项、错误提示边角一致性
 
 ## 8. Phase 5: 低风险页面补齐
 

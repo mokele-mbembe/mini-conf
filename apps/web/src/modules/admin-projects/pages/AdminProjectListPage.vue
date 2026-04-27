@@ -84,6 +84,24 @@
             {{ formatDate(row.created_at) }}
           </template>
         </el-table-column>
+        <el-table-column
+          :label="t('admin.projects.columns.actions')"
+          width="100"
+          align="center"
+          fixed="right"
+        >
+          <template #default="{ row }">
+            <el-button
+              text
+              type="danger"
+              size="small"
+              :loading="deletingProjectId === row.id"
+              @click="handleDeleteProject(row)"
+            >
+              {{ t("common.delete") }}
+            </el-button>
+          </template>
+        </el-table-column>
       </el-table>
 
       <div class="admin-project-list-page__pagination">
@@ -105,7 +123,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import * as adminProjectsApi from "@/api/admin-projects";
 import { isApiError } from "@/api/error";
 import type { AdminProjectSummary } from "@/api/types/admin-project";
@@ -122,6 +140,7 @@ const projects = ref<AdminProjectSummary[]>([]);
 const total = ref(0);
 const page = ref(1);
 const pageSize = ref(20);
+const deletingProjectId = ref<number | null>(null);
 let requestSeq = 0;
 
 const filters = ref({
@@ -182,6 +201,38 @@ function handlePageSizeChange() {
 
 function goToCreateProject() {
   router.push({ name: ROUTE_NAMES.ADMIN_CREATE_PROJECT });
+}
+
+async function handleDeleteProject(project: AdminProjectSummary) {
+  try {
+    await ElMessageBox.confirm(
+      t("admin.projects.delete.confirm", { code: project.code }),
+      t("admin.projects.delete.title"),
+      {
+        confirmButtonText: t("common.delete"),
+        cancelButtonText: t("common.cancel"),
+        type: "warning",
+        confirmButtonClass: "el-button--danger",
+      },
+    );
+  } catch {
+    return;
+  }
+
+  deletingProjectId.value = project.id;
+  try {
+    await adminProjectsApi.deleteAdminProject(project.id);
+    ElMessage.success(t("admin.projects.delete.success"));
+    await loadProjects();
+  } catch (err) {
+    if (isApiError(err)) {
+      ElMessage.error(getErrorMessage(err.code, err.message));
+    } else {
+      ElMessage.error(t("admin.projects.delete.failed"));
+    }
+  } finally {
+    deletingProjectId.value = null;
+  }
 }
 
 function formatDate(dateStr: string) {

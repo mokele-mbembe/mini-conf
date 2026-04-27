@@ -36,3 +36,7 @@ export function createAdminProject(
 ): Promise<AdminProjectCreateResponse> {
   return client.post<AdminProjectCreateResponse>("/admin/projects", body);
 }
+
+export function deleteAdminProject(id: number): Promise<void> {
+  return client.delete<void>(`/admin/projects/${id}`);
+}

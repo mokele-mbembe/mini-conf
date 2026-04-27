@@ -216,6 +216,15 @@
 - 必须指定一个 active 用户作为首个项目 `admin`。
 - 创建项目后，平台管理员默认不会自动加入该项目。
 
+### `DELETE /api/admin/projects/:id`
+
+说明：
+
+- 只有 `platform_admin` 可调用。
+- 用于删除平台侧空项目壳，当前平台管理员不需要是该项目成员。
+- 删除前会检查业务引用；存在配置文件、环境、部署实例、Draft、Saved Version、Release、同步记录或心跳时返回 `409 project_delete_conflict`。
+- 项目成员关系会随项目删除清理；项目级审计会解除 `project_id` 外键关联，并额外写入一条全局 `project.deleted` 审计记录。
+
 ## 8. Project API
 
 ### `GET /api/projects`
@@ -243,6 +252,14 @@
 
 - `GET` 需要当前用户是该项目成员
 - `PUT` 仅项目 `admin` 可调用
+
+### `DELETE /api/projects/:id`
+
+说明：
+
+- 仅项目 `admin` 可调用。
+- 删除前会检查业务引用；存在配置文件、环境、部署实例、Draft、Saved Version、Release、同步记录或心跳时返回 `409 project_delete_conflict`。
+- 项目成员关系会随项目删除清理；项目级审计会解除 `project_id` 外键关联，并额外写入一条全局 `project.deleted` 审计记录。
 
 ## 9. Project Member API
 
@@ -320,6 +337,8 @@
 
 ### `PUT /api/config-files/:id`
 
+### `DELETE /api/config-files/:id`
+
 说明：
 
 - `code` 在中文语义上更接近“配置标识”，不是字符编码
@@ -329,6 +348,8 @@
 - `is_required` 是项目级规则，用于约束实例发布前是否必须已具备该配置
 - `GET` 需要项目成员身份
 - `POST / PUT` 仅项目 `admin` 可调用
+- `DELETE` 仅项目 `admin` 可调用；存在 Draft、Saved Version、Release、同步记录或心跳引用时返回 `409 config_file_delete_conflict`
+- 删除成功会写入 `config_file.deleted` 审计记录
 
 ## 11. Project Environment API
 

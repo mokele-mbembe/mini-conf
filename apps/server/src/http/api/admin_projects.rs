@@ -2,11 +2,12 @@ use crate::{
     audit::{AuditLogEntry, write_audit_log},
     authorization::require_platform_admin,
     error::ApiError,
+    http::api::projects::delete_project_by_id,
     state::AppState,
 };
 use axum::{
     Json, Router,
-    extract::{Query, State, rejection::JsonRejection},
+    extract::{Path, Query, State, rejection::JsonRejection},
     http::{HeaderMap, StatusCode},
     routing::get,
 };
@@ -42,10 +43,15 @@ struct ValidatedCreatePlatformProjectRequest {
 }
 
 pub fn router() -> Router<AppState> {
-    Router::new().route(
-        "/admin/projects",
-        get(list_admin_projects).post(create_admin_project),
-    )
+    Router::new()
+        .route(
+            "/admin/projects",
+            get(list_admin_projects).post(create_admin_project),
+        )
+        .route(
+            "/admin/projects/{id}",
+            axum::routing::delete(delete_admin_project),
+        )
 }
 
 #[utoipa::path(
@@ -180,6 +186,44 @@ pub(crate) async fn create_admin_project(
     .await?;
 
     Ok((StatusCode::CREATED, Json(response)))
+}
+
+#[utoipa::path(
+    delete,
+    path = "/api/admin/projects/{id}",
+    tag = "admin",
+    params(
+        ("id" = i64, Path, description = "Project ID")
+    ),
+    security(
+        ("session_auth" = [])
+    ),
+    responses(
+        (status = 204, description = "Platform project deleted"),
+        (status = 401, description = "Missing or expired admin session", body = crate::error::ErrorResponse),
+        (status = 403, description = "Platform admin access required", body = crate::error::ErrorResponse),
+        (status = 404, description = "Project not found", body = crate::error::ErrorResponse),
+        (status = 409, description = "Project has dependent resources", body = crate::error::ErrorResponse),
+        (status = 503, description = "Database bootstrap disabled", body = crate::error::ErrorResponse),
+        (status = 500, description = "Internal server error", body = crate::error::ErrorResponse),
+    )
+)]
+pub(crate) async fn delete_admin_project(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    headers: HeaderMap,
+) -> Result<StatusCode, ApiError> {
+    let Some(pool) = state.db_pool() else {
+        return Err(ApiError::service_unavailable(
+            "database_unavailable",
+            "Database bootstrap is disabled",
+        ));
+    };
+    let auth = require_platform_admin(pool, &headers).await?;
+
+    delete_project_by_id(pool, auth.user_id, id).await?;
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub(crate) async fn create_platform_project_with_initial_admin(

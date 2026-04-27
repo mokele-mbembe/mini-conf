@@ -57,7 +57,10 @@ struct ValidatedUpdateProjectRequest {
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/projects", get(list_projects).post(create_project))
-        .route("/projects/{id}", get(get_project).put(update_project))
+        .route(
+            "/projects/{id}",
+            get(get_project).put(update_project).delete(delete_project),
+        )
 }
 
 #[utoipa::path(
@@ -264,6 +267,53 @@ pub(crate) async fn update_project(
 }
 
 #[utoipa::path(
+    delete,
+    path = "/api/projects/{id}",
+    tag = "admin",
+    params(
+        ("id" = i64, Path, description = "Project ID")
+    ),
+    security(
+        ("session_auth" = [])
+    ),
+    responses(
+        (status = 204, description = "Project deleted"),
+        (status = 401, description = "Missing or expired admin session", body = crate::error::ErrorResponse),
+        (status = 403, description = "Current project member cannot delete the project", body = crate::error::ErrorResponse),
+        (status = 404, description = "Project not found", body = crate::error::ErrorResponse),
+        (status = 409, description = "Project has dependent resources", body = crate::error::ErrorResponse),
+        (status = 503, description = "Database bootstrap disabled", body = crate::error::ErrorResponse),
+        (status = 500, description = "Internal server error", body = crate::error::ErrorResponse),
+    )
+)]
+pub(crate) async fn delete_project(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    headers: HeaderMap,
+) -> Result<StatusCode, ApiError> {
+    let Some(pool) = state.db_pool() else {
+        return Err(ApiError::service_unavailable(
+            "database_unavailable",
+            "Database bootstrap is disabled",
+        ));
+    };
+    let auth = authenticate_user(pool, &headers).await?;
+    require_project_role(
+        pool,
+        auth.user_id,
+        id,
+        ProjectRole::Admin,
+        "project_not_found",
+        "project not found",
+    )
+    .await?;
+
+    delete_project_by_id(pool, auth.user_id, id).await?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(
     post,
     path = "/api/projects",
     tag = "admin",
@@ -310,6 +360,111 @@ pub(crate) async fn create_project(
     .await?;
 
     Ok((StatusCode::CREATED, Json(response)))
+}
+
+pub(crate) async fn delete_project_by_id(
+    pool: &sqlx::PgPool,
+    actor_user_id: i64,
+    project_id: i64,
+) -> Result<(), ApiError> {
+    let project_row = sqlx::query(
+        r#"
+        SELECT id, code, name, status
+        FROM projects
+        WHERE id = $1
+        LIMIT 1
+        "#,
+    )
+    .bind(project_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| ApiError::internal())?
+    .ok_or_else(|| ApiError::not_found_with("project_not_found", "project not found"))?;
+
+    let reference_row = sqlx::query(
+        r#"
+        SELECT
+            (SELECT COUNT(*) FROM config_files WHERE project_id = $1)::bigint AS config_file_count,
+            (SELECT COUNT(*) FROM deployment_instances WHERE project_id = $1)::bigint AS deployment_count,
+            (SELECT COUNT(*) FROM project_environments WHERE project_id = $1)::bigint AS environment_count,
+            (SELECT COUNT(*) FROM releases WHERE project_id = $1)::bigint AS release_count,
+            (SELECT COUNT(*) FROM drafts WHERE project_id = $1)::bigint AS draft_count,
+            (SELECT COUNT(*) FROM draft_saved_versions WHERE project_id = $1)::bigint AS saved_version_count,
+            (SELECT COUNT(*) FROM deployment_sync_records WHERE project_id = $1)::bigint AS sync_record_count,
+            (SELECT COUNT(*) FROM deployment_heartbeats WHERE project_id = $1)::bigint AS heartbeat_count
+        "#,
+    )
+    .bind(project_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|_| ApiError::internal())?;
+
+    let reference_counts = [
+        reference_row.get::<i64, _>("config_file_count"),
+        reference_row.get::<i64, _>("deployment_count"),
+        reference_row.get::<i64, _>("environment_count"),
+        reference_row.get::<i64, _>("release_count"),
+        reference_row.get::<i64, _>("draft_count"),
+        reference_row.get::<i64, _>("saved_version_count"),
+        reference_row.get::<i64, _>("sync_record_count"),
+        reference_row.get::<i64, _>("heartbeat_count"),
+    ];
+
+    if reference_counts.iter().any(|count| *count > 0) {
+        return Err(ApiError::conflict(
+            "project_delete_conflict",
+            "project has dependent resources",
+        ));
+    }
+
+    let project_code: String = project_row.get("code");
+    let project_status: String = project_row.get("status");
+    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+
+    sqlx::query("UPDATE audit_logs SET project_id = NULL WHERE project_id = $1")
+        .bind(project_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| ApiError::internal())?;
+
+    write_audit_log(
+        &mut *tx,
+        AuditLogEntry {
+            project_id: None,
+            user_id: Some(actor_user_id),
+            action: "project.deleted",
+            resource_type: "project",
+            resource_id: project_id.to_string(),
+            detail: Some(serde_json::json!({
+                "project_id": project_id,
+                "project_code": project_code,
+                "previous_status": project_status
+            })),
+        },
+    )
+    .await?;
+
+    sqlx::query("DELETE FROM project_members WHERE project_id = $1")
+        .bind(project_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| ApiError::internal())?;
+
+    let delete_result = sqlx::query("DELETE FROM projects WHERE id = $1")
+        .bind(project_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| ApiError::internal())?;
+    if delete_result.rows_affected() == 0 {
+        return Err(ApiError::not_found_with(
+            "project_not_found",
+            "project not found",
+        ));
+    }
+
+    tx.commit().await.map_err(|_| ApiError::internal())?;
+
+    Ok(())
 }
 
 impl CreateProjectRequest {
@@ -408,5 +563,49 @@ fn validate_status(value: Option<String>) -> Result<String, ApiError> {
             "invalid_request",
             "invalid project status",
         )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CreateProjectRequest, UpdateProjectRequest};
+
+    #[test]
+    fn create_project_request_validation_trims_required_fields() {
+        let payload = CreateProjectRequest {
+            code: Some(" coffee-main ".to_owned()),
+            name: Some(" Coffee Main ".to_owned()),
+            description: Some(" Retail ".to_owned()),
+            initial_admin_user_id: Some(42),
+        };
+
+        let validated = match payload.validate() {
+            Ok(validated) => validated,
+            Err(error) => panic!("request should validate: {:?}", error.into_body()),
+        };
+
+        assert_eq!(validated.code, "coffee-main");
+        assert_eq!(validated.name, "Coffee Main");
+        assert_eq!(validated.description.as_deref(), Some("Retail"));
+        assert_eq!(validated.initial_admin_user_id, 42);
+    }
+
+    #[test]
+    fn update_project_request_validation_rejects_unknown_status() {
+        let payload = UpdateProjectRequest {
+            code: Some("coffee-main".to_owned()),
+            name: Some("Coffee Main".to_owned()),
+            description: None,
+            status: Some("deleted".to_owned()),
+        };
+
+        let error = match payload.validate() {
+            Ok(_) => panic!("unknown project status should be rejected"),
+            Err(error) => error,
+        };
+
+        let body = error.into_body();
+        assert_eq!(body.code, "invalid_request");
+        assert_eq!(body.message, "invalid project status");
     }
 }

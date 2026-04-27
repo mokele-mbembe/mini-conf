@@ -78,7 +78,9 @@ pub fn router() -> Router<AppState> {
         )
         .route(
             "/config-files/{id}",
-            get(get_config_file).put(update_config_file),
+            get(get_config_file)
+                .put(update_config_file)
+                .delete(delete_config_file),
         )
 }
 
@@ -461,6 +463,131 @@ pub(crate) async fn update_config_file(
     Ok(Json(summary))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/config-files/{id}",
+    tag = "admin",
+    params(
+        ("id" = i64, Path, description = "Config file ID")
+    ),
+    security(
+        ("session_auth" = [])
+    ),
+    responses(
+        (status = 204, description = "Config file deleted"),
+        (status = 401, description = "Missing or expired admin session", body = crate::error::ErrorResponse),
+        (status = 403, description = "Current project member cannot delete config files", body = crate::error::ErrorResponse),
+        (status = 404, description = "Config file not found", body = crate::error::ErrorResponse),
+        (status = 409, description = "Config file has dependent resources", body = crate::error::ErrorResponse),
+        (status = 503, description = "Database bootstrap disabled", body = crate::error::ErrorResponse),
+        (status = 500, description = "Internal server error", body = crate::error::ErrorResponse),
+    )
+)]
+pub(crate) async fn delete_config_file(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    headers: HeaderMap,
+) -> Result<StatusCode, ApiError> {
+    let Some(pool) = state.db_pool() else {
+        return Err(ApiError::service_unavailable(
+            "database_unavailable",
+            "Database bootstrap is disabled",
+        ));
+    };
+
+    let auth = authenticate_user(pool, &headers).await?;
+    let row = sqlx::query(
+        r#"
+        SELECT project_id, code, status
+        FROM config_files
+        WHERE id = $1
+        LIMIT 1
+        "#,
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| ApiError::internal())?
+    .ok_or_else(|| ApiError::not_found_with("config_file_not_found", "config file not found"))?;
+
+    let project_id: i64 = row.get("project_id");
+    require_project_role(
+        pool,
+        auth.user_id,
+        project_id,
+        ProjectRole::Admin,
+        "config_file_not_found",
+        "config file not found",
+    )
+    .await?;
+
+    let reference_row = sqlx::query(
+        r#"
+        SELECT
+            (SELECT COUNT(*) FROM drafts WHERE config_file_id = $1)::bigint AS draft_count,
+            (SELECT COUNT(*) FROM draft_saved_versions WHERE config_file_id = $1)::bigint AS saved_version_count,
+            (SELECT COUNT(*) FROM releases WHERE config_file_id = $1)::bigint AS release_count,
+            (SELECT COUNT(*) FROM deployment_sync_records WHERE config_file_id = $1)::bigint AS sync_record_count,
+            (SELECT COUNT(*) FROM deployment_heartbeats WHERE config_file_id = $1)::bigint AS heartbeat_count
+        "#,
+    )
+    .bind(id)
+    .fetch_one(pool)
+    .await
+    .map_err(|_| ApiError::internal())?;
+
+    let reference_counts = [
+        reference_row.get::<i64, _>("draft_count"),
+        reference_row.get::<i64, _>("saved_version_count"),
+        reference_row.get::<i64, _>("release_count"),
+        reference_row.get::<i64, _>("sync_record_count"),
+        reference_row.get::<i64, _>("heartbeat_count"),
+    ];
+
+    if reference_counts.iter().any(|count| *count > 0) {
+        return Err(ApiError::conflict(
+            "config_file_delete_conflict",
+            "config file has dependent resources",
+        ));
+    }
+
+    let config_file_code: String = row.get("code");
+    let config_file_status: String = row.get("status");
+    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let delete_result = sqlx::query("DELETE FROM config_files WHERE id = $1")
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| ApiError::internal())?;
+    if delete_result.rows_affected() == 0 {
+        return Err(ApiError::not_found_with(
+            "config_file_not_found",
+            "config file not found",
+        ));
+    }
+
+    write_audit_log(
+        &mut *tx,
+        AuditLogEntry {
+            project_id: Some(project_id),
+            user_id: Some(auth.user_id),
+            action: "config_file.deleted",
+            resource_type: "config_file",
+            resource_id: id.to_string(),
+            detail: Some(serde_json::json!({
+                "config_file_id": id,
+                "config_file_code": config_file_code,
+                "previous_status": config_file_status
+            })),
+        },
+    )
+    .await?;
+
+    tx.commit().await.map_err(|_| ApiError::internal())?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
 impl CreateConfigFileRequest {
     fn validate(self) -> Result<ValidatedCreateConfigFileRequest, ApiError> {
         Ok(ValidatedCreateConfigFileRequest {
@@ -628,5 +755,92 @@ fn invalid_body_message(field: &'static str) -> &'static str {
         "format" => "missing required body field: format",
         "status" => "missing required body field: status",
         _ => "missing required body field",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CreateConfigFileRequest, UpdateConfigFileRequest};
+
+    #[test]
+    fn create_config_file_request_validation_defaults_and_trims() {
+        let payload = CreateConfigFileRequest {
+            project_id: Some(7),
+            code: Some(" main ".to_owned()),
+            name: Some(" Main Config ".to_owned()),
+            is_required: None,
+            format: Some("yaml".to_owned()),
+            sensitivity: None,
+            secret_paths: Some(vec![
+                " $.wifi.password ".to_owned(),
+                "".to_owned(),
+                "  ".to_owned(),
+            ]),
+            description: Some(" Primary ".to_owned()),
+        };
+
+        let validated = match payload.validate() {
+            Ok(validated) => validated,
+            Err(error) => panic!("request should validate: {:?}", error.into_body()),
+        };
+
+        assert_eq!(validated.project_id, 7);
+        assert_eq!(validated.code, "main");
+        assert_eq!(validated.name, "Main Config");
+        assert!(!validated.is_required);
+        assert_eq!(validated.format, "yaml");
+        assert_eq!(validated.sensitivity, "normal");
+        assert_eq!(
+            validated.secret_paths.as_deref(),
+            Some(&["$.wifi.password".to_owned()][..])
+        );
+        assert_eq!(validated.description.as_deref(), Some("Primary"));
+    }
+
+    #[test]
+    fn update_config_file_request_validation_rejects_unknown_status() {
+        let payload = UpdateConfigFileRequest {
+            project_id: Some(7),
+            code: Some("main".to_owned()),
+            name: Some("Main Config".to_owned()),
+            is_required: Some(true),
+            format: Some("yaml".to_owned()),
+            sensitivity: Some("normal".to_owned()),
+            secret_paths: None,
+            description: None,
+            status: Some("deleted".to_owned()),
+        };
+
+        let error = match payload.validate() {
+            Ok(_) => panic!("unknown config file status should be rejected"),
+            Err(error) => error,
+        };
+
+        let body = error.into_body();
+        assert_eq!(body.code, "invalid_request");
+        assert_eq!(body.message, "invalid config file status");
+    }
+
+    #[test]
+    fn create_config_file_request_validation_rejects_unknown_sensitivity() {
+        let payload = CreateConfigFileRequest {
+            project_id: Some(7),
+            code: Some("main".to_owned()),
+            name: Some("Main Config".to_owned()),
+            is_required: Some(false),
+            format: Some("yaml".to_owned()),
+            sensitivity: Some("private".to_owned()),
+            secret_paths: None,
+            description: None,
+        };
+
+        let error = match payload.validate() {
+            Ok(_) => panic!("unknown config file sensitivity should be rejected"),
+            Err(error) => error,
+        };
+
+        let body = error.into_body();
+        assert_eq!(body.code, "invalid_request");
+        assert_eq!(body.message, "invalid config file sensitivity");
     }
 }

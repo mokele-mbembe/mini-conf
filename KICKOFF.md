@@ -23,6 +23,7 @@
   - Draft、Saved Versions、preview-bundle、publish
   - Release history / detail / diff
   - deployment archive / restore / permanent delete
+  - projects / config_files delete with reference checks
 - 前端已接入 lint、format check、typecheck、build 和 Playwright E2E。
 - 当前最大的剩余风险已经从“主链路缺页面”转为“上线运营骨架、文档和 runbook 收口”。
 
@@ -37,9 +38,8 @@
    - `config-center.example.com` 示例入口域名 + 反向代理/TLS runbook 已成文
    - GitHub Actions `Release Package` workflow 已可生成 artifact，`just staging-smoke` 已提供真实环境只读探测，下一步是真实 staging 试部署
 3. 资源生命周期与文案收口：
-   - projects 删除能力和引用检查
-   - config_files 删除能力和引用检查
-   - 状态词、错误码、前端文案统一
+   - projects / config_files 删除能力与引用检查已落地
+   - 下一步主要是继续检查状态词、错误码和前端文案是否还有边角不一致
 4. 低风险运营页面：
    - 项目成员页
    - sync records 页面

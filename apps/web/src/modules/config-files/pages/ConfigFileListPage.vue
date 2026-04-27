@@ -148,19 +148,30 @@
             <el-table-column
               v-if="isAdmin"
               :label="t('configFiles.column.actions')"
-              width="80"
+              width="140"
               align="center"
               fixed="right"
             >
               <template #default="{ row }">
-                <el-button
-                  text
-                  type="primary"
-                  size="small"
-                  @click="openEditDialog(row)"
-                >
-                  {{ t("configFiles.action.edit") }}
-                </el-button>
+                <div class="config-file-list-page__actions">
+                  <el-button
+                    text
+                    type="primary"
+                    size="small"
+                    @click="openEditDialog(row)"
+                  >
+                    {{ t("configFiles.action.edit") }}
+                  </el-button>
+                  <el-button
+                    text
+                    type="danger"
+                    size="small"
+                    :loading="deletingConfigFileId === row.id"
+                    @click="handleDeleteConfigFile(row)"
+                  >
+                    {{ t("common.delete") }}
+                  </el-button>
+                </div>
               </template>
             </el-table-column>
           </el-table>
@@ -181,6 +192,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from "vue";
 import { useRoute } from "vue-router";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { useProjectContext } from "@/modules/projects/composables/useProjectContext";
 import ProjectTabs from "@/modules/projects/components/ProjectTabs.vue";
 import ConfigFileFormDialog from "../components/ConfigFileFormDialog.vue";
@@ -219,6 +231,7 @@ const isAdmin = computed(() => project.value?.current_user_role === "admin");
 // Dialog state
 const dialogVisible = ref(false);
 const editTarget = ref<ConfigFileSummary | null>(null);
+const deletingConfigFileId = ref<number | null>(null);
 
 async function loadConfigFiles() {
   listLoading.value = true;
@@ -274,6 +287,38 @@ function handleFormSuccess(item: ConfigFileSummary) {
   }
 }
 
+async function handleDeleteConfigFile(row: ConfigFileSummary) {
+  try {
+    await ElMessageBox.confirm(
+      t("configFiles.delete.confirm", { code: row.code }),
+      t("configFiles.delete.title"),
+      {
+        confirmButtonText: t("common.delete"),
+        cancelButtonText: t("common.cancel"),
+        type: "warning",
+        confirmButtonClass: "el-button--danger",
+      },
+    );
+  } catch {
+    return;
+  }
+
+  deletingConfigFileId.value = row.id;
+  try {
+    await configFilesApi.deleteConfigFile(row.id);
+    ElMessage.success(t("configFiles.delete.success"));
+    await loadConfigFiles();
+  } catch (err) {
+    if (err instanceof ApiRequestError) {
+      ElMessage.error(getErrorMessage(err.code, err.message));
+    } else {
+      ElMessage.error(t("configFiles.delete.failed"));
+    }
+  } finally {
+    deletingConfigFileId.value = null;
+  }
+}
+
 onMounted(loadAll);
 
 watch(
@@ -312,6 +357,12 @@ watch(
 
 .config-file-list-page__optional {
   color: var(--color-text-secondary);
+}
+
+.config-file-list-page__actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--spacing-xs);
 }
 
 @media (max-width: 768px) {

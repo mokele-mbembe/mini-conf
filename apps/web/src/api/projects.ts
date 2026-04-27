@@ -13,6 +13,10 @@ export function getProject(id: number): Promise<ProjectSummary> {
   return client.get<ProjectSummary>(`/projects/${id}`);
 }
 
+export function deleteProject(id: number): Promise<void> {
+  return client.delete<void>(`/projects/${id}`);
+}
+
 export function getProjectMembers(
   projectId: number,
 ): Promise<ProjectMemberListResponse> {

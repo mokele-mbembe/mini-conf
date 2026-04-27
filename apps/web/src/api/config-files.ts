@@ -39,3 +39,7 @@ export function updateConfigFile(
 ): Promise<ConfigFileSummary> {
   return client.put<ConfigFileSummary>(`/config-files/${id}`, body);
 }
+
+export function deleteConfigFile(id: number): Promise<void> {
+  return client.delete<void>(`/config-files/${id}`);
+}

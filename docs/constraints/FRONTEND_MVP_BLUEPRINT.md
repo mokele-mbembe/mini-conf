@@ -132,6 +132,7 @@
 
 - `GET /api/projects/:id`
 - `PUT /api/projects/:id`
+- `DELETE /api/projects/:id`
 
 加载态 / 空状态 / 缺权限状态：
 
@@ -147,6 +148,7 @@
 关键交互：
 
 - 基础信息编辑
+- 项目 `admin` 可删除空项目；如果后端返回 `project_delete_conflict`，提示先清理配置文件、环境、部署实例、发布和上报记录等引用
 - 导航到配置文件页、部署实例页、发布历史页
 
 ## 6. 配置文件列表与编辑页
@@ -162,6 +164,7 @@
 - `POST /api/config-files`
 - `GET /api/config-files/:id`
 - `PUT /api/config-files/:id`
+- `DELETE /api/config-files/:id`
 
 加载态 / 空状态 / 缺权限状态：
 
@@ -183,10 +186,12 @@
 
 - 在列表中清晰区分“必选”与“可选”配置
 - 可在详情抽屉或页内编辑 `is_required`
+- 项目 `admin` 可删除未被引用的配置文件；如果后端返回 `config_file_delete_conflict`，提示先清理 Draft、Saved Version、Release、同步记录或心跳引用
 
 失败提示：
 
 - `config_file_code_conflict`
+- `config_file_delete_conflict`
 - `project_not_found`
 
 与当前产品规则绑定的限制：

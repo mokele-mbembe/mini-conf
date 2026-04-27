@@ -498,6 +498,70 @@ test("platform admin can return to platform management from project list", async
   await expect(page.getByRole("button", { name: "新建用户" })).toBeVisible();
 });
 
+test("resource lifecycle: delete unused config file and empty projects", async ({
+  page,
+}) => {
+  const suffix = Date.now().toString();
+  await loginAsPlatformAdmin(page);
+
+  const projectId = await createProject(page, `${suffix}-lifecycle`);
+  const configCode = `unused-${suffix}`;
+  const configResponse = await postWithCsrf(page, "/api/config-files", {
+    data: {
+      project_id: projectId,
+      code: configCode,
+      name: `Unused ${suffix}`,
+      format: "yaml",
+      sensitivity: "normal",
+      is_required: false,
+    },
+  });
+  expect(configResponse.ok()).toBeTruthy();
+
+  await page.goto(`/projects/${projectId}/config-files`);
+  const configRow = page.locator(".el-table__row", { hasText: configCode });
+  await expect(configRow).toBeVisible();
+  await configRow.getByRole("button", { name: "删除" }).click();
+
+  const configDeleteDialog = page.getByRole("dialog", { name: "删除配置文件" });
+  await expect(configDeleteDialog).toContainText(configCode);
+  await configDeleteDialog.getByRole("button", { name: "删除" }).click();
+  await expect(
+    page.locator(".el-message", { hasText: "配置文件已删除" }),
+  ).toBeVisible({ timeout: 5_000 });
+  await expect(configRow).toHaveCount(0, { timeout: 5_000 });
+
+  await page.goto(`/projects/${projectId}`);
+  await page.getByRole("button", { name: "删除项目" }).click();
+  const projectDeleteDialog = page.getByRole("dialog", { name: "删除项目" });
+  await expect(projectDeleteDialog).toContainText("e2e-project");
+  await projectDeleteDialog.getByRole("button", { name: "删除" }).click();
+  await expect(page).toHaveURL(/\/projects$/, { timeout: 10_000 });
+
+  const adminProjectId = await createProject(page, `${suffix}-admin-delete`);
+  await page.goto("/admin/projects");
+  await page
+    .getByPlaceholder("搜索项目标识或名称")
+    .fill(`${suffix}-admin-delete`);
+  const adminProjectRow = page.locator(".el-table__row", {
+    hasText: `${suffix}-admin-delete`,
+  });
+  await expect(adminProjectRow).toBeVisible({ timeout: 10_000 });
+  await adminProjectRow.getByRole("button", { name: "删除" }).click();
+
+  const adminDeleteDialog = page.getByRole("dialog", { name: "删除项目" });
+  await expect(adminDeleteDialog).toContainText(`${suffix}-admin-delete`);
+  await adminDeleteDialog.getByRole("button", { name: "删除" }).click();
+  await expect(
+    page.locator(".el-message", { hasText: "项目已删除" }),
+  ).toBeVisible({ timeout: 5_000 });
+
+  const countResponse = await page.request.get(
+    `/api/projects/${adminProjectId}`,
+  );
+  expect(countResponse.status()).toBe(404);
+});
+
 test("admin project create path: other initial admin hides project-list action", async ({
   page,
 }) => {

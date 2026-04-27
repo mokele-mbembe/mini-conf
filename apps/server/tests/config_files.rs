@@ -156,6 +156,13 @@ async fn login(app: &axum::Router) -> TestResult<String> {
     Ok(cookie)
 }
 
+async fn admin_user_id(pool: &PgPool) -> TestResult<i64> {
+    let user_id: i64 = sqlx::query_scalar("SELECT id FROM users WHERE username = 'admin' LIMIT 1")
+        .fetch_one(pool)
+        .await?;
+    Ok(user_id)
+}
+
 #[tokio::test]
 async fn list_config_files_filters_by_project() -> TestResult {
     let Some((app, pool, database_url, schema)) = setup_app().await? else {
@@ -700,6 +707,129 @@ async fn config_file_crud_flow_persists_changes_across_endpoints() -> TestResult
     assert_eq!(row.get::<String, _>("code"), "main-v2");
     assert!(row.get::<bool, _>("is_required"));
     assert_eq!(row.get::<String, _>("status"), "archived");
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn delete_config_file_removes_unused_config_and_audits() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    let project_id: i64 = sqlx::query_scalar(
+        "INSERT INTO projects (code, name, status) VALUES ('coffee-legacy', 'Coffee Legacy', 'active') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await?;
+    let config_file_id: i64 = sqlx::query_scalar(
+        "INSERT INTO config_files (project_id, code, name, format, sensitivity, status) VALUES ($1, 'unused', 'Unused', 'yaml', 'normal', 'archived') RETURNING id",
+    )
+    .bind(project_id)
+    .fetch_one(&pool)
+    .await?;
+
+    let cookie = login(&app).await?;
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/api/config-files/{config_file_id}"))
+                .header(header::COOKIE, cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+    let config_file_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM config_files WHERE id = $1")
+            .bind(config_file_id)
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!(config_file_count, 0);
+
+    let audit_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM audit_logs WHERE project_id = $1 AND action = 'config_file.deleted' AND resource_id = $2",
+    )
+    .bind(project_id)
+    .bind(config_file_id.to_string())
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(audit_count, 1);
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
+async fn delete_config_file_rejects_dependent_drafts() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    let project_id: i64 = sqlx::query_scalar(
+        "INSERT INTO projects (code, name, status) VALUES ('coffee-legacy', 'Coffee Legacy', 'active') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await?;
+    let environment_id: i64 = sqlx::query_scalar(
+        "INSERT INTO project_environments (project_id, code, name, status) VALUES ($1, 'dev', 'Dev', 'active') RETURNING id",
+    )
+    .bind(project_id)
+    .fetch_one(&pool)
+    .await?;
+    let deployment_id: i64 = sqlx::query_scalar(
+        "INSERT INTO deployment_instances (project_id, environment_id, deployment_key, name, status, is_template) VALUES ($1, $2, 'store-001', 'Store 001', 'inactive', false) RETURNING id",
+    )
+    .bind(project_id)
+    .bind(environment_id)
+    .fetch_one(&pool)
+    .await?;
+    let config_file_id: i64 = sqlx::query_scalar(
+        "INSERT INTO config_files (project_id, code, name, format, sensitivity, status) VALUES ($1, 'main', 'Main', 'yaml', 'normal', 'active') RETURNING id",
+    )
+    .bind(project_id)
+    .fetch_one(&pool)
+    .await?;
+    let content_hash = "a".repeat(64);
+    sqlx::query(
+        r#"
+        INSERT INTO drafts (
+            project_id,
+            config_file_id,
+            deployment_instance_id,
+            content,
+            content_hash,
+            format,
+            editor_user_id
+        )
+        VALUES ($1, $2, $3, 'enabled: true', $4, 'yaml', $5)
+        "#,
+    )
+    .bind(project_id)
+    .bind(config_file_id)
+    .bind(deployment_id)
+    .bind(content_hash)
+    .bind(admin_user_id(&pool).await?)
+    .execute(&pool)
+    .await?;
+
+    let cookie = login(&app).await?;
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/api/config-files/{config_file_id}"))
+                .header(header::COOKIE, cookie)
+                .body(Body::empty())?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let payload: ErrorResponse = read_json(response).await?;
+    assert_eq!(payload.code, "config_file_delete_conflict");
+    assert_eq!(payload.message, "config file has dependent resources");
 
     teardown(&database_url, &schema, pool).await
 }

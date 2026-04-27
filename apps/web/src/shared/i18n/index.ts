@@ -111,6 +111,12 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "project.notFound.subtitle": "请求的项目不存在",
     "project.forbidden.subtitle": "你当前角色没有查看该项目的权限",
     "project.loadFailed": "加载项目失败",
+    "project.action.delete": "删除项目",
+    "project.delete.title": "删除项目",
+    "project.delete.confirm":
+      "确认删除项目 {code} 吗？只有没有配置文件、环境、部署实例和发布历史等引用的空项目可以删除。",
+    "project.delete.success": "项目已删除",
+    "project.delete.failed": "删除项目失败",
     "projectSection.placeholder.heading": "页面已预留",
     "projectSection.deployments.title": "部署实例",
     "projectSection.deployments.subtitle": "{project} 的部署实例管理",
@@ -153,6 +159,11 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "configFiles.column.status": "状态",
     "configFiles.column.actions": "操作",
     "configFiles.action.edit": "编辑",
+    "configFiles.delete.title": "删除配置文件",
+    "configFiles.delete.confirm":
+      "确认删除配置文件 {code} 吗？只有没有 Draft、发布、同步记录和心跳引用的配置文件可以删除。",
+    "configFiles.delete.success": "配置文件已删除",
+    "configFiles.delete.failed": "删除配置文件失败",
     "configFiles.required": "必选",
     "configFiles.normal": "普通",
     "configFiles.secret": "敏感",
@@ -474,6 +485,7 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "releases.diff.redactedHint": "当前配置为敏感类型，差异内容已脱敏处理。",
     "common.cancel": "取消",
     "common.confirm": "确认",
+    "common.delete": "删除",
     "common.save": "保存",
     "common.create": "创建",
     "common.close": "关闭",
@@ -539,6 +551,8 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "error.project_permission_denied": "你当前角色没有执行这个操作的权限",
     "error.project_code_conflict": "项目标识已存在",
     "error.project_not_found": "项目不存在",
+    "error.project_delete_conflict":
+      "项目仍有配置文件、环境、部署实例、发布或上报记录，不能删除",
     "error.project_environment_not_found": "项目环境不存在",
     "error.project_environment_code_conflict": "环境标识在当前项目内已存在",
     "error.project_environment_in_use": "环境已被部署实例使用，不能删除",
@@ -546,6 +560,8 @@ const messages: Record<AppLocale, Record<string, string>> = {
       "当前环境已停用，不能继续分配部署实例",
     "error.config_file_code_conflict": "配置文件标识在该项目内已存在",
     "error.config_file_not_found": "配置文件不存在",
+    "error.config_file_delete_conflict":
+      "配置文件仍有 Draft、发布、同步记录或心跳引用，不能删除",
     "error.deployment_instance_conflict": "部署实例标识已存在",
     "error.deployment_key_conflict": "部署实例标识已存在",
     "error.deployment_instance_not_found": "部署实例不存在",
@@ -627,6 +643,12 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "admin.projects.columns.memberCount": "成员数",
     "admin.projects.columns.deploymentCount": "实例数",
     "admin.projects.columns.createdAt": "创建时间",
+    "admin.projects.columns.actions": "操作",
+    "admin.projects.delete.title": "删除项目",
+    "admin.projects.delete.confirm":
+      "确认删除项目 {code} 吗？只有没有配置文件、环境、部署实例和发布历史等引用的空项目可以删除。",
+    "admin.projects.delete.success": "项目已删除",
+    "admin.projects.delete.failed": "删除项目失败",
     "admin.users.search": "搜索用户名",
     "admin.users.filterByStatus": "按状态筛选",
     "admin.users.platformAdmin": "平台管理员",
@@ -784,6 +806,12 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "project.forbidden.subtitle":
       "Your current role does not have permission to view this project.",
     "project.loadFailed": "Failed to load project",
+    "project.action.delete": "Delete Project",
+    "project.delete.title": "Delete Project",
+    "project.delete.confirm":
+      "Delete project {code}? Only empty projects without config files, environments, deployments, release history, or reports can be deleted.",
+    "project.delete.success": "Project deleted",
+    "project.delete.failed": "Failed to delete project",
     "projectSection.placeholder.heading": "Page reserved",
     "projectSection.deployments.title": "Deployments",
     "projectSection.deployments.subtitle": "Manage deployments for {project}",
@@ -828,6 +856,11 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "configFiles.column.status": "Status",
     "configFiles.column.actions": "Actions",
     "configFiles.action.edit": "Edit",
+    "configFiles.delete.title": "Delete Config File",
+    "configFiles.delete.confirm":
+      "Delete config file {code}? Only config files without Drafts, releases, sync records, or heartbeat references can be deleted.",
+    "configFiles.delete.success": "Config file deleted",
+    "configFiles.delete.failed": "Failed to delete config file",
     "configFiles.required": "Required",
     "configFiles.normal": "Normal",
     "configFiles.secret": "Secret",
@@ -1167,6 +1200,7 @@ const messages: Record<AppLocale, Record<string, string>> = {
       "This config is marked as secret. Diff content shown is redacted.",
     "common.cancel": "Cancel",
     "common.confirm": "Confirm",
+    "common.delete": "Delete",
     "common.save": "Save",
     "common.create": "Create",
     "common.close": "Close",
@@ -1251,6 +1285,8 @@ const messages: Record<AppLocale, Record<string, string>> = {
       "Your current role does not have permission to perform this action.",
     "error.project_code_conflict": "Project key already exists",
     "error.project_not_found": "Project not found",
+    "error.project_delete_conflict":
+      "The project still has config files, environments, deployments, releases, or report records and cannot be deleted",
     "error.project_environment_not_found": "Project environment not found",
     "error.project_environment_code_conflict":
       "Environment code already exists in this project",
@@ -1261,6 +1297,8 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "error.config_file_code_conflict":
       "A config file with this key already exists in the project",
     "error.config_file_not_found": "Config file not found",
+    "error.config_file_delete_conflict":
+      "The config file still has Draft, release, sync, or heartbeat references and cannot be deleted",
     "error.deployment_instance_conflict": "Deployment key already exists",
     "error.deployment_key_conflict": "Deployment key already exists",
     "error.deployment_instance_not_found": "Deployment not found",
@@ -1354,6 +1392,12 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "admin.projects.columns.memberCount": "Members",
     "admin.projects.columns.deploymentCount": "Deployments",
     "admin.projects.columns.createdAt": "Created At",
+    "admin.projects.columns.actions": "Actions",
+    "admin.projects.delete.title": "Delete Project",
+    "admin.projects.delete.confirm":
+      "Delete project {code}? Only empty projects without config files, environments, deployments, release history, or reports can be deleted.",
+    "admin.projects.delete.success": "Project deleted",
+    "admin.projects.delete.failed": "Failed to delete project",
     "admin.users.search": "Search by username",
     "admin.users.filterByStatus": "Filter by status",
     "admin.users.platformAdmin": "Platform Admin",

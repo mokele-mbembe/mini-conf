@@ -11,8 +11,9 @@
 - Vue 3、Vite、TypeScript、Pinia、Vue Router、Element Plus 已落地。
 - 已有登录、setup、首次改密、平台用户管理、平台项目列表和创建。
 - 项目内主链路已覆盖项目列表、配置文件、环境、部署实例、Draft、Saved Versions、preview-bundle、publish、Release detail/diff。
+- 已有 projects / config_files 删除入口、引用冲突提示和页面级 E2E 覆盖。
 - 部署实例页已支持模板/普通实例分区、分页、搜索、激活、停用、token reset、归档、恢复、永久删除。
-- Playwright E2E 已覆盖 setup、admin project create、must-change-password、Saved Versions、clone、Release detail/diff、deployment archive/delete 等主路径。
+- Playwright E2E 已覆盖 setup、admin project create、resource lifecycle、must-change-password、Saved Versions、clone、Release detail/diff、deployment archive/delete 等主路径。
 - 仍未完成真实页面的是：项目成员、sync records、heartbeats、audit logs。
 
 ## 2. 任务流程
