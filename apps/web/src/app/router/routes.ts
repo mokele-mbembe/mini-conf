@@ -34,6 +34,8 @@ const ReleaseDiffPage = () =>
   import("@/modules/releases/pages/ReleaseDiffPage.vue");
 const ProjectMemberListPage = () =>
   import("@/modules/projects/pages/ProjectMemberListPage.vue");
+const ProjectSyncRecordListPage = () =>
+  import("@/modules/projects/pages/ProjectSyncRecordListPage.vue");
 
 // Admin pages
 const AdminUserListPage = () =>
@@ -154,7 +156,7 @@ export const routes: RouteRecordRaw[] = [
       {
         path: ROUTE_PATHS.SYNC_RECORD_LIST,
         name: ROUTE_NAMES.SYNC_RECORD_LIST,
-        component: ProjectSectionPlaceholderPage,
+        component: ProjectSyncRecordListPage,
       },
       {
         path: ROUTE_PATHS.HEARTBEAT_LIST,

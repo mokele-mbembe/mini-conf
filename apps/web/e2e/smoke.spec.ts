@@ -158,6 +158,67 @@ async function createProject(page: Page, suffix: string): Promise<number> {
   return payload.project.id;
 }
 
+async function createProjectEnvironment(
+  page: Page,
+  projectId: number,
+  suffix: string,
+) {
+  const code = `e2e-env-${suffix}`;
+  const response = await postWithCsrf(
+    page,
+    `/api/projects/${projectId}/environments`,
+    {
+      data: {
+        code,
+        name: `E2E Env ${suffix}`,
+        status: "active",
+        sort_order: 10,
+      },
+    },
+  );
+  expect(response.ok()).toBeTruthy();
+  const payload = (await response.json()) as { id: number; code: string };
+  return payload;
+}
+
+async function createDeploymentInstance(
+  page: Page,
+  projectId: number,
+  environmentId: number,
+  suffix: string,
+) {
+  const deploymentKey = `e2e-deployment-${suffix}`;
+  const response = await postWithCsrf(page, "/api/deployment-instances", {
+    data: {
+      project_id: projectId,
+      environment_id: environmentId,
+      deployment_key: deploymentKey,
+      name: `E2E Deployment ${suffix}`,
+      is_template: false,
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+  const payload = (await response.json()) as {
+    id: number;
+    deployment_key: string;
+  };
+  return payload;
+}
+
+async function activateDeploymentInstance(
+  page: Page,
+  deploymentId: number,
+): Promise<string> {
+  const response = await postWithCsrf(
+    page,
+    `/api/deployment-instances/${deploymentId}/activate`,
+    {},
+  );
+  expect(response.ok()).toBeTruthy();
+  const payload = (await response.json()) as { token: string };
+  return payload.token;
+}
+
 function getInitialAdminOption(page: Page, username: string) {
   return page
     .locator(".el-select-dropdown__item")
@@ -605,6 +666,82 @@ test("project members: add, change role, and remove member", async ({
     page.locator(".el-message", { hasText: "项目成员已移除" }),
   ).toBeVisible({ timeout: 5_000 });
   await expect(memberRow).toHaveCount(0, { timeout: 5_000 });
+});
+
+test("sync records: list and filter reported client events", async ({
+  page,
+}) => {
+  const suffix = Date.now().toString();
+  const projectCode = `e2e-project-${suffix}-sync`;
+  const configCode = `sync-main-${suffix}`;
+
+  await loginAsPlatformAdmin(page);
+  const projectId = await createProject(page, `${suffix}-sync`);
+  const environment = await createProjectEnvironment(page, projectId, suffix);
+  const deployment = await createDeploymentInstance(
+    page,
+    projectId,
+    environment.id,
+    suffix,
+  );
+  const token = await activateDeploymentInstance(page, deployment.id);
+
+  const configResponse = await postWithCsrf(page, "/api/config-files", {
+    data: {
+      project_id: projectId,
+      code: configCode,
+      name: `Sync Main ${suffix}`,
+      format: "yaml",
+      sensitivity: "normal",
+      is_required: false,
+    },
+  });
+  expect(configResponse.ok()).toBeTruthy();
+
+  const syncResponse = await page.request.post(
+    "/api/open/deployment-sync-records",
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      data: {
+        project: projectCode,
+        environment: environment.code,
+        deployment_key: deployment.deployment_key,
+        config: configCode,
+        action: "apply",
+        status: "failed",
+        message: "apply failed in playwright",
+        detail: {
+          duration_ms: 42,
+        },
+        reported_at: "2026-04-27T12:00:00Z",
+      },
+    },
+  );
+  expect(syncResponse.ok()).toBeTruthy();
+
+  await page.goto(`/projects/${projectId}/sync-records`);
+  await expect(page.getByRole("heading", { name: `E2E Project` })).toBeVisible({
+    timeout: 10_000,
+  });
+
+  const recordRow = page.locator(".el-table__row", { hasText: configCode });
+  await expect(recordRow).toBeVisible({ timeout: 10_000 });
+  await expect(recordRow).toContainText("应用");
+  await expect(recordRow).toContainText("失败");
+  await expect(recordRow).toContainText("apply failed in playwright");
+
+  await page
+    .locator(".project-sync-record-list-page__filters .el-select__wrapper")
+    .nth(3)
+    .click();
+  await page.getByRole("option", { name: "成功" }).click();
+  await page.getByRole("button", { name: "查询" }).click();
+  await expect(page.getByText("暂无同步记录")).toBeVisible();
+
+  await page.getByRole("button", { name: "重置" }).click();
+  await expect(recordRow).toBeVisible({ timeout: 10_000 });
 });
 
 test("admin project create path: other initial admin hides project-list action", async ({
