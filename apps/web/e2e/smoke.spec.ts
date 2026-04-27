@@ -485,6 +485,19 @@ test("admin project create path: remote search → submit → success state", as
   await expect(page.locator(".el-table")).toContainText(projectName);
 });
 
+test("platform admin can return to platform management from project list", async ({
+  page,
+}) => {
+  await loginAsPlatformAdmin(page);
+
+  await page.getByRole("link", { name: "返回项目列表" }).click();
+  await expect(page).toHaveURL(/\/projects$/, { timeout: 10_000 });
+
+  await page.getByRole("button", { name: "平台管理" }).click();
+  await expect(page).toHaveURL(/\/admin\/users$/, { timeout: 10_000 });
+  await expect(page.getByRole("button", { name: "新建用户" })).toBeVisible();
+});
+
 test("admin project create path: other initial admin hides project-list action", async ({
   page,
 }) => {

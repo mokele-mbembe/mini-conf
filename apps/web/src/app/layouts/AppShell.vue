@@ -3,6 +3,13 @@
     <el-header class="app-shell__header">
       <div class="app-shell__brand" @click="goHome">mini-conf</div>
       <div class="app-shell__user">
+        <el-button
+          v-if="authSession.isPlatformAdmin"
+          :icon="Setting"
+          @click="goToAdmin"
+        >
+          {{ t("app.platformAdmin") }}
+        </el-button>
         <LocaleSelect class-name="app-shell__locale" />
         <span v-if="authSession.user">{{ authSession.user.username }}</span>
         <el-button text @click="handleLogout">{{ t("app.logout") }}</el-button>
@@ -16,6 +23,7 @@
 
 <script setup lang="ts">
 import { useRouter } from "vue-router";
+import { Setting } from "@element-plus/icons-vue";
 import { useAuthSession } from "@/modules/auth/composables/useAuthSession";
 import { ROUTE_NAMES } from "@/shared/constants/routes";
 import { useI18nText } from "@/shared/i18n";
@@ -27,6 +35,10 @@ const { t } = useI18nText();
 
 function goHome() {
   router.push({ name: ROUTE_NAMES.PROJECTS });
+}
+
+function goToAdmin() {
+  router.push({ name: ROUTE_NAMES.ADMIN_USERS });
 }
 
 async function handleLogout() {
