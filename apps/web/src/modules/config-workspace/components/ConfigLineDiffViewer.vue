@@ -26,7 +26,14 @@
             {{ lineMarker(row.beforeType) }}
           </span>
           <code class="config-line-diff-viewer__code">
-            {{ row.beforeLine ?? "" }}
+            <span
+              v-for="(segment, segmentIndex) in row.beforeSegments"
+              :key="segmentIndex"
+              class="config-line-diff-viewer__segment"
+              :class="{ 'is-changed': segment.changed }"
+            >
+              {{ segment.text }}
+            </span>
           </code>
         </div>
 
@@ -41,7 +48,14 @@
             {{ lineMarker(row.afterType) }}
           </span>
           <code class="config-line-diff-viewer__code">
-            {{ row.afterLine ?? "" }}
+            <span
+              v-for="(segment, segmentIndex) in row.afterSegments"
+              :key="segmentIndex"
+              class="config-line-diff-viewer__segment"
+              :class="{ 'is-changed': segment.changed }"
+            >
+              {{ segment.text }}
+            </span>
           </code>
         </div>
       </div>
@@ -54,13 +68,27 @@ import { computed } from "vue";
 
 type DiffLineType = "unchanged" | "added" | "removed" | "empty";
 
+interface DiffSegment {
+  text: string;
+  changed: boolean;
+}
+
 interface DiffRow {
   beforeLine: string | null;
   afterLine: string | null;
+  beforeSegments: DiffSegment[];
+  afterSegments: DiffSegment[];
   beforeNumber: number | null;
   afterNumber: number | null;
   beforeType: DiffLineType;
   afterType: DiffLineType;
+}
+
+interface DiffOperation {
+  type: "unchanged" | "added" | "removed";
+  line: string;
+  beforeNumber: number | null;
+  afterNumber: number | null;
 }
 
 const props = defineProps<{
@@ -90,7 +118,7 @@ function buildLineDiffRows(
   afterLines: string[],
 ): DiffRow[] {
   const lcs = buildLcsTable(beforeLines, afterLines);
-  const diffRows: DiffRow[] = [];
+  const operations: DiffOperation[] = [];
   let beforeIndex = 0;
   let afterIndex = 0;
 
@@ -100,13 +128,11 @@ function buildLineDiffRows(
       afterIndex < afterLines.length &&
       beforeLines[beforeIndex] === afterLines[afterIndex]
     ) {
-      diffRows.push({
-        beforeLine: beforeLines[beforeIndex],
-        afterLine: afterLines[afterIndex],
+      operations.push({
+        type: "unchanged",
+        line: beforeLines[beforeIndex],
         beforeNumber: beforeIndex + 1,
         afterNumber: afterIndex + 1,
-        beforeType: "unchanged",
-        afterType: "unchanged",
       });
       beforeIndex += 1;
       afterIndex += 1;
@@ -118,30 +144,139 @@ function buildLineDiffRows(
       (beforeIndex === beforeLines.length ||
         lcs[beforeIndex][afterIndex + 1] >= lcs[beforeIndex + 1][afterIndex])
     ) {
-      diffRows.push({
-        beforeLine: null,
-        afterLine: afterLines[afterIndex],
+      operations.push({
+        type: "added",
+        line: afterLines[afterIndex],
         beforeNumber: null,
         afterNumber: afterIndex + 1,
-        beforeType: "empty",
-        afterType: "added",
       });
       afterIndex += 1;
       continue;
     }
 
-    diffRows.push({
-      beforeLine: beforeLines[beforeIndex],
-      afterLine: null,
+    operations.push({
+      type: "removed",
+      line: beforeLines[beforeIndex],
       beforeNumber: beforeIndex + 1,
       afterNumber: null,
-      beforeType: "removed",
-      afterType: "empty",
     });
     beforeIndex += 1;
   }
 
-  return diffRows;
+  return buildRowsFromOperations(operations);
+}
+
+function buildRowsFromOperations(operations: DiffOperation[]): DiffRow[] {
+  const rows: DiffRow[] = [];
+  let index = 0;
+
+  while (index < operations.length) {
+    const operation = operations[index];
+
+    if (operation.type === "unchanged") {
+      rows.push({
+        beforeLine: operation.line,
+        afterLine: operation.line,
+        beforeSegments: [{ text: operation.line, changed: false }],
+        afterSegments: [{ text: operation.line, changed: false }],
+        beforeNumber: operation.beforeNumber,
+        afterNumber: operation.afterNumber,
+        beforeType: "unchanged",
+        afterType: "unchanged",
+      });
+      index += 1;
+      continue;
+    }
+
+    const changeBlock = operations.slice(index);
+    const nextUnchangedIndex = changeBlock.findIndex(
+      (item) => item.type === "unchanged",
+    );
+    const blockEnd =
+      nextUnchangedIndex === -1
+        ? operations.length
+        : index + nextUnchangedIndex;
+    rows.push(...buildRowsFromChangeBlock(operations.slice(index, blockEnd)));
+    index = blockEnd;
+  }
+
+  return rows;
+}
+
+function buildRowsFromChangeBlock(operations: DiffOperation[]): DiffRow[] {
+  const removed = operations.filter((item) => item.type === "removed");
+  const added = operations.filter((item) => item.type === "added");
+  const rowCount = Math.max(removed.length, added.length);
+  const rows: DiffRow[] = [];
+
+  for (let index = 0; index < rowCount; index += 1) {
+    const before = removed[index];
+    const after = added[index];
+    const segments =
+      before && after
+        ? buildChangedSegments(before.line, after.line)
+        : {
+            before: textSegments(before?.line),
+            after: textSegments(after?.line),
+          };
+
+    rows.push({
+      beforeLine: before?.line ?? null,
+      afterLine: after?.line ?? null,
+      beforeSegments: segments.before,
+      afterSegments: segments.after,
+      beforeNumber: before?.beforeNumber ?? null,
+      afterNumber: after?.afterNumber ?? null,
+      beforeType: before ? "removed" : "empty",
+      afterType: after ? "added" : "empty",
+    });
+  }
+
+  return rows;
+}
+
+function buildChangedSegments(beforeLine: string, afterLine: string) {
+  let prefixLength = 0;
+  const maxPrefixLength = Math.min(beforeLine.length, afterLine.length);
+  while (
+    prefixLength < maxPrefixLength &&
+    beforeLine[prefixLength] === afterLine[prefixLength]
+  ) {
+    prefixLength += 1;
+  }
+
+  let suffixLength = 0;
+  const maxSuffixLength = maxPrefixLength - prefixLength;
+  while (
+    suffixLength < maxSuffixLength &&
+    beforeLine[beforeLine.length - 1 - suffixLength] ===
+      afterLine[afterLine.length - 1 - suffixLength]
+  ) {
+    suffixLength += 1;
+  }
+
+  return {
+    before: splitChangedLine(beforeLine, prefixLength, suffixLength),
+    after: splitChangedLine(afterLine, prefixLength, suffixLength),
+  };
+}
+
+function splitChangedLine(
+  line: string,
+  prefixLength: number,
+  suffixLength: number,
+): DiffSegment[] {
+  const changedEnd =
+    suffixLength > 0 ? line.length - suffixLength : line.length;
+  return [
+    { text: line.slice(0, prefixLength), changed: false },
+    { text: line.slice(prefixLength, changedEnd), changed: true },
+    { text: line.slice(changedEnd), changed: false },
+  ].filter((segment) => segment.text.length > 0);
+}
+
+function textSegments(line: string | undefined): DiffSegment[] {
+  return line ? [{ text: line, changed: true }] : [];
 }
 
 function buildLcsTable(beforeLines: string[], afterLines: string[]) {
@@ -269,6 +404,16 @@ function lineMarker(type: DiffLineType) {
   color: var(--el-text-color-primary);
   white-space: pre;
   overflow: visible;
+}
+
+.config-line-diff-viewer__segment.is-changed {
+  border-radius: 2px;
+  background: rgba(245, 108, 108, 0.18);
+}
+
+.config-line-diff-viewer__cell.is-added
+  .config-line-diff-viewer__segment.is-changed {
+  background: rgba(103, 194, 58, 0.24);
 }
 
 @media (max-width: 768px) {

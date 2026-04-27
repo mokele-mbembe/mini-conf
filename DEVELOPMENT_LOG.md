@@ -37,6 +37,12 @@
 - Release Diff 页从“两块只读内容”升级为行级对比视图，新增行高亮绿色、删除行高亮红色，并保留原有 `.release-diff-page__content` 定位 class
 - Playwright release detail / diff 主路径已扩展到第二次发布，覆盖删除行和新增行的可见性断言
 
+2026-04-27 本轮继续补 Diff 行内高亮：
+
+- `ConfigLineDiffViewer` 支持把删除 / 新增行配对，并用公共前缀 / 后缀切分行内变更片段
+- Release Diff 对 `greeting: old` -> `greeting: old-v2` 这类同一行修改会突出显示实际变化片段，而不只依赖整行背景
+- Playwright release detail / diff 主路径增加行内 changed segment 断言
+
 2026-04-27 本轮完成 heartbeats / audit logs 前端低风险页面：
 
 - `heartbeats` 页已从占位页替换为真实页面，支持按部署实例和配置文件筛选

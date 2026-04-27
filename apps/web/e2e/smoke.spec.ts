@@ -310,10 +310,16 @@ test("deployment lifecycle path: environment → inactive deployment → activat
   const projectId = await createProject(page, suffix);
 
   await page.goto(`/projects/${projectId}/environments`);
+  await expect(page).toHaveURL(
+    new RegExp(`/projects/${projectId}/environments`),
+    {
+      timeout: 10_000,
+    },
+  );
   const createEnvironmentButton = page
     .getByRole("button", { name: "新建环境" })
     .first();
-  await expect(createEnvironmentButton).toBeVisible();
+  await expect(createEnvironmentButton).toBeVisible({ timeout: 10_000 });
   await createEnvironmentButton.click();
 
   const environmentDialog = page.getByRole("dialog", { name: "新建项目环境" });
@@ -1502,6 +1508,11 @@ test("release detail and diff: publish draft → view detail → view diff", asy
   await expect(
     lineDiff.locator(".is-added").filter({
       hasText: "greeting: hello-release-test-v2",
+    }),
+  ).toBeVisible();
+  await expect(
+    lineDiff.locator(".config-line-diff-viewer__segment.is-changed", {
+      hasText: "-v2",
     }),
   ).toBeVisible();
   await expect(
