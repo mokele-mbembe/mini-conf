@@ -504,7 +504,7 @@ Preview 页每行建议提供：
 
 - 继续收敛 `DraftEditorPage` 页面层职责，把 API 状态和副作用逐步抽入 `useDraftWorkspace`、`useSavedVersionsPanel`、`useCloneDraftSource` 等 composable
 - 已完成统一代码工作区底座第一步：Draft 编辑页切到 CodeMirror 6，并拆出 workspace shell、配置导航和 Saved Versions 面板
-- Release Detail / Diff 已复用同一代码视图底座提供只读语法高亮；后续继续补真正的行级 diff 高亮和组件测试
+- Release Detail / Diff 已复用统一代码视图底座；Release Diff 已补行级左右对比、高亮新增 / 删除行，后续继续补 word-level 差异和组件测试
 - 为高状态密度组件补前端单元 / 组件测试
 
 ## 14. 验收标准

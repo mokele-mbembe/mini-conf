@@ -1462,6 +1462,51 @@ test("release detail and diff: publish draft → view detail → view diff", asy
   await expect(page.locator(".release-detail-page__content")).toBeVisible({
     timeout: 10_000,
   });
+
+  // Publish a second release and verify line-level diff markers.
+  await page.goto(
+    `/projects/${projectId}/deployments/${deploymentId}/configs/${configFileId}/draft`,
+  );
+  await expect(getDraftEditor(page)).toBeVisible({ timeout: 10_000 });
+  await fillDraftEditor(
+    page,
+    "greeting: hello-release-test-v2\nfeature: enabled",
+  );
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(page.locator(".el-message", { hasText: "已保存" })).toBeVisible({
+    timeout: 5_000,
+  });
+  await expect(page.locator(".el-message")).toHaveCount(0, { timeout: 6_000 });
+
+  await page.getByRole("button", { name: "发布 Release" }).click();
+  await expect(publishDialog).toBeVisible();
+  await publishDialog.locator("textarea").fill("E2E release diff test");
+  await publishDialog.getByRole("button", { name: "发布" }).click();
+  await expect(page).toHaveURL(
+    new RegExp(`/projects/${projectId}/releases/\\d+`),
+    { timeout: 10_000 },
+  );
+
+  await page.getByRole("button", { name: "查看 Diff" }).click();
+  await expect(page).toHaveURL(
+    new RegExp(`/projects/${projectId}/releases/\\d+/diff`),
+    { timeout: 10_000 },
+  );
+  const lineDiff = page.locator(".config-line-diff-viewer");
+  await expect(lineDiff).toBeVisible({ timeout: 10_000 });
+  await expect(
+    lineDiff.locator(".is-removed").filter({
+      hasText: "greeting: hello-release-test",
+    }),
+  ).toBeVisible();
+  await expect(
+    lineDiff.locator(".is-added").filter({
+      hasText: "greeting: hello-release-test-v2",
+    }),
+  ).toBeVisible();
+  await expect(
+    lineDiff.locator(".is-added").filter({ hasText: "feature: enabled" }),
+  ).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------

@@ -107,45 +107,13 @@
             {{ t("releases.diff.firstReleaseHint") }}
           </el-alert>
 
-          <!-- Two-column compare -->
-          <div class="release-diff-page__compare">
-            <div class="release-diff-page__pane">
-              <h3 class="release-diff-page__pane-title">
-                {{ t("releases.diff.base") }}
-                <template v-if="diff.base_release">
-                  ({{ diff.base_release.revision }})
-                </template>
-              </h3>
-              <ConfigCodeEditor
-                v-if="diff.before_content !== null"
-                :model-value="diff.before_content"
-                :format="diff.release.format"
-                :readonly="true"
-                :min-height="420"
-                :aria-label="t('releases.diff.baseContentAriaLabel')"
-                class="release-diff-page__content"
-              />
-              <EmptyState
-                v-else
-                :description="t('releases.diff.noPreviousContent')"
-              />
-            </div>
-
-            <div class="release-diff-page__pane">
-              <h3 class="release-diff-page__pane-title">
-                {{ t("releases.diff.target") }}
-                ({{ diff.release.revision }})
-              </h3>
-              <ConfigCodeEditor
-                :model-value="diff.after_content"
-                :format="diff.release.format"
-                :readonly="true"
-                :min-height="420"
-                :aria-label="t('releases.diff.targetContentAriaLabel')"
-                class="release-diff-page__content"
-              />
-            </div>
-          </div>
+          <ConfigLineDiffViewer
+            :before-content="diff.before_content ?? ''"
+            :after-content="diff.after_content"
+            :before-title="baseContentTitle"
+            :after-title="targetContentTitle"
+            class="release-diff-page__content"
+          />
         </template>
       </div>
     </template>
@@ -157,10 +125,9 @@ import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useProjectContext } from "@/modules/projects/composables/useProjectContext";
 import ProjectTabs from "@/modules/projects/components/ProjectTabs.vue";
-import ConfigCodeEditor from "@/modules/config-workspace/components/ConfigCodeEditor.vue";
+import ConfigLineDiffViewer from "@/modules/config-workspace/components/ConfigLineDiffViewer.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import LoadingState from "@/shared/states/LoadingState.vue";
-import EmptyState from "@/shared/states/EmptyState.vue";
 import ErrorState from "@/shared/states/ErrorState.vue";
 import ForbiddenState from "@/shared/states/ForbiddenState.vue";
 import NotFoundState from "@/shared/states/NotFoundState.vue";
@@ -189,6 +156,22 @@ const diff = ref<ReleaseDiffResponse | null>(null);
 const diffLoading = ref(false);
 const diffError = ref<ApiRequestError | null>(null);
 let diffLoadSeq = 0;
+
+const baseContentTitle = computed(() => {
+  if (!diff.value?.base_release) {
+    return t("releases.diff.noPreviousContent");
+  }
+
+  return `${t("releases.diff.base")} (${diff.value.base_release.revision})`;
+});
+
+const targetContentTitle = computed(() => {
+  if (!diff.value) {
+    return t("releases.diff.target");
+  }
+
+  return `${t("releases.diff.target")} (${diff.value.release.revision})`;
+});
 
 async function loadDiff() {
   const seq = ++diffLoadSeq;
@@ -271,26 +254,7 @@ watch(
   margin-bottom: var(--spacing-md);
 }
 
-.release-diff-page__compare {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--spacing-md);
-}
-
-@media (max-width: 768px) {
-  .release-diff-page__compare {
-    grid-template-columns: 1fr;
-  }
-}
-
-.release-diff-page__pane {
-  min-width: 0;
-}
-
-.release-diff-page__pane-title {
-  margin: 0 0 var(--spacing-sm);
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--el-text-color-regular);
+.release-diff-page__content {
+  margin-top: var(--spacing-md);
 }
 </style>

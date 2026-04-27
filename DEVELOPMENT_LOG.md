@@ -31,6 +31,12 @@
 - Release Diff 左右对比区复用同一只读代码视图，按 release format 提供 YAML / JSON / TOML 语法高亮
 - 新增 Release 详情 / Diff 只读代码视图 aria 文案，为后续统一 diff viewer 和组件测试铺底
 
+2026-04-27 本轮补齐 Release 行级 Diff Viewer：
+
+- 新增 `ConfigLineDiffViewer`，基于本地 LCS 行对齐展示左右两列差异
+- Release Diff 页从“两块只读内容”升级为行级对比视图，新增行高亮绿色、删除行高亮红色，并保留原有 `.release-diff-page__content` 定位 class
+- Playwright release detail / diff 主路径已扩展到第二次发布，覆盖删除行和新增行的可见性断言
+
 2026-04-27 本轮完成 heartbeats / audit logs 前端低风险页面：
 
 - `heartbeats` 页已从占位页替换为真实页面，支持按部署实例和配置文件筛选

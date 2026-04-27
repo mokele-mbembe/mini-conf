@@ -575,8 +575,6 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "releases.diff.noChanges": "内容无变更",
     "releases.diff.noPreviousContent": "无上一版内容",
     "releases.diff.redactedHint": "当前配置为敏感类型，差异内容已脱敏处理。",
-    "releases.diff.baseContentAriaLabel": "Release Diff 上一版只读内容",
-    "releases.diff.targetContentAriaLabel": "Release Diff 当前版本只读内容",
     "common.cancel": "取消",
     "common.confirm": "确认",
     "common.delete": "删除",
@@ -1391,9 +1389,6 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "releases.diff.noPreviousContent": "No previous content",
     "releases.diff.redactedHint":
       "This config is marked as secret. Diff content shown is redacted.",
-    "releases.diff.baseContentAriaLabel": "Readonly release diff base content",
-    "releases.diff.targetContentAriaLabel":
-      "Readonly release diff target content",
     "common.cancel": "Cancel",
     "common.confirm": "Confirm",
     "common.delete": "Delete",
