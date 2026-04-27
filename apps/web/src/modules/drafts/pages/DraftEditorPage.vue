@@ -194,11 +194,11 @@
 
           <div class="draft-editor-page__workspace">
             <div class="draft-editor-page__main">
-              <el-input
+              <ConfigCodeEditor
                 v-model="content"
-                type="textarea"
-                :rows="24"
+                :format="configFile.format"
                 :placeholder="t('drafts.editor.placeholder')"
+                :aria-label="t('drafts.editor.ariaLabel')"
                 class="draft-editor-page__editor"
               />
             </div>
@@ -493,6 +493,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { onBeforeRouteLeave, useRoute, useRouter } from "vue-router";
 import { useProjectContext } from "@/modules/projects/composables/useProjectContext";
 import ProjectTabs from "@/modules/projects/components/ProjectTabs.vue";
+import ConfigCodeEditor from "@/modules/config-workspace/components/ConfigCodeEditor.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import LoadingState from "@/shared/states/LoadingState.vue";
 import ErrorState from "@/shared/states/ErrorState.vue";
@@ -1584,10 +1585,7 @@ onBeforeUnmount(() => {
   font-family: monospace;
 }
 
-.draft-editor-page__editor :deep(textarea) {
-  font-family:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-    "Courier New", monospace;
-  line-height: 1.55;
+.draft-editor-page__main {
+  min-width: 0;
 }
 </style>

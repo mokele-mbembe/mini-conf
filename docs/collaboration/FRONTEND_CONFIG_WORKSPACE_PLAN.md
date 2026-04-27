@@ -502,8 +502,9 @@ Preview 页每行建议提供：
 
 ### 下一阶段建议
 
-- 补项目成员页、sync records、heartbeats、audit logs 页面，让 demo 和真实运维可观察
-- Release 详情 / Diff 升级为 Monaco 只读语法高亮和带颜色 diff
+- 引入统一代码工作区底座，Draft 编辑页先切到 CodeMirror 6，保持现有保存、恢复、clone、publish 流程不变
+- 将 Draft 编辑页逐步拆成 workspace shell、Current Draft 编辑区、配置导航和历史面板
+- Release 详情 / Diff 升级为复用同一代码视图底座的只读语法高亮和差异视图
 - 为高状态密度组件补前端单元 / 组件测试
 
 ## 14. 验收标准

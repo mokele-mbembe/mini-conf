@@ -226,6 +226,19 @@ function getInitialAdminOption(page: Page, username: string) {
     .first();
 }
 
+function getDraftEditor(page: Page) {
+  return page.locator(".draft-editor-page__editor .cm-content").first();
+}
+
+async function fillDraftEditor(page: Page, value: string) {
+  const editor = getDraftEditor(page);
+  await editor.click();
+  await page.keyboard.press(
+    process.platform === "darwin" ? "Meta+A" : "Control+A",
+  );
+  await page.keyboard.insertText(value);
+}
+
 test("setup path: platform admin login redirects to setup and can complete", async ({
   page,
 }) => {
@@ -973,7 +986,7 @@ test("saved versions: save → list → note → restore → delete", async ({
     `/projects/${projectId}/deployments/${deploymentId}/configs/${configFileId}/draft`,
   );
 
-  const editor = page.locator(".draft-editor-page__editor textarea");
+  const editor = getDraftEditor(page);
   await expect(editor).toBeVisible({ timeout: 10_000 });
 
   // Saved versions panel should be visible for admin, initially empty
@@ -982,7 +995,7 @@ test("saved versions: save → list → note → restore → delete", async ({
   await expect(panel).toContainText("暂无 Saved Version");
 
   // ---- Save draft #1 -------------------------------------------------------
-  await editor.fill("key: value_1");
+  await fillDraftEditor(page, "key: value_1");
   await page.getByRole("button", { name: "保存", exact: true }).click();
 
   // Wait for the success toast to confirm the save completed
@@ -1016,7 +1029,7 @@ test("saved versions: save → list → note → restore → delete", async ({
   // ---- Save draft #2 -------------------------------------------------------
   await expect(page.locator(".el-message")).toHaveCount(0, { timeout: 6_000 });
 
-  await editor.fill("key: value_2");
+  await fillDraftEditor(page, "key: value_2");
   await page.getByRole("button", { name: "保存", exact: true }).click();
   await expect(page.locator(".el-message", { hasText: "已保存" })).toBeVisible({
     timeout: 5_000,
@@ -1041,7 +1054,7 @@ test("saved versions: save → list → note → restore → delete", async ({
   await restoreDialog.getByRole("button", { name: "确认恢复" }).click();
 
   // Editor content should revert to value_1
-  await expect(editor).toHaveValue("key: value_1", { timeout: 5_000 });
+  await expect(editor).toHaveText("key: value_1", { timeout: 5_000 });
 
   // Restore does NOT create a new saved version, count stays 2
   await expect(items).toHaveCount(2, { timeout: 5_000 });
@@ -1138,7 +1151,7 @@ test("clone from other instance: search source → select → clone draft", asyn
   await page.goto(
     `/projects/${projectId}/deployments/${tgtDeployment.id}/configs/${configFile.id}/draft`,
   );
-  const editor = page.locator(".draft-editor-page__editor textarea");
+  const editor = getDraftEditor(page);
   await expect(editor).toBeVisible({ timeout: 10_000 });
 
   // --- open clone dialog ---
@@ -1172,7 +1185,7 @@ test("clone from other instance: search source → select → clone draft", asyn
   ).toBeVisible({ timeout: 5_000 });
 
   // Editor should now contain the source draft content
-  await expect(editor).toHaveValue(draftContent, { timeout: 5_000 });
+  await expect(editor).toHaveText(draftContent, { timeout: 5_000 });
 });
 
 // ---------------------------------------------------------------------------
@@ -1276,7 +1289,7 @@ test("clone dialog: remote search filters by keyword and pagination carries keyw
   await page.goto(
     `/projects/${projectId}/deployments/${targetId}/configs/${configFile.id}/draft`,
   );
-  const editor = page.locator(".draft-editor-page__editor textarea");
+  const editor = getDraftEditor(page);
   await expect(editor).toBeVisible({ timeout: 10_000 });
 
   // Open clone dialog
@@ -1353,11 +1366,11 @@ test("release detail and diff: publish draft → view detail → view diff", asy
   await page.goto(
     `/projects/${projectId}/deployments/${deploymentId}/configs/${configFileId}/draft`,
   );
-  const editor = page.locator(".draft-editor-page__editor textarea");
+  const editor = getDraftEditor(page);
   await expect(editor).toBeVisible({ timeout: 10_000 });
 
   // Write and save a draft
-  await editor.fill("greeting: hello-release-test");
+  await fillDraftEditor(page, "greeting: hello-release-test");
   await page.getByRole("button", { name: "保存", exact: true }).click();
   await expect(page.locator(".el-message", { hasText: "已保存" })).toBeVisible({
     timeout: 5_000,

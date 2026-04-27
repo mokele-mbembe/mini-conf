@@ -487,6 +487,7 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "drafts.notice.unsaved": "当前内容尚未保存，发布前请先保存 Draft。",
     "drafts.notice.saveBeforePublish": "请先保存当前 Draft，再发布 Release。",
     "drafts.editor.placeholder": "输入配置内容",
+    "drafts.editor.ariaLabel": "Current Draft 配置编辑器",
     "drafts.publish.title": "发布 Release",
     "drafts.publish.prompt": "为这次发布填写变更说明，可留空。",
     "drafts.publish.placeholder": "如 调整咖啡店轮询间隔",
@@ -1293,6 +1294,7 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "drafts.notice.saveBeforePublish":
       "Save the current Draft before publishing a Release.",
     "drafts.editor.placeholder": "Enter config content",
+    "drafts.editor.ariaLabel": "Current Draft config editor",
     "drafts.publish.title": "Publish Release",
     "drafts.publish.prompt": "Add a change summary for this release. Optional.",
     "drafts.publish.placeholder": "e.g. Adjust coffee store poll interval",

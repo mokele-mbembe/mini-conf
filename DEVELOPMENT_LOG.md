@@ -12,6 +12,12 @@
 
 ## 1.1 最近完成
 
+2026-04-27 本轮启动 Config Workspace 统一升级第一步：
+
+- 新增统一代码编辑器封装 `ConfigCodeEditor`，以 CodeMirror 6 作为后续 Draft / Release / Diff / Merge 的共享代码视图底座
+- Draft 编辑页的 Current Draft 正文区域已从 Element Plus textarea 切换为 CodeMirror，保留现有保存、恢复、clone、publish 和 Saved Versions 流程
+- 当前批次尚未改变路由和后端接口，后续继续拆三栏 workspace shell、Release 只读代码视图与 Diff viewer
+
 2026-04-27 本轮完成 heartbeats / audit logs 前端低风险页面：
 
 - `heartbeats` 页已从占位页替换为真实页面，支持按部署实例和配置文件筛选
