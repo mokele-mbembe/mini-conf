@@ -25,6 +25,12 @@
 - 新增 `DraftSavedVersionsPanel`，把 Saved Versions 列表、详情、备注和恢复 / 删除按钮从 Draft 页面迁出；页面仍持有 API 调用、确认弹窗和状态副作用
 - `DraftEditorPage.vue` 已从 1591 行降到更可控的页面编排层，下一步可继续抽 `useDraftWorkspace` / `useSavedVersionsPanel` 等 composable
 
+2026-04-27 本轮继续扩大统一代码视图覆盖：
+
+- Release Detail 内容区从 `<pre>` 切换为 `ConfigCodeEditor` 只读模式，保留复制内容、查看 Diff 和原有 E2E 定位 class
+- Release Diff 左右对比区复用同一只读代码视图，按 release format 提供 YAML / JSON / TOML 语法高亮
+- 新增 Release 详情 / Diff 只读代码视图 aria 文案，为后续统一 diff viewer 和组件测试铺底
+
 2026-04-27 本轮完成 heartbeats / audit logs 前端低风险页面：
 
 - `heartbeats` 页已从占位页替换为真实页面，支持按部署实例和配置文件筛选

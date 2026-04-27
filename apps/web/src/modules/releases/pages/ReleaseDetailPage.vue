@@ -142,7 +142,14 @@
           </el-alert>
 
           <!-- Content -->
-          <pre class="release-detail-page__content" v-text="detail.content" />
+          <ConfigCodeEditor
+            :model-value="detail.content"
+            :format="detail.release.format"
+            :readonly="true"
+            :min-height="420"
+            :aria-label="t('releases.detail.contentAriaLabel')"
+            class="release-detail-page__content"
+          />
 
           <!-- Actions -->
           <div class="release-detail-page__actions">
@@ -165,6 +172,7 @@ import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { useProjectContext } from "@/modules/projects/composables/useProjectContext";
 import ProjectTabs from "@/modules/projects/components/ProjectTabs.vue";
+import ConfigCodeEditor from "@/modules/config-workspace/components/ConfigCodeEditor.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import LoadingState from "@/shared/states/LoadingState.vue";
 import ErrorState from "@/shared/states/ErrorState.vue";
@@ -332,18 +340,6 @@ watch(
 }
 
 .release-detail-page__content {
-  padding: var(--spacing-md);
-  background: var(--el-fill-color-lighter, #fafafa);
-  border: 1px solid var(--el-border-color, #dcdfe6);
-  border-radius: 4px;
-  font-family: monospace;
-  font-size: 13px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-break: break-all;
-  overflow-x: auto;
-  max-height: 600px;
-  overflow-y: auto;
   margin-bottom: var(--spacing-md);
 }
 

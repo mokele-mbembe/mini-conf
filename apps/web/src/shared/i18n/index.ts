@@ -557,6 +557,7 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "releases.detail.viewDiff": "查看 Diff",
     "releases.detail.copyContent": "复制内容",
     "releases.detail.contentCopied": "发布内容已复制",
+    "releases.detail.contentAriaLabel": "Release 只读配置内容",
     "releases.detail.readonlyHint": "发布内容为只读，不可编辑。",
     "releases.detail.redactedHint": "当前配置为敏感类型，展示内容已脱敏处理。",
     "releases.diff.title": "发布 Diff",
@@ -574,6 +575,8 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "releases.diff.noChanges": "内容无变更",
     "releases.diff.noPreviousContent": "无上一版内容",
     "releases.diff.redactedHint": "当前配置为敏感类型，差异内容已脱敏处理。",
+    "releases.diff.baseContentAriaLabel": "Release Diff 上一版只读内容",
+    "releases.diff.targetContentAriaLabel": "Release Diff 当前版本只读内容",
     "common.cancel": "取消",
     "common.confirm": "确认",
     "common.delete": "删除",
@@ -1366,6 +1369,7 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "releases.detail.viewDiff": "View Diff",
     "releases.detail.copyContent": "Copy Content",
     "releases.detail.contentCopied": "Release content copied",
+    "releases.detail.contentAriaLabel": "Readonly release config content",
     "releases.detail.readonlyHint":
       "Release content is read-only and cannot be edited.",
     "releases.detail.redactedHint":
@@ -1387,6 +1391,9 @@ const messages: Record<AppLocale, Record<string, string>> = {
     "releases.diff.noPreviousContent": "No previous content",
     "releases.diff.redactedHint":
       "This config is marked as secret. Diff content shown is redacted.",
+    "releases.diff.baseContentAriaLabel": "Readonly release diff base content",
+    "releases.diff.targetContentAriaLabel":
+      "Readonly release diff target content",
     "common.cancel": "Cancel",
     "common.confirm": "Confirm",
     "common.delete": "Delete",

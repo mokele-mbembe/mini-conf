@@ -116,10 +116,14 @@
                   ({{ diff.base_release.revision }})
                 </template>
               </h3>
-              <pre
+              <ConfigCodeEditor
                 v-if="diff.before_content !== null"
+                :model-value="diff.before_content"
+                :format="diff.release.format"
+                :readonly="true"
+                :min-height="420"
+                :aria-label="t('releases.diff.baseContentAriaLabel')"
                 class="release-diff-page__content"
-                v-text="diff.before_content"
               />
               <EmptyState
                 v-else
@@ -132,9 +136,13 @@
                 {{ t("releases.diff.target") }}
                 ({{ diff.release.revision }})
               </h3>
-              <pre
+              <ConfigCodeEditor
+                :model-value="diff.after_content"
+                :format="diff.release.format"
+                :readonly="true"
+                :min-height="420"
+                :aria-label="t('releases.diff.targetContentAriaLabel')"
                 class="release-diff-page__content"
-                v-text="diff.after_content"
               />
             </div>
           </div>
@@ -149,6 +157,7 @@ import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useProjectContext } from "@/modules/projects/composables/useProjectContext";
 import ProjectTabs from "@/modules/projects/components/ProjectTabs.vue";
+import ConfigCodeEditor from "@/modules/config-workspace/components/ConfigCodeEditor.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import LoadingState from "@/shared/states/LoadingState.vue";
 import EmptyState from "@/shared/states/EmptyState.vue";
@@ -283,21 +292,5 @@ watch(
   font-size: 14px;
   font-weight: 600;
   color: var(--el-text-color-regular);
-}
-
-.release-diff-page__content {
-  padding: var(--spacing-md);
-  background: var(--el-fill-color-lighter, #fafafa);
-  border: 1px solid var(--el-border-color, #dcdfe6);
-  border-radius: 4px;
-  font-family: monospace;
-  font-size: 13px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-break: break-all;
-  overflow-x: auto;
-  max-height: 600px;
-  overflow-y: auto;
-  margin: 0;
 }
 </style>
