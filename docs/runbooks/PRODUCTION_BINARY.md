@@ -31,6 +31,7 @@ mini-conf/
     mini-conf.env.example
   systemd/
     mini-conf.service.example
+  RELEASE.txt
 ```
 
 当前 server crate 的 release binary 名称是 `server`。发布时建议重命名为 `mini-conf-server`，避免生产机器上出现语义不清的进程名。
@@ -41,18 +42,18 @@ mini-conf/
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm --dir apps/web build
-cargo build --release -p server --bin server
-
-rm -rf dist/mini-conf
-mkdir -p dist/mini-conf/bin dist/mini-conf/web dist/mini-conf/migrations dist/mini-conf/config dist/mini-conf/systemd
-
-cp target/release/server dist/mini-conf/bin/mini-conf-server
-cp -R apps/web/dist/. dist/mini-conf/web/
-cp -R migrations/. dist/mini-conf/migrations/
-
-tar -C dist -czf mini-conf-linux-x86_64.tar.gz mini-conf
+just release-package
 ```
+
+默认输出：
+
+```text
+dist/mini-conf-linux-x86_64.tar.gz
+```
+
+可用 `MINI_CONF_RELEASE_NAME` 覆盖包名，用 `MINI_CONF_DIST_DIR` 覆盖输出目录。
+
+GitHub Actions 也提供 `Release Package` workflow，可手动触发，或在推送 `v*` tag 时生成并上传同名 artifact。
 
 发布包不包含 PostgreSQL 数据目录，不包含生产密钥，不包含 TLS 证书。
 
@@ -79,7 +80,7 @@ sqlx migrate run --source /opt/mini-conf/migrations
 
 ## 5. Environment File
 
-建议 `/etc/mini-conf/mini-conf.env`：
+发布包内提供 `config/mini-conf.env.example`，生产部署时写入 `/etc/mini-conf/mini-conf.env`：
 
 ```bash
 APP_ENV=prod
@@ -99,7 +100,7 @@ RUST_LOG=info
 
 ## 6. systemd Unit
 
-示例 `/etc/systemd/system/mini-conf.service`：
+发布包内提供 `systemd/mini-conf.service.example`。生产部署时可复制为 `/etc/systemd/system/mini-conf.service`：
 
 ```ini
 [Unit]

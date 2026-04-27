@@ -163,6 +163,21 @@ MVP 默认采用 `DeploymentInstance` 作为配置组织模型，因为它最贴
 - 本机 CI 入口分层为：`just ci-local` 负责非 DB 基线，`just ci-local-db` 对齐 GitHub `backend-db`，`just test-e2e-local` 以临时 schema 启动隔离前后端，`just ci-local-full` 串联三层
 - 当前后端开发阶段，本机优先恢复 `just test-backend-db-local`；`just run-server-local` 只在确实需要联调时启用
 
+## 生产发布包
+
+MVP 生产部署主路径是 Linux binary 发布包，不把 PostgreSQL、DNS、TLS 或反向代理纳入项目编排。
+
+生成发布包：
+
+```bash
+pnpm install --frozen-lockfile
+just release-package
+```
+
+默认产物是 `dist/mini-conf-linux-x86_64.tar.gz`，包含 `bin/mini-conf-server`、`web/`、`migrations/`、生产 env 示例和 systemd 示例。完整部署步骤见 [docs/runbooks/PRODUCTION_BINARY.md](./docs/runbooks/PRODUCTION_BINARY.md)。
+
+GitHub Actions 的 `Release Package` workflow 可手动触发，也会在推送 `v*` tag 时上传同名 artifact。
+
 ## 本机联调启动
 
 如果你已经按仓库约定配置好了 `~/.config/mini-conf/dev-env.sh`，可以直接用下面这组命令启动前后端联调。

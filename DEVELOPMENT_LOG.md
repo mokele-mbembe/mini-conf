@@ -15,11 +15,15 @@
 2026-04-25 本轮裁剪生产部署目标并补齐 binary 主路径：
 
 - 生产部署主路径改为 Linux binary 发布包，不再把 Dockerfile / 容器镜像作为默认生产目标
+- 新增 `just release-package` 和 [scripts/release-package.sh](./scripts/release-package.sh)，默认生成 `dist/mini-conf-linux-x86_64.tar.gz`
+- 新增 `.github/workflows/release-package.yml`，支持手动触发或 `v*` tag 生成并上传发布包 artifact
+- 新增 [deploy/mini-conf.env.example](./deploy/mini-conf.env.example) 与 [deploy/mini-conf.service.example](./deploy/mini-conf.service.example)，发布包会复制到 `config/` 和 `systemd/`
 - 新增 [docs/runbooks/PRODUCTION_BINARY.md](./docs/runbooks/PRODUCTION_BINARY.md)，覆盖发布包布局、构建步骤、外部 PostgreSQL、生产变量、systemd、反向代理、首次启动、smoke 和回滚
 - 新增 [docs/runbooks/README.md](./docs/runbooks/README.md)，并把 `docs/README.md` / `docs/public/README.md` 接入 runbook 入口
 - `APP_ENV=staging|prod` 现在要求显式 `DATABASE_URL`，服务启动时会连接外部 PostgreSQL，但仍禁止 `INIT_DB_ON_BOOT=true`
 - `INIT_DB_ON_BOOT` 继续只用于 dev/test 的自动迁移和 seed；生产迁移、seed 和初始化独立执行
 - 本轮验证通过：
+  - `just release-package`
   - `cargo test -p server config::tests`
   - `cargo test -p server bootstrap::tests`
   - `cargo test -p server state::tests`

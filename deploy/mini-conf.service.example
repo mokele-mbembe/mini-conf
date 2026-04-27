@@ -1,0 +1,17 @@
+[Unit]
+Description=mini-conf config center
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=mini-conf
+Group=mini-conf
+WorkingDirectory=/opt/mini-conf
+EnvironmentFile=/etc/mini-conf/mini-conf.env
+ExecStart=/opt/mini-conf/bin/mini-conf-server
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

@@ -242,6 +242,9 @@ perf-smoke:
 perf-ci:
   @PERF_ENFORCE=1 bash scripts/perf-smoke.sh
 
+release-package:
+  @bash scripts/release-package.sh
+
 ci-local:
   @just lint
   @just sqlx-check
