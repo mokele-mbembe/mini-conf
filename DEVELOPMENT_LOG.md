@@ -18,6 +18,13 @@
 - Draft 编辑页的 Current Draft 正文区域已从 Element Plus textarea 切换为 CodeMirror，保留现有保存、恢复、clone、publish 和 Saved Versions 流程
 - 当前批次尚未改变路由和后端接口，后续继续拆三栏 workspace shell、Release 只读代码视图与 Diff viewer
 
+2026-04-27 本轮继续推进 Config Workspace 结构拆分：
+
+- 新增 `ConfigWorkspaceLayout` 作为 Draft / Release / Diff 后续复用的主编辑区 + 侧栏布局底座
+- 新增 `ConfigFileSwitcher`，把配置项切换和 preview 状态 badge 从 Draft 页面内联模板迁出
+- 新增 `DraftSavedVersionsPanel`，把 Saved Versions 列表、详情、备注和恢复 / 删除按钮从 Draft 页面迁出；页面仍持有 API 调用、确认弹窗和状态副作用
+- `DraftEditorPage.vue` 已从 1591 行降到更可控的页面编排层，下一步可继续抽 `useDraftWorkspace` / `useSavedVersionsPanel` 等 composable
+
 2026-04-27 本轮完成 heartbeats / audit logs 前端低风险页面：
 
 - `heartbeats` 页已从占位页替换为真实页面，支持按部署实例和配置文件筛选

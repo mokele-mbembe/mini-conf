@@ -502,8 +502,8 @@ Preview 页每行建议提供：
 
 ### 下一阶段建议
 
-- 引入统一代码工作区底座，Draft 编辑页先切到 CodeMirror 6，保持现有保存、恢复、clone、publish 流程不变
-- 将 Draft 编辑页逐步拆成 workspace shell、Current Draft 编辑区、配置导航和历史面板
+- 继续收敛 `DraftEditorPage` 页面层职责，把 API 状态和副作用逐步抽入 `useDraftWorkspace`、`useSavedVersionsPanel`、`useCloneDraftSource` 等 composable
+- 已完成统一代码工作区底座第一步：Draft 编辑页切到 CodeMirror 6，并拆出 workspace shell、配置导航和 Saved Versions 面板
 - Release 详情 / Diff 升级为复用同一代码视图底座的只读语法高亮和差异视图
 - 为高状态密度组件补前端单元 / 组件测试
 

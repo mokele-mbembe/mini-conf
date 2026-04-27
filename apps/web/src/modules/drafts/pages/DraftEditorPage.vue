@@ -78,35 +78,12 @@
         />
 
         <template v-else-if="deployment && configFile">
-          <!-- Config file switcher -->
-          <div
-            v-if="configFiles.length > 1"
-            class="draft-editor-page__config-switcher"
-          >
-            <div class="draft-editor-page__config-switcher-label">
-              {{ t("drafts.configSwitcher.title") }}
-            </div>
-            <el-radio-group
-              :model-value="configFileId"
-              @update:model-value="switchConfigFile"
-            >
-              <el-radio-button
-                v-for="cf in configFiles"
-                :key="cf.id"
-                :value="cf.id"
-              >
-                <span>{{ cf.code }}</span>
-                <el-tag
-                  v-if="previewStatusMap[cf.id]"
-                  size="small"
-                  :type="configStatusTagType(previewStatusMap[cf.id])"
-                  class="draft-editor-page__config-status-tag"
-                >
-                  {{ configStatusLabel(previewStatusMap[cf.id]) }}
-                </el-tag>
-              </el-radio-button>
-            </el-radio-group>
-          </div>
+          <ConfigFileSwitcher
+            :config-files="configFiles"
+            :current-config-file-id="configFileId"
+            :preview-status-map="previewStatusMap"
+            @switch="switchConfigFile"
+          />
 
           <div class="draft-editor-page__meta">
             <el-descriptions :column="3" border>
@@ -192,8 +169,8 @@
             class="draft-editor-page__notice"
           />
 
-          <div class="draft-editor-page__workspace">
-            <div class="draft-editor-page__main">
+          <ConfigWorkspaceLayout>
+            <template #main>
               <ConfigCodeEditor
                 v-model="content"
                 :format="configFile.format"
@@ -201,149 +178,29 @@
                 :aria-label="t('drafts.editor.ariaLabel')"
                 class="draft-editor-page__editor"
               />
-            </div>
+            </template>
 
-            <aside
-              v-if="canViewSavedVersions"
-              class="draft-editor-page__history"
-            >
-              <div class="draft-editor-page__history-header">
-                <div class="draft-editor-page__history-title">
-                  {{ t("savedVersions.panel.title") }}
-                </div>
-                <el-tag size="small" type="info">
-                  {{ savedVersions.length }}
-                </el-tag>
-              </div>
-
-              <el-alert
-                v-if="savedVersionsError"
-                :title="t('savedVersions.error.loadList')"
-                type="error"
-                :description="
-                  getErrorMessage(
-                    savedVersionsError.code,
-                    savedVersionsError.message,
-                  )
-                "
-                show-icon
-                :closable="false"
-                class="draft-editor-page__history-alert"
+            <template v-if="canViewSavedVersions" #aside>
+              <DraftSavedVersionsPanel
+                v-model:note="savedVersionNote"
+                class="draft-editor-page__history"
+                :saved-versions="savedVersions"
+                :loading="savedVersionsLoading"
+                :error="savedVersionsError"
+                :selected-saved-version-id="selectedSavedVersionId"
+                :saved-version-detail="savedVersionDetail"
+                :detail-loading="savedVersionDetailLoading"
+                :note-max-length="SAVED_VERSION_NOTE_MAX_LENGTH"
+                :updating-note="updatingSavedVersionNote"
+                :restoring="restoringFromSavedVersion"
+                :deleting="deletingSavedVersion"
+                @select="selectSavedVersion"
+                @save-note="handleUpdateSavedVersionNote"
+                @restore="handleRestoreSavedVersion"
+                @delete="handleDeleteSavedVersion"
               />
-
-              <div
-                v-else-if="savedVersionsLoading"
-                class="draft-editor-page__history-loading"
-              >
-                <el-skeleton :rows="4" animated />
-              </div>
-
-              <el-empty
-                v-else-if="savedVersions.length === 0"
-                :description="t('savedVersions.empty')"
-              />
-
-              <template v-else>
-                <div class="draft-editor-page__history-list">
-                  <button
-                    v-for="item in savedVersions"
-                    :key="item.id"
-                    type="button"
-                    class="draft-editor-page__history-item"
-                    :class="{
-                      'is-active': selectedSavedVersionId === item.id,
-                    }"
-                    @click="selectSavedVersion(item.id)"
-                  >
-                    <div class="draft-editor-page__history-item-title">
-                      {{ item.title }}
-                    </div>
-                    <div class="draft-editor-page__history-item-meta">
-                      <span>
-                        {{ t("savedVersions.field.version") }}
-                        {{ item.source_draft_version }}
-                      </span>
-                      <span>{{ item.created_by_username }}</span>
-                    </div>
-                  </button>
-                </div>
-
-                <el-divider />
-
-                <div class="draft-editor-page__history-detail">
-                  <el-skeleton
-                    v-if="savedVersionDetailLoading"
-                    :rows="4"
-                    animated
-                  />
-
-                  <template v-else-if="savedVersionDetail">
-                    <el-descriptions :column="1" border size="small">
-                      <el-descriptions-item
-                        :label="t('savedVersions.field.title')"
-                      >
-                        {{ savedVersionDetail.title }}
-                      </el-descriptions-item>
-                      <el-descriptions-item
-                        :label="t('savedVersions.field.createdAt')"
-                      >
-                        {{ savedVersionDetail.created_at }}
-                      </el-descriptions-item>
-                      <el-descriptions-item
-                        :label="t('savedVersions.field.author')"
-                      >
-                        {{ savedVersionDetail.created_by_username }}
-                      </el-descriptions-item>
-                    </el-descriptions>
-
-                    <div class="draft-editor-page__history-note">
-                      <div class="draft-editor-page__history-note-header">
-                        <span>{{ t("savedVersions.field.note") }}</span>
-                        <span>
-                          {{ savedVersionNote.length }}/{{
-                            SAVED_VERSION_NOTE_MAX_LENGTH
-                          }}
-                        </span>
-                      </div>
-                      <el-input
-                        v-model="savedVersionNote"
-                        type="textarea"
-                        :rows="3"
-                        :maxlength="SAVED_VERSION_NOTE_MAX_LENGTH"
-                        :placeholder="t('savedVersions.note.placeholder')"
-                      />
-                    </div>
-
-                    <div class="draft-editor-page__history-actions">
-                      <el-button
-                        size="small"
-                        :loading="updatingSavedVersionNote"
-                        @click="handleUpdateSavedVersionNote"
-                      >
-                        {{ t("savedVersions.action.saveNote") }}
-                      </el-button>
-                      <el-button
-                        size="small"
-                        type="warning"
-                        :loading="restoringFromSavedVersion"
-                        @click="handleRestoreSavedVersion"
-                      >
-                        {{ t("savedVersions.action.restore") }}
-                      </el-button>
-                      <el-button
-                        size="small"
-                        type="danger"
-                        :loading="deletingSavedVersion"
-                        @click="handleDeleteSavedVersion"
-                      >
-                        {{ t("savedVersions.action.delete") }}
-                      </el-button>
-                    </div>
-                  </template>
-                </div>
-              </template>
-            </aside>
-          </div>
+            </template>
+          </ConfigWorkspaceLayout>
         </template>
       </div>
     </template>
@@ -493,7 +350,10 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { onBeforeRouteLeave, useRoute, useRouter } from "vue-router";
 import { useProjectContext } from "@/modules/projects/composables/useProjectContext";
 import ProjectTabs from "@/modules/projects/components/ProjectTabs.vue";
+import ConfigFileSwitcher from "@/modules/config-workspace/components/ConfigFileSwitcher.vue";
 import ConfigCodeEditor from "@/modules/config-workspace/components/ConfigCodeEditor.vue";
+import ConfigWorkspaceLayout from "@/modules/config-workspace/components/ConfigWorkspaceLayout.vue";
+import DraftSavedVersionsPanel from "@/modules/drafts/components/DraftSavedVersionsPanel.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import LoadingState from "@/shared/states/LoadingState.vue";
 import ErrorState from "@/shared/states/ErrorState.vue";
@@ -662,34 +522,6 @@ const versionLabel = computed(() => {
 
 function cloneSourceHasNoAvailableSources(src: CloneSourceSummary): boolean {
   return !src.available_sources.draft && !src.available_sources.latest_release;
-}
-
-function configStatusTagType(source: string) {
-  switch (source) {
-    case "draft":
-      return "warning";
-    case "latest_release":
-      return "success";
-    case "missing_required":
-      return "danger";
-    default:
-      return "info";
-  }
-}
-
-function configStatusLabel(source: string) {
-  switch (source) {
-    case "draft":
-      return t("preview.source.draft");
-    case "latest_release":
-      return t("preview.source.latest_release");
-    case "missing_required":
-      return t("preview.status.missing_required");
-    case "missing_optional":
-      return t("preview.status.missing_optional");
-    default:
-      return t("preview.source.none");
-  }
 }
 
 async function confirmIfDirty(): Promise<boolean> {
@@ -1461,20 +1293,6 @@ onBeforeUnmount(() => {
   margin-bottom: var(--spacing-md);
 }
 
-.draft-editor-page__config-switcher {
-  margin-bottom: var(--spacing-md);
-}
-
-.draft-editor-page__config-switcher-label {
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
-  margin-bottom: var(--spacing-xs, 4px);
-}
-
-.draft-editor-page__config-status-tag {
-  margin-left: 4px;
-}
-
 .draft-editor-page__draft-actions {
   display: flex;
   gap: var(--spacing-sm);
@@ -1486,106 +1304,7 @@ onBeforeUnmount(() => {
   margin-bottom: var(--spacing-md);
 }
 
-.draft-editor-page__workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: var(--spacing-md);
-}
-
-.draft-editor-page__history {
-  border: 1px solid var(--el-border-color-light);
-  border-radius: var(--el-border-radius-base);
-  padding: var(--spacing-sm);
-  background: var(--el-bg-color-page);
-  min-height: 560px;
-}
-
-.draft-editor-page__history-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--spacing-sm);
-}
-
-.draft-editor-page__history-title {
-  font-weight: 600;
-}
-
-.draft-editor-page__history-alert {
-  margin-bottom: var(--spacing-sm);
-}
-
-.draft-editor-page__history-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs, 6px);
-  max-height: 240px;
-  overflow: auto;
-}
-
-.draft-editor-page__history-item {
-  border: 1px solid var(--el-border-color-light);
-  background: var(--el-bg-color);
-  border-radius: var(--el-border-radius-base);
-  padding: 8px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.draft-editor-page__history-item.is-active {
-  border-color: var(--el-color-primary);
-  box-shadow: 0 0 0 1px var(--el-color-primary-light-5) inset;
-}
-
-.draft-editor-page__history-item-title {
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.draft-editor-page__history-item-meta {
-  margin-top: 4px;
-  color: var(--el-text-color-secondary);
-  font-size: 12px;
-  display: flex;
-  gap: 8px;
-}
-
-.draft-editor-page__history-detail {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-}
-
-.draft-editor-page__history-note {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.draft-editor-page__history-note-header {
-  display: flex;
-  justify-content: space-between;
-  color: var(--el-text-color-secondary);
-  font-size: 12px;
-}
-
-.draft-editor-page__history-actions {
-  display: flex;
-  gap: var(--spacing-xs, 6px);
-  flex-wrap: wrap;
-}
-
-@media (max-width: 1200px) {
-  .draft-editor-page__workspace {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
 .draft-editor-page__code {
   font-family: monospace;
-}
-
-.draft-editor-page__main {
-  min-width: 0;
 }
 </style>
