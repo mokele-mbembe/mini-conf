@@ -73,8 +73,8 @@
 - Linux binary 发布包方案已收口为 `just release-package` / `just release-package-check`，GitHub Actions `Release Package` workflow 已可生成并自检 artifact；后续只需要按正式版本策略决定是否创建 GitHub Release。
 - 生产部署 runbook 已覆盖外部 PostgreSQL、`config-center.example.com` 示例域名、反向代理/TLS、环境变量、迁移与初始化；`just staging-smoke` 已提供真实环境只读探测，后续需要按真实 staging 试部署结果补充排障项。
 - 文档压缩后的最终三层结构。
-- 前端单元 / 组件测试基线。
-- Config Workspace 统一升级。
+- 前端单元 / 组件测试已建立初始基线，后续继续扩展高状态密度组件覆盖。
+- Config Workspace 统一升级已进入渐进收口阶段，后续继续抽薄 Draft 页面层并准备 Merge Workspace。
 
 ## 3. 后续固定顺序
 
@@ -82,7 +82,7 @@
 
 1. 上线实施方案
 2. 资源生命周期与文案收口
-3. 前端单元 / 组件测试基线
+3. 前端单元 / 组件测试补量
 4. 文档压缩
 5. Config Workspace 统一升级
 

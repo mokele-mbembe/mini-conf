@@ -156,8 +156,8 @@ OPENAPI_EXPORT_PATH=docs/artifacts/openapi.json
 2. sync records 页面
 3. heartbeats 页面
 4. audit logs 页面
-5. 前端单元 / 组件测试基线
-6. Config Workspace 统一升级
+5. 前端单元 / 组件测试补量
+6. Config Workspace 统一升级继续收口
 
 已有页面和运行方式见 [FRONTEND_TASK_WORKFLOW.md](../collaboration/FRONTEND_TASK_WORKFLOW.md)。
 

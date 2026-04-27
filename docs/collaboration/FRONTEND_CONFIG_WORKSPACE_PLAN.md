@@ -502,10 +502,10 @@ Preview 页每行建议提供：
 
 ### 下一阶段建议
 
-- 继续收敛 `DraftEditorPage` 页面层职责，把 API 状态和副作用逐步抽入 `useDraftWorkspace`、`useSavedVersionsPanel`、`useCloneDraftSource` 等 composable
-- 已完成统一代码工作区底座第一步：Draft 编辑页切到 CodeMirror 6，并拆出 workspace shell、配置导航和 Saved Versions 面板
-- Release Detail / Diff 已复用统一代码视图底座；Release Diff 已补行级左右对比、新增 / 删除行高亮和行内变更片段高亮，后续继续补组件测试
-- 为高状态密度组件补前端单元 / 组件测试
+- 继续收敛 `DraftEditorPage` 页面层职责，把剩余 API 状态和副作用逐步抽入 `useDraftWorkspace`、`useCloneDraftSource` 等 composable；`useSavedVersionsPanel` 已先行落地
+- 已完成统一代码工作区底座第一步：Draft 编辑页切到 CodeMirror 6，并拆出 workspace shell、配置导航、Saved Versions 面板和 Saved Versions 副作用 composable
+- Release Detail / Diff 已复用统一代码视图底座；Release Diff 已补行级左右对比、新增 / 删除行高亮和行内变更片段高亮，并以 `ConfigLineDiffViewer` 建立首批 Vitest 组件测试
+- 继续为高状态密度组件补前端单元 / 组件测试，优先覆盖 Draft workspace 状态和 clone source 交互
 
 ## 14. 验收标准
 

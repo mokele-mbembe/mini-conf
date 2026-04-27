@@ -12,6 +12,12 @@
 
 ## 1.1 最近完成
 
+2026-04-27 本轮继续收口 Config Workspace 页面层职责：
+
+- 新增 `useSavedVersionsPanel` composable，把 Saved Versions 列表加载、详情选择、备注保存、恢复和删除副作用从 `DraftEditorPage.vue` 抽出
+- `DraftEditorPage.vue` 从 1310 行降到 1082 行，页面层继续向工作台编排层收敛
+- 前端测试基线从占位脚本切到 Vitest + Vue Test Utils + happy-dom，并为 `ConfigLineDiffViewer` 补首批 3 条组件测试，覆盖不变行、行内变更片段和新增 / 删除行
+
 2026-04-27 本轮启动 Config Workspace 统一升级第一步：
 
 - 新增统一代码编辑器封装 `ConfigCodeEditor`，以 CodeMirror 6 作为后续 Draft / Release / Diff / Merge 的共享代码视图底座
@@ -356,7 +362,7 @@
 - [x] 覆盖率基线
 - [x] 前端 build 基线
 - [x] 前端 smoke E2E 基线
-- [ ] 前端单元 / 组件测试基线
+- [x] 前端单元 / 组件测试初始基线
 - [ ] compile-time SQLx metadata 检查
 
 ## 3. 当前剩余工作
@@ -406,13 +412,13 @@
 - [x] projects / config_files 的删除能力与生命周期文案统一
 - [x] 低风险管理页面补齐：heartbeats、audit logs
 - [x] 中间文档压缩整理第一轮
-- [ ] 配置编辑体验统一升级（延后到上述骨架完成之后）
+- [ ] 配置编辑体验统一升级（已进入渐进收口阶段）
 
 ## 4. 当前阶段剩余工作
 
 推荐顺序：
 
-1. 前端单元 / 组件测试基线，优先覆盖高状态密度组件
+1. 前端单元 / 组件测试继续补量，优先覆盖高状态密度组件
 2. 真实 staging 试部署反馈与 runbook 排障补充
 3. `sqlx-check` 恢复为强制检查的时机评估
 4. 黑盒与覆盖率基线的持续补量
@@ -427,7 +433,7 @@
 
 前端下一批推荐顺序：
 
-1. 前端组件测试基线：优先覆盖高风险状态页和权限相关交互
+1. 前端组件测试补量：优先覆盖高风险状态页和权限相关交互
 2. 页面级 E2E 继续补边角权限矩阵
 3. 配置编辑体验统一升级：最后再收束到统一 Config Workspace
 

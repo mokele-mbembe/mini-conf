@@ -161,9 +161,9 @@ E2E_ALLOW_SHARED_SERVER=1 PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 pnpm --dir a
 
 当前下一批前端优先级：
 
-1. 前端单元 / 组件测试基线：优先覆盖高状态密度组件和权限交互。
+1. 前端单元 / 组件测试补量：已建立 Vitest 初始基线，继续覆盖高状态密度组件和权限交互。
 2. 页面级 E2E 继续补权限矩阵和异常分支。
-3. Config Workspace：等平台、上线、安全、低风险页收口后再统一升级。
+3. Config Workspace：已进入渐进收口阶段，继续抽薄 Draft 页面层并准备 Merge Workspace。
 
 ## 9. 常见坑
 
