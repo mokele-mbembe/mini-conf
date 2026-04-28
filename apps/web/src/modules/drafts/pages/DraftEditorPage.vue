@@ -85,71 +85,18 @@
             @switch="switchConfigFile"
           />
 
-          <div class="draft-editor-page__meta">
-            <el-descriptions :column="3" border>
-              <el-descriptions-item :label="t('deployments.field.name')">
-                {{ deployment.name }}
-              </el-descriptions-item>
-              <el-descriptions-item
-                :label="t('deployments.field.deploymentKey')"
-              >
-                <span class="draft-editor-page__code">
-                  {{ deployment.deployment_key }}
-                </span>
-              </el-descriptions-item>
-              <el-descriptions-item :label="t('deployments.field.type')">
-                {{
-                  deployment.is_template
-                    ? t("deployments.type.template")
-                    : t("deployments.type.instance")
-                }}
-              </el-descriptions-item>
-              <el-descriptions-item :label="t('configFiles.column.code')">
-                <span class="draft-editor-page__code">
-                  {{ configFile.code }}
-                </span>
-              </el-descriptions-item>
-              <el-descriptions-item :label="t('configFiles.column.format')">
-                <el-tag size="small" type="info">
-                  {{ configFile.format }}
-                </el-tag>
-              </el-descriptions-item>
-              <el-descriptions-item :label="t('drafts.field.version')">
-                {{ versionLabel }}
-              </el-descriptions-item>
-            </el-descriptions>
-          </div>
-
-          <!-- Draft actions toolbar -->
-          <div v-if="canEdit" class="draft-editor-page__draft-actions">
-            <el-button
-              v-if="draftReady"
-              text
-              type="danger"
-              size="small"
-              :loading="discarding"
-              @click="handleDiscard"
-            >
-              {{ t("drafts.action.discard") }}
-            </el-button>
-            <el-button
-              text
-              type="primary"
-              size="small"
-              :loading="restoring"
-              @click="handleRestoreFromRelease"
-            >
-              {{ t("drafts.action.restoreFromRelease") }}
-            </el-button>
-            <el-button
-              text
-              type="primary"
-              size="small"
-              @click="cloneDialogVisible = true"
-            >
-              {{ t("drafts.action.cloneFromInstance") }}
-            </el-button>
-          </div>
+          <DraftWorkspaceSummary
+            :deployment="deployment"
+            :config-file="configFile"
+            :version-label="versionLabel"
+            :can-edit="canEdit"
+            :draft-ready="draftReady"
+            :discarding="discarding"
+            :restoring="restoring"
+            @discard="handleDiscard"
+            @restore-from-release="handleRestoreFromRelease"
+            @clone-from-instance="cloneDialogVisible = true"
+          />
 
           <el-alert
             v-if="deployment.is_template"
@@ -205,176 +152,57 @@
       </div>
     </template>
 
-    <!-- Clone from other instance dialog -->
-    <el-dialog
+    <DraftCloneSourceDialog
       v-model="cloneDialogVisible"
-      :title="t('drafts.cloneDialog.title')"
-      width="520px"
-      destroy-on-close
-    >
-      <el-alert
-        v-if="cloneLoadError"
-        type="error"
-        :closable="false"
-        style="margin-bottom: 16px"
-      >
-        {{ t("drafts.cloneDialog.loadError") }}
-      </el-alert>
-      <el-form label-position="top">
-        <el-form-item :label="t('drafts.cloneDialog.sourceInstance')">
-          <el-select
-            v-model="cloneSourceInstanceId"
-            :placeholder="t('drafts.cloneDialog.selectInstance')"
-            filterable
-            remote
-            :remote-method="handleCloneRemoteSearch"
-            style="width: 100%"
-            :loading="cloneInstancesLoading"
-          >
-            <el-option
-              v-for="src in cloneSources"
-              :key="src.deployment_instance_id"
-              :label="
-                src.is_template
-                  ? `${src.name} (${src.deployment_key}) [${t('drafts.cloneDialog.templateTag')}]`
-                  : `${src.name} (${src.deployment_key})`
-              "
-              :value="src.deployment_instance_id"
-            >
-              <div
-                style="
-                  display: flex;
-                  justify-content: space-between;
-                  align-items: center;
-                "
-              >
-                <span>
-                  {{ src.name }}
-                  <span style="color: var(--el-text-color-secondary)">
-                    ({{ src.deployment_key }})
-                  </span>
-                  <el-tag
-                    v-if="src.is_template"
-                    size="small"
-                    type="info"
-                    style="margin-left: 4px"
-                  >
-                    {{ t("drafts.cloneDialog.templateTag") }}
-                  </el-tag>
-                </span>
-                <span
-                  style="font-size: 12px; color: var(--el-text-color-secondary)"
-                >
-                  <template v-if="cloneSourceHasNoAvailableSources(src)">
-                    {{ t("drafts.cloneDialog.noSources") }}
-                  </template>
-                  <template v-else>
-                    <span
-                      v-if="src.available_sources.draft"
-                      style="margin-right: 6px"
-                    >
-                      Draft ✓
-                    </span>
-                    <span v-if="src.available_sources.latest_release">
-                      Release ✓
-                    </span>
-                  </template>
-                </span>
-              </div>
-            </el-option>
-            <template v-if="cloneNextCursor" #footer>
-              <el-button
-                text
-                :loading="cloneLoadingMore"
-                style="width: 100%"
-                @mousedown.prevent
-                @click="loadMoreCloneSources"
-              >
-                {{ t("drafts.cloneDialog.loadMore") }}
-              </el-button>
-            </template>
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="t('drafts.cloneDialog.sourceKind')">
-          <el-radio-group v-model="cloneSourceKind">
-            <el-radio value="draft" :disabled="cloneDraftOptionDisabled">
-              {{ t("drafts.cloneDialog.kindDraft") }}
-              <span
-                v-if="selectedCloneSourceDraftUnavailable"
-                style="color: var(--el-text-color-secondary); font-size: 12px"
-              >
-                ({{ t("drafts.cloneDialog.sourceUnavailable") }})
-              </span>
-            </el-radio>
-            <el-radio
-              value="latest_release"
-              :disabled="cloneReleaseOptionDisabled"
-            >
-              {{ t("drafts.cloneDialog.kindRelease") }}
-              <span
-                v-if="selectedCloneSource?.is_template"
-                style="color: var(--el-text-color-secondary); font-size: 12px"
-              >
-                ({{ t("drafts.cloneDialog.templateNoRelease") }})
-              </span>
-              <span
-                v-else-if="selectedCloneSourceReleaseUnavailable"
-                style="color: var(--el-text-color-secondary); font-size: 12px"
-              >
-                ({{ t("drafts.cloneDialog.sourceUnavailable") }})
-              </span>
-            </el-radio>
-          </el-radio-group>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="cloneDialogVisible = false">
-          {{ t("common.cancel") }}
-        </el-button>
-        <el-button
-          type="primary"
-          :loading="cloning"
-          :disabled="cloneSubmitDisabled"
-          @click="handleCloneFromInstance"
-        >
-          {{ t("drafts.cloneDialog.submit") }}
-        </el-button>
-      </template>
-    </el-dialog>
+      v-model:source-instance-id="cloneSourceInstanceId"
+      v-model:source-kind="cloneSourceKind"
+      :clone-sources="cloneSources"
+      :load-error="cloneLoadError"
+      :instances-loading="cloneInstancesLoading"
+      :loading-more="cloneLoadingMore"
+      :next-cursor="cloneNextCursor"
+      :selected-source="selectedCloneSource"
+      :draft-option-disabled="cloneDraftOptionDisabled"
+      :release-option-disabled="cloneReleaseOptionDisabled"
+      :selected-source-draft-unavailable="selectedCloneSourceDraftUnavailable"
+      :selected-source-release-unavailable="
+        selectedCloneSourceReleaseUnavailable
+      "
+      :submit-disabled="cloneSubmitDisabled"
+      :cloning="cloning"
+      @search="handleCloneRemoteSearch"
+      @load-more="loadMoreCloneSources"
+      @submit="handleCloneFromInstance"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { ElMessage, ElMessageBox } from "element-plus";
-import { onBeforeRouteLeave, useRoute, useRouter } from "vue-router";
+import { computed, onMounted, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { useProjectContext } from "@/modules/projects/composables/useProjectContext";
 import ProjectTabs from "@/modules/projects/components/ProjectTabs.vue";
 import ConfigFileSwitcher from "@/modules/config-workspace/components/ConfigFileSwitcher.vue";
 import ConfigCodeEditor from "@/modules/config-workspace/components/ConfigCodeEditor.vue";
 import ConfigWorkspaceLayout from "@/modules/config-workspace/components/ConfigWorkspaceLayout.vue";
+import DraftCloneSourceDialog from "@/modules/drafts/components/DraftCloneSourceDialog.vue";
 import DraftSavedVersionsPanel from "@/modules/drafts/components/DraftSavedVersionsPanel.vue";
+import DraftWorkspaceSummary from "@/modules/drafts/components/DraftWorkspaceSummary.vue";
 import {
   SAVED_VERSION_NOTE_MAX_LENGTH,
   useSavedVersionsPanel,
 } from "@/modules/drafts/composables/useSavedVersionsPanel";
+import { useDraftCloneDialog } from "@/modules/drafts/composables/useDraftCloneDialog";
+import { useDraftActions } from "@/modules/drafts/composables/useDraftActions";
+import { useDraftWorkspaceResources } from "@/modules/drafts/composables/useDraftWorkspaceResources";
+import { useDraftUnsavedChangesGuard } from "@/modules/drafts/composables/useDraftUnsavedChangesGuard";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import LoadingState from "@/shared/states/LoadingState.vue";
 import ErrorState from "@/shared/states/ErrorState.vue";
 import ForbiddenState from "@/shared/states/ForbiddenState.vue";
 import NotFoundState from "@/shared/states/NotFoundState.vue";
 import { ROUTE_NAMES } from "@/shared/constants/routes";
-import * as deploymentInstancesApi from "@/api/deployment-instances";
-import * as configFilesApi from "@/api/config-files";
-import * as draftsApi from "@/api/drafts";
-import * as releasesApi from "@/api/releases";
-import * as cloneSourcesApi from "@/api/clone-sources";
-import { ApiRequestError } from "@/api/error";
 import { getErrorMessage } from "@/shared/constants/error-messages";
-import type { ConfigFileSummary } from "@/api/types/config-file";
-import type { DeploymentInstanceSummary } from "@/api/types/deployment-instance";
-import type { DraftResponse } from "@/api/types/draft";
-import type { CloneSourceSummary } from "@/api/types/clone-source";
 import { useI18nText } from "@/shared/i18n";
 
 const route = useRoute();
@@ -396,87 +224,40 @@ const canEdit = computed(() => {
   return role === "admin" || role === "editor";
 });
 
-const deployment = ref<DeploymentInstanceSummary | null>(null);
-const configFile = ref<ConfigFileSummary | null>(null);
-const configFiles = ref<ConfigFileSummary[]>([]);
-const draft = ref<DraftResponse | null>(null);
-const content = ref("");
-const savedContent = ref("");
-const resourceLoading = ref(false);
-const resourceError = ref<ApiRequestError | null>(null);
-const saving = ref(false);
-const publishing = ref(false);
-const discarding = ref(false);
-const restoring = ref(false);
-const draftWasMissing = ref(false);
+const canViewSavedVersions = computed(() => canEdit.value);
 
-// Preview status per config (for switcher badges)
-const previewStatusMap = ref<Record<number, string>>({});
-
-// Clone from instance dialog
-const cloneDialogVisible = ref(false);
-const cloneSourceInstanceId = ref<number | null>(null);
-const cloneSourceKind = ref<"draft" | "latest_release">("draft");
-const cloneSources = ref<CloneSourceSummary[]>([]);
-const cloneInstancesLoading = ref(false);
-const cloneLoadingMore = ref(false);
-const cloneLoadError = ref(false);
-const cloning = ref(false);
-const cloneNextCursor = ref<number | null>(null);
-const cloneSearchKeyword = ref<string | undefined>(undefined);
-let cloneSearchTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
-let cloneSearchSeq = 0;
-
-const selectedCloneSource = computed(() =>
-  cloneSources.value.find(
-    (s) => s.deployment_instance_id === cloneSourceInstanceId.value,
-  ),
-);
-const cloneDraftOptionDisabled = computed(
-  () =>
-    selectedCloneSource.value !== undefined &&
-    !selectedCloneSource.value.available_sources.draft,
-);
-const cloneReleaseOptionDisabled = computed(
-  () =>
-    selectedCloneSource.value !== undefined &&
-    (!selectedCloneSource.value.available_sources.latest_release ||
-      selectedCloneSource.value.is_template),
-);
-const selectedCloneSourceDraftUnavailable = computed(
-  () =>
-    selectedCloneSource.value !== undefined &&
-    !selectedCloneSource.value.available_sources.draft,
-);
-const selectedCloneSourceReleaseUnavailable = computed(
-  () =>
-    selectedCloneSource.value !== undefined &&
-    !selectedCloneSource.value.available_sources.latest_release,
-);
-
-const cloneSubmitDisabled = computed(() => {
-  if (!cloneSourceInstanceId.value || !selectedCloneSource.value) return true;
-  const src = selectedCloneSource.value;
-  if (cloneSourceKind.value === "draft" && !src.available_sources.draft)
-    return true;
-  if (
-    cloneSourceKind.value === "latest_release" &&
-    !src.available_sources.latest_release
-  )
-    return true;
-  return false;
+const {
+  deployment,
+  configFile,
+  configFiles,
+  draft,
+  content,
+  resourceLoading,
+  resourceError,
+  previewStatusMap,
+  resourceNotFound,
+  resourceForbidden,
+  draftReady,
+  isDirty,
+  draftVersion,
+  versionLabel,
+  loadDraftResources: loadDraftWorkspaceResources,
+  loadPreviewStatus,
+  applyDraft,
+  markDraftMissing,
+} = useDraftWorkspaceResources({
+  projectId,
+  deploymentId,
+  configFileId,
+  canEdit,
+  canViewSavedVersions,
+  t,
 });
 
-const resourceNotFound = computed(() => resourceError.value?.status === 404);
-const resourceForbidden = computed(() => resourceError.value?.status === 403);
-const draftReady = computed(() => draft.value !== null);
-const isDirty = computed(() => content.value !== savedContent.value);
 const canPublish = computed(
   () =>
     canEdit.value && deployment.value !== null && !deployment.value.is_template,
 );
-const canViewSavedVersions = computed(() => canEdit.value);
-const draftVersion = computed(() => draft.value?.version ?? null);
 const pageTitle = computed(() => {
   if (configFile.value) {
     return t("drafts.page.title", { config: configFile.value.code });
@@ -490,15 +271,6 @@ const pageSubtitle = computed(() => {
   }
 
   return `${deployment.value.name} / ${deployment.value.deployment_key}`;
-});
-const versionLabel = computed(() => {
-  if (draft.value) {
-    return String(draft.value.version);
-  }
-
-  return draftWasMissing.value
-    ? t("drafts.field.newDraft")
-    : t("drafts.field.unknownVersion");
 });
 
 const {
@@ -529,27 +301,69 @@ const {
   t,
 });
 
-function cloneSourceHasNoAvailableSources(src: CloneSourceSummary): boolean {
-  return !src.available_sources.draft && !src.available_sources.latest_release;
-}
+const {
+  cloneDialogVisible,
+  cloneSourceInstanceId,
+  cloneSourceKind,
+  cloneSources,
+  cloneInstancesLoading,
+  cloneLoadingMore,
+  cloneLoadError,
+  cloning,
+  cloneNextCursor,
+  selectedCloneSource,
+  cloneDraftOptionDisabled,
+  cloneReleaseOptionDisabled,
+  selectedCloneSourceDraftUnavailable,
+  selectedCloneSourceReleaseUnavailable,
+  cloneSubmitDisabled,
+  loadMoreCloneSources,
+  handleCloneRemoteSearch,
+  handleCloneFromInstance,
+} = useDraftCloneDialog({
+  projectId,
+  deploymentId,
+  configFileId,
+  isDirty,
+  applyDraft,
+  refreshPreviewStatus: loadPreviewStatus,
+  t,
+});
 
-async function confirmIfDirty(): Promise<boolean> {
-  if (!isDirty.value) return true;
-  try {
-    await ElMessageBox.confirm(
-      t("drafts.navigate.prompt"),
-      t("drafts.navigate.title"),
-      {
-        confirmButtonText: t("drafts.navigate.confirm"),
-        cancelButtonText: t("common.cancel"),
-        type: "warning",
-      },
-    );
-    return true;
-  } catch {
-    return false;
-  }
-}
+const {
+  saving,
+  publishing,
+  discarding,
+  restoring,
+  handleSave,
+  handleDiscard,
+  handleRestoreFromRelease,
+  handlePublish,
+} = useDraftActions({
+  projectId,
+  deploymentId,
+  configFileId,
+  configFile,
+  draft,
+  content,
+  isDirty,
+  applyDraft,
+  markDraftMissing,
+  loadSavedVersions,
+  refreshPreviewStatus: loadPreviewStatus,
+  onReleasePublished: (release) => {
+    void router.push({
+      name: ROUTE_NAMES.RELEASE_DETAIL,
+      params: { projectId: route.params.projectId, releaseId: release.id },
+    });
+  },
+  t,
+});
+
+const { confirmIfDirty } = useDraftUnsavedChangesGuard({
+  isDirty,
+  t,
+});
 
 async function switchConfigFile(cfId: number) {
   if (!(await confirmIfDirty())) return;
@@ -564,99 +378,10 @@ async function switchConfigFile(cfId: number) {
 }
 
 async function loadDraftResources() {
-  const did = deploymentId.value;
-  const cid = configFileId.value;
-  if (Number.isNaN(did) || Number.isNaN(cid)) return;
-
-  resourceLoading.value = true;
-  resourceError.value = null;
-  deployment.value = null;
-  configFile.value = null;
-  draft.value = null;
-  content.value = "";
-  savedContent.value = "";
-  draftWasMissing.value = false;
-  resetSavedVersions();
-
-  try {
-    const [deploymentResult, configResult, configListResult] =
-      await Promise.all([
-        deploymentInstancesApi.getDeploymentInstance(did),
-        configFilesApi.getConfigFile(cid),
-        configFilesApi.listConfigFiles({
-          project_id: Number(route.params.projectId),
-          status: "active",
-        }),
-      ]);
-    deployment.value = deploymentResult;
-    configFile.value = configResult;
-    configFiles.value = configListResult.items;
-
-    if (
-      deploymentResult.project_id !== projectId.value ||
-      configResult.project_id !== projectId.value
-    ) {
-      resourceError.value = new ApiRequestError(404, {
-        code: "resource_not_found",
-        message: "resource not found",
-      });
-      return;
-    }
-
-    if (!canEdit.value) {
-      return;
-    }
-
-    // Load preview status for config switcher badges (non-blocking)
-    loadPreviewStatus(did);
-    if (canViewSavedVersions.value) {
-      await loadSavedVersions({ keepSelection: false });
-    }
-
-    try {
-      const draftResult = await draftsApi.getDraft(did, cid);
-      applyDraft(draftResult);
-    } catch (err) {
-      if (err instanceof ApiRequestError && err.code === "draft_not_found") {
-        draftWasMissing.value = true;
-        content.value = "";
-        savedContent.value = "";
-        return;
-      }
-      throw err;
-    }
-  } catch (err) {
-    if (err instanceof ApiRequestError) {
-      resourceError.value = err;
-    } else {
-      resourceError.value = new ApiRequestError(0, {
-        code: "unknown_error",
-        message: t("drafts.page.loadError"),
-      });
-    }
-  } finally {
-    resourceLoading.value = false;
-  }
-}
-
-async function loadPreviewStatus(did: number) {
-  try {
-    const preview = await deploymentInstancesApi.previewDeploymentBundle(did);
-    const map: Record<number, string> = {};
-    for (const item of preview.items) {
-      if (
-        item.status === "missing_required" ||
-        item.status === "missing_optional"
-      ) {
-        map[item.config_file_id] = item.status;
-      } else {
-        map[item.config_file_id] = item.source;
-      }
-    }
-    previewStatusMap.value = map;
-  } catch {
-    // Non-critical; silently ignore
-  }
+  await loadDraftWorkspaceResources({
+    resetSavedVersions,
+    loadSavedVersions,
+  });
 }
 
 async function loadAll() {
@@ -664,311 +389,6 @@ async function loadAll() {
   if (Number.isNaN(pid)) return;
   await fetchProject(pid);
   await loadDraftResources();
-}
-
-function applyDraft(value: DraftResponse) {
-  draft.value = value;
-  draftWasMissing.value = false;
-  content.value = value.content;
-  savedContent.value = value.content;
-}
-
-async function handleSave() {
-  if (!configFile.value) return;
-
-  saving.value = true;
-  try {
-    const result = await draftsApi.updateDraft(
-      deploymentId.value,
-      configFileId.value,
-      {
-        content: content.value,
-        format: configFile.value.format,
-        base_version: draft.value?.version ?? 0,
-      },
-    );
-    applyDraft(result);
-    await loadSavedVersions({ keepSelection: false });
-    ElMessage.success(t("toast.drafts.saved"));
-  } catch (err) {
-    if (err instanceof ApiRequestError) {
-      ElMessage.error(getErrorMessage(err.code, err.message));
-    } else {
-      ElMessage.error(t("toast.operationFailed"));
-    }
-  } finally {
-    saving.value = false;
-  }
-}
-
-async function handleDiscard() {
-  try {
-    await ElMessageBox.confirm(
-      t("drafts.discard.prompt"),
-      t("drafts.discard.title"),
-      {
-        confirmButtonText: t("drafts.discard.confirm"),
-        cancelButtonText: t("common.cancel"),
-        type: "warning",
-      },
-    );
-  } catch {
-    return;
-  }
-
-  discarding.value = true;
-  try {
-    await draftsApi.deleteDraft(deploymentId.value, configFileId.value);
-    draft.value = null;
-    draftWasMissing.value = true;
-
-    // Load fallback content so the editor shows what the instance uses now
-    // instead of a misleading empty state.
-    try {
-      const preview = await deploymentInstancesApi.previewDeploymentBundle(
-        deploymentId.value,
-      );
-      const item = preview.items.find(
-        (i) => i.config_file_id === configFileId.value,
-      );
-      content.value = item?.content ?? "";
-      savedContent.value = content.value;
-    } catch {
-      content.value = "";
-      savedContent.value = "";
-    }
-
-    ElMessage.success(t("toast.drafts.discarded"));
-    loadPreviewStatus(deploymentId.value);
-  } catch (err) {
-    if (err instanceof ApiRequestError) {
-      ElMessage.error(getErrorMessage(err.code, err.message));
-    } else {
-      ElMessage.error(t("toast.operationFailed"));
-    }
-  } finally {
-    discarding.value = false;
-  }
-}
-
-async function handleRestoreFromRelease() {
-  try {
-    await ElMessageBox.confirm(
-      t("drafts.restore.prompt"),
-      t("drafts.restore.title"),
-      {
-        confirmButtonText: t("drafts.restore.confirm"),
-        cancelButtonText: t("common.cancel"),
-        type: "warning",
-      },
-    );
-  } catch {
-    return;
-  }
-
-  restoring.value = true;
-  try {
-    const result = await draftsApi.cloneDraft(
-      deploymentId.value,
-      configFileId.value,
-      {
-        source_deployment_instance_id: deploymentId.value,
-        source_kind: "latest_release",
-      },
-    );
-    applyDraft(result.draft);
-    ElMessage.success(t("toast.drafts.restoredFromRelease"));
-    loadPreviewStatus(deploymentId.value);
-  } catch (err) {
-    if (err instanceof ApiRequestError) {
-      ElMessage.error(getErrorMessage(err.code, err.message));
-    } else {
-      ElMessage.error(t("toast.operationFailed"));
-    }
-  } finally {
-    restoring.value = false;
-  }
-}
-
-async function handlePublish() {
-  if (!draft.value || isDirty.value) {
-    ElMessage.warning(t("drafts.notice.saveBeforePublish"));
-    return;
-  }
-
-  try {
-    const { value } = await ElMessageBox.prompt(
-      t("drafts.publish.prompt"),
-      t("drafts.publish.title"),
-      {
-        inputType: "textarea",
-        inputPlaceholder: t("drafts.publish.placeholder"),
-        confirmButtonText: t("common.publish"),
-        cancelButtonText: t("common.cancel"),
-      },
-    );
-    publishing.value = true;
-    const release = await releasesApi.publishRelease({
-      project_id: projectId.value,
-      deployment_instance_id: deploymentId.value,
-      config_file_id: configFileId.value,
-      change_summary: value || null,
-    });
-    ElMessage.success(
-      t("toast.releases.published", { revision: release.revision }),
-    );
-    router.push({
-      name: ROUTE_NAMES.RELEASE_DETAIL,
-      params: { projectId: route.params.projectId, releaseId: release.id },
-    });
-  } catch (err) {
-    if (err === "cancel" || err === "close") return;
-    if (err instanceof ApiRequestError) {
-      ElMessage.error(getErrorMessage(err.code, err.message));
-    } else {
-      ElMessage.error(t("toast.operationFailed"));
-    }
-  } finally {
-    publishing.value = false;
-  }
-}
-
-// Clone from other instance
-const CLONE_ERROR_KEYS: Record<string, string> = {
-  draft_not_found: "drafts.cloneDialog.error.sourceDraftNotFound",
-  release_not_found: "drafts.cloneDialog.error.sourceReleaseNotFound",
-  draft_validation_failed: "drafts.cloneDialog.error.validationFailed",
-};
-
-async function searchCloneSources(keyword?: string) {
-  const seq = ++cloneSearchSeq;
-  const normalizedKeyword = keyword || undefined;
-  cloneSearchKeyword.value = normalizedKeyword;
-  cloneInstancesLoading.value = true;
-  cloneLoadError.value = false;
-  cloneNextCursor.value = null;
-  try {
-    const result = await cloneSourcesApi.listCloneSources({
-      project_id: projectId.value,
-      target_deployment_id: deploymentId.value,
-      config_file_id: configFileId.value,
-      keyword: normalizedKeyword,
-      limit: 50,
-    });
-    if (seq !== cloneSearchSeq) return;
-    cloneSources.value = result.items;
-    cloneNextCursor.value = result.next_cursor;
-  } catch {
-    if (seq !== cloneSearchSeq) return;
-    cloneSources.value = [];
-    cloneLoadError.value = true;
-  } finally {
-    if (seq === cloneSearchSeq) {
-      cloneInstancesLoading.value = false;
-    }
-  }
-}
-
-async function loadMoreCloneSources() {
-  if (!cloneNextCursor.value || cloneLoadingMore.value) return;
-  const seq = cloneSearchSeq;
-  cloneLoadingMore.value = true;
-  try {
-    const result = await cloneSourcesApi.listCloneSources({
-      project_id: projectId.value,
-      target_deployment_id: deploymentId.value,
-      config_file_id: configFileId.value,
-      keyword: cloneSearchKeyword.value,
-      limit: 50,
-      cursor: cloneNextCursor.value,
-    });
-    if (seq !== cloneSearchSeq) return;
-    cloneSources.value = [...cloneSources.value, ...result.items];
-    cloneNextCursor.value = result.next_cursor;
-  } catch {
-    // silently ignore load-more errors; user can retry
-  } finally {
-    if (seq === cloneSearchSeq) {
-      cloneLoadingMore.value = false;
-    }
-  }
-}
-
-function handleCloneRemoteSearch(keyword: string) {
-  if (cloneSearchTimer) globalThis.clearTimeout(cloneSearchTimer);
-  if (cloneLoadingMore.value) return;
-  cloneSearchTimer = globalThis.setTimeout(() => {
-    searchCloneSources(keyword);
-  }, 300);
-}
-
-watch(cloneDialogVisible, (visible) => {
-  if (visible) {
-    cloneSourceInstanceId.value = null;
-    cloneSourceKind.value = "draft";
-    cloneLoadError.value = false;
-    cloneSources.value = [];
-    cloneNextCursor.value = null;
-    cloneSearchKeyword.value = undefined;
-    searchCloneSources();
-  }
-});
-
-// Auto-select best available source kind when instance changes
-watch(selectedCloneSource, (src) => {
-  if (!src) return;
-  if (src.is_template || !src.available_sources.latest_release) {
-    cloneSourceKind.value = "draft";
-  }
-});
-
-async function handleCloneFromInstance() {
-  if (!cloneSourceInstanceId.value) return;
-
-  if (isDirty.value) {
-    try {
-      await ElMessageBox.confirm(
-        t("drafts.cloneDialog.overwritePrompt"),
-        t("drafts.cloneDialog.overwriteTitle"),
-        {
-          confirmButtonText: t("drafts.cloneDialog.overwriteConfirm"),
-          cancelButtonText: t("common.cancel"),
-          type: "warning",
-        },
-      );
-    } catch {
-      return;
-    }
-  }
-
-  cloning.value = true;
-  try {
-    const result = await draftsApi.cloneDraft(
-      deploymentId.value,
-      configFileId.value,
-      {
-        source_deployment_instance_id: cloneSourceInstanceId.value,
-        source_kind: cloneSourceKind.value,
-      },
-    );
-    applyDraft(result.draft);
-    cloneDialogVisible.value = false;
-    ElMessage.success(t("toast.drafts.clonedFromInstance"));
-    loadPreviewStatus(deploymentId.value);
-  } catch (err) {
-    if (err instanceof ApiRequestError) {
-      const cloneErrorKey = CLONE_ERROR_KEYS[err.code];
-      ElMessage.error(
-        cloneErrorKey
-          ? t(cloneErrorKey)
-          : getErrorMessage(err.code, err.message),
-      );
-    } else {
-      ElMessage.error(t("toast.operationFailed"));
-    }
-  } finally {
-    cloning.value = false;
-  }
 }
 
 function backToDeployment() {
@@ -1001,46 +421,6 @@ watch(
   ],
   () => loadAll(),
 );
-
-// ---- Global route-leave & browser-close guards ----
-
-onBeforeRouteLeave(async () => {
-  if (!isDirty.value) return true;
-  try {
-    await ElMessageBox.confirm(
-      t("drafts.navigate.prompt"),
-      t("drafts.navigate.title"),
-      {
-        confirmButtonText: t("drafts.navigate.confirm"),
-        cancelButtonText: t("common.cancel"),
-        type: "warning",
-      },
-    );
-    return true;
-  } catch {
-    return false;
-  }
-});
-
-function onBeforeUnloadHandler(e: {
-  preventDefault: () => void;
-  returnValue?: string;
-}) {
-  if (isDirty.value) {
-    e.preventDefault();
-    e.returnValue = "";
-  }
-}
-
-onMounted(() => {
-  globalThis.addEventListener("beforeunload", onBeforeUnloadHandler);
-});
-onBeforeUnmount(() => {
-  if (cloneSearchTimer) {
-    globalThis.clearTimeout(cloneSearchTimer);
-  }
-  globalThis.removeEventListener("beforeunload", onBeforeUnloadHandler);
-});
 </script>
 
 <style scoped>
@@ -1065,18 +445,7 @@ onBeforeUnmount(() => {
   margin-bottom: var(--spacing-md);
 }
 
-.draft-editor-page__draft-actions {
-  display: flex;
-  gap: var(--spacing-sm);
-  margin-bottom: var(--spacing-md);
-}
-
-.draft-editor-page__meta,
 .draft-editor-page__notice {
   margin-bottom: var(--spacing-md);
-}
-
-.draft-editor-page__code {
-  font-family: monospace;
 }
 </style>
