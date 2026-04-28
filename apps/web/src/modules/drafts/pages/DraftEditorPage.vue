@@ -1,5 +1,8 @@
 <template>
-  <div class="draft-editor-page page-container">
+  <div
+    class="draft-editor-page"
+    :class="embedded ? 'draft-editor-page--embedded' : 'page-container'"
+  >
     <LoadingState v-if="projectLoading" />
 
     <NotFoundState
@@ -23,6 +26,9 @@
       <PageHeader :title="pageTitle" :subtitle="pageSubtitle">
         <template #actions>
           <div class="draft-editor-page__header-actions">
+            <el-button v-if="embedded" text :icon="Close" @click="requestClose">
+              {{ t("common.close") }}
+            </el-button>
             <el-button v-if="canEdit" text type="primary" @click="goToPreview">
               {{ t("drafts.action.preview") }}
             </el-button>
@@ -48,10 +54,10 @@
         </template>
       </PageHeader>
 
-      <ProjectTabs />
+      <ProjectTabs v-if="!embedded" />
 
       <div class="draft-editor-page__section">
-        <div class="draft-editor-page__nav">
+        <div v-if="!embedded" class="draft-editor-page__nav">
           <el-button text type="primary" @click="backToDeployment">
             {{ t("drafts.action.backToDeployment") }}
           </el-button>
@@ -179,6 +185,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, watch } from "vue";
+import { Close } from "@element-plus/icons-vue";
 import { useRoute, useRouter } from "vue-router";
 import { useProjectContext } from "@/modules/projects/composables/useProjectContext";
 import ProjectTabs from "@/modules/projects/components/ProjectTabs.vue";
@@ -209,6 +216,22 @@ const route = useRoute();
 const router = useRouter();
 const { t } = useI18nText();
 
+const props = withDefaults(
+  defineProps<{
+    embedded?: boolean;
+    configFileIdOverride?: number | null;
+  }>(),
+  {
+    embedded: false,
+    configFileIdOverride: null,
+  },
+);
+
+const emit = defineEmits<{
+  close: [];
+  "switch-config": [configFileId: number];
+}>();
+
 const {
   project,
   loading: projectLoading,
@@ -218,7 +241,9 @@ const {
 
 const projectId = computed(() => Number(route.params.projectId));
 const deploymentId = computed(() => Number(route.params.deploymentId));
-const configFileId = computed(() => Number(route.params.configFileId));
+const configFileId = computed(
+  () => props.configFileIdOverride ?? Number(route.params.configFileId),
+);
 const canEdit = computed(() => {
   const role = project.value?.current_user_role;
   return role === "admin" || role === "editor";
@@ -367,6 +392,11 @@ const { confirmIfDirty } = useDraftUnsavedChangesGuard({
 
 async function switchConfigFile(cfId: number) {
   if (!(await confirmIfDirty())) return;
+  if (props.embedded) {
+    emit("switch-config", cfId);
+    return;
+  }
+
   router.push({
     name: ROUTE_NAMES.DRAFT_EDITOR,
     params: {
@@ -376,6 +406,16 @@ async function switchConfigFile(cfId: number) {
     },
   });
 }
+
+async function requestClose() {
+  if (await confirmIfDirty()) {
+    emit("close");
+  }
+}
+
+defineExpose({
+  requestClose,
+});
 
 async function loadDraftResources() {
   await loadDraftWorkspaceResources({
@@ -414,11 +454,7 @@ function goToPreview() {
 onMounted(loadAll);
 
 watch(
-  () => [
-    route.params.projectId,
-    route.params.deploymentId,
-    route.params.configFileId,
-  ],
+  () => [projectId.value, deploymentId.value, configFileId.value],
   () => loadAll(),
 );
 </script>
@@ -426,6 +462,12 @@ watch(
 <style scoped>
 .draft-editor-page {
   width: 100%;
+}
+
+.draft-editor-page--embedded {
+  min-height: 100%;
+  padding: var(--spacing-lg);
+  background: var(--color-bg-card);
 }
 
 .draft-editor-page__section {

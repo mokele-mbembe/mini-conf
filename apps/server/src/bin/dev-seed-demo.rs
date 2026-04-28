@@ -1120,6 +1120,30 @@ async fn upsert_credential(
     credential_name: &str,
     token: &str,
 ) -> SeedResult {
+    let token_hash = hash_bearer_token(token);
+
+    // Demo deployment keys can be reused after local archive/delete experiments.
+    // Remove stale credentials from tombstoned demo rows before reusing the same
+    // deterministic demo token for the fresh replacement row.
+    sqlx::query(
+        r#"
+        DELETE FROM deployment_credentials dc
+        USING deployment_instances di
+        WHERE dc.deployment_instance_id = di.id
+          AND dc.token_hash = $1
+          AND NOT (
+            dc.deployment_instance_id = $2
+            AND dc.credential_name = $3
+          )
+          AND (di.deleted_at IS NOT NULL OR di.is_archived = TRUE)
+        "#,
+    )
+    .bind(&token_hash)
+    .bind(deployment_instance_id)
+    .bind(credential_name)
+    .execute(tx.as_mut())
+    .await?;
+
     sqlx::query(
         r#"
         INSERT INTO deployment_credentials (
@@ -1140,7 +1164,7 @@ async fn upsert_credential(
     )
     .bind(deployment_instance_id)
     .bind(credential_name)
-    .bind(hash_bearer_token(token))
+    .bind(token_hash)
     .execute(tx.as_mut())
     .await?;
 

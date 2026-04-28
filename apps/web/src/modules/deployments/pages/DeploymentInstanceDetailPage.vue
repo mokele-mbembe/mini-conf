@@ -325,11 +325,19 @@
       :template="deployment"
       @success="handleCloneSuccess"
     />
+
+    <DraftEditorOverlay
+      v-if="draftOverlayVisible"
+      :visible="draftOverlayVisible"
+      :config-file-id="draftOverlayConfigFileId"
+      @request-close="closeDraftOverlay"
+      @switch-config="switchDraftOverlayConfig"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, defineAsyncComponent, onMounted, ref, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useRoute, useRouter } from "vue-router";
 import { useProjectContext } from "@/modules/projects/composables/useProjectContext";
@@ -358,6 +366,9 @@ import { useI18nText } from "@/shared/i18n";
 const route = useRoute();
 const router = useRouter();
 const { t } = useI18nText();
+const DraftEditorOverlay = defineAsyncComponent(
+  () => import("@/modules/drafts/components/DraftEditorOverlay.vue"),
+);
 
 const {
   project,
@@ -397,6 +408,19 @@ const tokenDialogVisible = ref(false);
 const tokenDialogMode = ref<"activate" | "reset">("activate");
 const tokenPayload = ref<DeploymentTokenResponse | null>(null);
 const cloneDialogVisible = ref(false);
+const draftOverlayConfigFileId = computed(() => {
+  const raw = route.query.draftConfigFileId;
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+});
+const draftOverlayVisible = computed(
+  () => draftOverlayConfigFileId.value !== null,
+);
 const detailTitle = computed(
   () => deployment.value?.name ?? t("deployments.detail.title"),
 );
@@ -738,11 +762,41 @@ function openPreview() {
 
 function openDraft(configFileId: number) {
   router.push({
-    name: ROUTE_NAMES.DRAFT_EDITOR,
+    name: ROUTE_NAMES.DEPLOYMENT_DETAIL,
     params: {
       projectId: route.params.projectId,
       deploymentId: route.params.deploymentId,
-      configFileId,
+    },
+    query: {
+      ...route.query,
+      draftConfigFileId: String(configFileId),
+    },
+  });
+}
+
+function closeDraftOverlay() {
+  const query = { ...route.query };
+  delete query.draftConfigFileId;
+  router.push({
+    name: ROUTE_NAMES.DEPLOYMENT_DETAIL,
+    params: {
+      projectId: route.params.projectId,
+      deploymentId: route.params.deploymentId,
+    },
+    query,
+  });
+}
+
+function switchDraftOverlayConfig(configFileId: number) {
+  router.push({
+    name: ROUTE_NAMES.DEPLOYMENT_DETAIL,
+    params: {
+      projectId: route.params.projectId,
+      deploymentId: route.params.deploymentId,
+    },
+    query: {
+      ...route.query,
+      draftConfigFileId: String(configFileId),
     },
   });
 }
