@@ -8,12 +8,12 @@
 
 - 当前采用 MVP 前单人 `main-first` 开发策略，规则见根目录 [MAIN_DEV_CHECKLIST.md](../../MAIN_DEV_CHECKLIST.md)。
 - 后端配置中心主链路已基本完成：项目、项目成员、环境、配置文件、部署实例、Draft、Saved Versions、Release、preview-bundle、open API、sync records、heartbeats、audit logs。
-- 前端管理台主链路已打通：登录、setup、首次改密、平台用户管理、平台项目创建、项目列表、配置文件、环境、部署实例、Draft、Saved Versions、preview、publish、Release detail/diff、实例归档/恢复/永久删除、项目成员管理、sync records、heartbeats、audit logs。
+- 前端管理台主链路已打通：登录、setup、首次改密、平台用户管理、平台项目创建、项目列表、配置文件、环境、部署实例、deployment list 行内展开、floating workspace overlay、Draft、Saved Versions、preview、publish、Release detail/diff、实例归档/恢复/永久删除、项目成员管理、sync records、heartbeats、audit logs。
 - 平台级权限模型已落地：`platform_admin` 与项目角色 `admin / editor / viewer` 分层；平台管理员默认不自动获得项目业务可见性。
 - Setup 核心链路已落地：`system_settings`、setup status、setup gate、setup complete、前端 setup 页。
 - 安全基线已覆盖管理端和 Open API：HttpOnly session cookie、CSRF、CSP/HSTS 等安全响应头、登录失败节流、Open API 基础限流、Open API 失败事件审计、密码强度、强制改密、禁用用户撤销 session、审计脱敏。
 - 上线交付主路径已收口为 Linux binary 发布包：`just release-package` 生成 `dist/mini-conf-linux-x86_64.tar.gz`，`just release-package-check` 做部署前包体自检，生产运行模型见 [PRODUCTION_BINARY.md](../runbooks/PRODUCTION_BINARY.md)。
-- 当前仍缺：真实 staging 试部署反馈、前端单元/组件测试基线、文档继续压缩、Config Workspace 统一升级。
+- 当前仍缺：真实 staging 试部署反馈、前端单元/组件测试补量、文档继续压缩、Config Workspace 的 release/history 右栏体验与 merge workspace 后续增强。
 
 ## 2. 必读顺序
 
@@ -51,10 +51,10 @@
 
 1. 文档同步和入口压缩：保持 README / KICKOFF / DEVELOPMENT_LOG / constraints 与真实实现一致。
 2. 上线实施交付：运行 `just staging-smoke` 收集真实 staging 试部署反馈、外部 PostgreSQL、`config-center.example.com` 示例入口域名、反向代理/TLS、初始化和生产变量清单。
-3. 资源生命周期收口：projects / config_files 删除能力、引用检查、文案和错误码统一。
-4. 测试补量：前端单元/组件测试基线、更完整页面级 E2E、覆盖率持续补量。
+3. 前端质量补量：优先覆盖 deployment list 展开、workspace overlay、ConfigFileSwitcher、Draft/Saved Versions 等高状态密度组件和关键 E2E。
+4. 资源生命周期收口：projects / config_files 删除能力、引用检查、文案和错误码统一。
 5. 文档压缩第二轮：把阶段性 handoff 继续迁入最终 constraints / runbooks / public。
-6. Config Workspace：Draft / Release / Diff / Merge 的统一编辑和阅读体验。
+6. Config Workspace 后续增强：Release/history 右栏、Merge Workspace 和更完整组件测试。
 
 ## 4. 执行规则
 

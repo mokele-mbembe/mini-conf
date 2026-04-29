@@ -11,6 +11,18 @@
 - 让前端页面层级、交互动作、状态机和接口依赖可直接拆任务实现
 - 约束 UI 方向，避免继续扩散成“多个并列可编辑 Draft”
 
+## 1.1 当前实现状态
+
+截至 2026-04-29，工作台主路径已按“列表主入口 + floating overlay”落地，而不是新增独立详情页承载工作台：
+
+- Deployment list 是主要入口，Templates 和 Deployment Instances 均可行内展开紧凑配置详情
+- 行内展开展示实例元信息、配置文件、Current Draft / Latest Release / Not Configured、Missing Required / Missing Optional、Saved Versions 数量和 Latest Release revision
+- 主行提供唯一 `打开工作台` 入口；展开区只展示状态，不再重复放多个功能相近的 workspace 按钮
+- 旧 deployment detail URL 已降级为兼容入口，重定向到列表并通过 `expandedDeploymentId` 展开对应实例；携带 `draftConfigFileId` 时仍可直接打开 overlay
+- `DraftEditorOverlay` 内部持有 active config，配置切换不再修改父页面 query，也不再带动底层列表或 preview 页面切换
+- `useDraftWorkspaceResources` 已把 deployment + config list 作为实例维度 shell 缓存；切换配置时只刷新当前配置相关资源
+- Draft 编辑区已使用 CodeMirror 6；Release Detail / Diff 已复用统一代码视图，Diff 已有行级和行内高亮
+
 ## 2. 视觉与交互基调
 
 ### 2.1 Visual Thesis
@@ -65,11 +77,13 @@
 
 ## 4. 页面结构
 
-建议新增主页面：
+当前采用现有路由兼容 + floating overlay：
 
-- `/projects/:projectId/deployments/:deploymentId/configs/:configFileId/workspace`
+- Deployment list 是主入口
+- Draft workspace 可通过 overlay 打开，也保留直接路由 `/projects/:projectId/deployments/:deploymentId/configs/:configFileId/draft`
+- 旧 `/projects/:projectId/deployments/:deploymentId` 详情路径只负责重定向到列表展开态
 
-当前 [DraftEditorPage.vue](/home/zjj/Projects/mini-conf/apps/web/src/modules/drafts/pages/DraftEditorPage.vue) 的职责应逐步收敛为工作台中栏编辑区，而不是继续作为最终页面形态。
+当前 [DraftEditorPage.vue](/home/zjj/Projects/mini-conf/apps/web/src/modules/drafts/pages/DraftEditorPage.vue) 的职责已开始收敛为工作台编排层，后续继续拆 release/history 右栏和 merge workspace。
 
 ### 4.1 桌面布局
 
@@ -414,20 +428,23 @@ Release 详情和右栏详情卡至少要有：
 
 ## 10. 入口改造建议
 
-### 10.1 实例详情页
+### 10.1 Deployment List 展开入口
 
 当前入口问题：
 
-- “编辑 Draft”语义太窄
-- 用户无法预判是否有历史可恢复内容
+- 独立详情页信息量不足，进入后仍要再找配置工作入口
+- 同一实例下多个相似 `打开工作台` 按钮会干扰选择
+- overlay 内切配置不应改变底层页面
 
-建议改为：
+当前已改为：
 
-- 主按钮：`打开工作台`
-- 辅助信息列：
+- Deployment list 行空白处点击展开 / 收起详情
+- 主行唯一入口：`打开工作台`
+- 展开区只展示紧凑配置状态：
   - Current Draft：有 / 无
   - Saved Versions：数量
   - Latest Release：revision / 无
+- 旧详情页路由仅保留兼容重定向
 
 ### 10.2 Preview 页
 
@@ -502,15 +519,17 @@ Preview 页每行建议提供：
 
 ### 下一阶段建议
 
-- 继续收敛 `DraftEditorPage` 页面层职责，把剩余 API 状态和副作用逐步抽入 `useDraftWorkspace`、`useCloneDraftSource` 等 composable；`useSavedVersionsPanel` 已先行落地
-- 已完成统一代码工作区底座第一步：Draft 编辑页切到 CodeMirror 6，并拆出 workspace shell、配置导航、Saved Versions 面板和 Saved Versions 副作用 composable
-- Release Detail / Diff 已复用统一代码视图底座；Release Diff 已补行级左右对比、新增 / 删除行高亮和行内变更片段高亮，并以 `ConfigLineDiffViewer` 建立首批 Vitest 组件测试
-- 继续为高状态密度组件补前端单元 / 组件测试，优先覆盖 Draft workspace 状态和 clone source 交互
+- 为 `DeploymentConfigExpansion`、列表行展开、workspace overlay 本地配置切换补组件级测试
+- 继续收敛 `DraftEditorPage` 页面层职责，把剩余 API 状态和副作用逐步抽入更细的 workspace composable
+- 继续完善 Release/history 右栏体验：Saved Versions 与 Releases 在同一工作台内切换、回看、恢复
+- Merge Workspace 仍未启动，后续作为 Config Workspace 的独立增强阶段
+- 继续为高状态密度组件补前端单元 / 组件测试，优先覆盖 Draft workspace 状态、clone source 交互和 release/history 恢复
 
 ## 14. 验收标准
 
-- 用户能从实例详情页明确进入配置工作台
-- 用户能在工作台内切换配置文件，不丢未保存编辑
+- 用户能从 deployment list 主行明确进入配置工作台
+- 用户能从列表行空白区域展开 / 收起紧凑配置详情
+- 用户能在工作台内切换配置文件，不改变底层页面，也不丢未保存编辑
 - 用户能保存 Current Draft，并在历史面板看到 Saved Version
 - 用户能从某条 Saved Version 恢复后继续编辑
 - 用户能从某条 Release 回看发布人并恢复到 Current Draft

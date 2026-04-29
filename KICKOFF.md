@@ -23,13 +23,14 @@
   - Draft、Saved Versions、preview-bundle、publish
   - Release history / detail / diff
   - deployment archive / restore / permanent delete
+  - deployment list inline expansion + workspace overlay entry
   - projects / config_files delete with reference checks
   - project members list / add / role update / remove
   - sync records list and filters
   - heartbeats list and filters
   - audit logs list and filters
 - 前端已接入 lint、format check、typecheck、build 和 Playwright E2E。
-- 当前最大的剩余风险已经从“主链路缺页面”转为“上线运营骨架、文档和 runbook 收口”。
+- 当前最大的剩余风险已经从“主链路缺页面”转为“上线运营骨架、文档一致性、真实 staging 反馈和前端质量补量”。
 
 ## 2. 当前未完成大项
 
@@ -41,19 +42,19 @@
    - 外部 PostgreSQL 16+ 作为必备基础设施
    - `config-center.example.com` 示例入口域名 + 反向代理/TLS runbook 已成文
    - GitHub Actions `Release Package` workflow 已可生成 artifact，`just staging-smoke` 已提供真实环境只读探测，下一步是真实 staging 试部署
-3. 资源生命周期与文案收口：
+3. 前端质量补量：
+   - 对 workspace/list 这种高状态密度区域继续补组件测试
+   - 保持关键 Playwright 场景迁移到 deployment list 主路径
+   - 后续全量 e2e 再做一轮基线确认
+4. 资源生命周期与文案收口：
    - projects / config_files 删除能力与引用检查已落地
    - 状态词、错误码和前端文案主路径已同步，后续只做边角复核
-4. 质量补量：
-   - 前端单元 / 组件测试基线
-   - 更完整的页面级 E2E
+5. Config Workspace 后续增强：
+   - Deployment list + floating overlay + CodeMirror + Saved Versions 主路径已落地
+   - 剩余重点是 release/history 右栏体验、merge workspace 和更多组件测试
+6. 覆盖率与 DB 校验策略：
    - 覆盖率持续补量
    - `sqlx-check` 恢复为强制检查的时机评估
-5. Config Workspace 统一升级：
-   - Draft 编辑统一升级
-   - Release 只读代码视图
-   - Diff 统一升级
-   - Merge Workspace
 
 ## 3. 读文档顺序
 

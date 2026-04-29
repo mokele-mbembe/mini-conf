@@ -123,7 +123,7 @@ MVP 默认采用 `DeploymentInstance` 作为配置组织模型，因为它最贴
 
 当前规划中的技术选型：
 
-- 前端：Vue 3、Vite、TypeScript、Element Plus、Monaco Editor
+- 前端：Vue 3、Vite、TypeScript、Element Plus、CodeMirror 6
 - 后端：Rust、Axum、Tokio、SQLx、PostgreSQL
 - 部署：单服务托管 API 和前端静态资源，外层使用 Caddy 或 Nginx
 
@@ -162,6 +162,8 @@ MVP 默认采用 `DeploymentInstance` 作为配置组织模型，因为它最贴
 - `secret-tool` 只是兼容选项，不是标准前提
 - 本机 CI 入口分层为：`just ci-local` 负责非 DB 基线，`just ci-local-db` 对齐 GitHub `backend-db`，`just test-e2e-local` 以临时 schema 启动隔离前后端，`just ci-local-full` 串联三层
 - 当前后端开发阶段，本机优先恢复 `just test-backend-db-local`；`just run-server-local` 只在确实需要联调时启用
+
+当前管理台已把 deployment 配置工作入口收口到列表页：部署实例列表行可展开紧凑配置详情，主行直接打开 floating workspace；旧 deployment detail URL 仅作为兼容入口重定向回列表展开态。
 
 ## 生产发布包
 
@@ -271,17 +273,19 @@ just db-clean-alpha-runtime-local
 项目目前已经完成后端 MVP 主链路和前端管理台核心业务链路，当前仓库重点转为：
 
 - 保持后端权限、审计、配置标识和部署实例生命周期主链路稳定
-- 补齐部署 runbook、初始化交付和上线运营页面
-- 补齐低风险运营页面与资源生命周期
-- 持续补 alpha 黑盒、覆盖率和前端单元 / 组件测试基线
+- 用真实 staging 反馈校准部署 runbook、初始化交付和生产变量清单
+- 继续补 alpha 黑盒、覆盖率和前端单元 / 组件测试基线
+- 继续推进 Config Workspace 的 release/history 右栏和 merge workspace 后续增强
 - 继续固化产品边界、协作流程与部署约定并压缩过时入口
 
 当前前端基线已经不是“待初始化”状态，而是：
 
 - `apps/web` 已存在并可运行
 - 已有登录、setup、首次改密、平台用户管理、平台项目创建
-- 已有项目列表、配置文件、环境、部署实例、Draft、Saved Versions、preview、publish、Release detail/diff
+- 已有项目列表、配置文件、环境、部署实例列表展开、floating workspace、Draft、Saved Versions、preview、publish、Release detail/diff
 - 已有 deployment archive / restore / permanent delete 主路径
+- 已有 projects / config_files 删除能力与引用检查
+- 已有项目成员、sync records、heartbeats、audit logs 页面
 - 已接入前端 `lint / format:check / typecheck / build`
 - 已接入覆盖核心管理链路的 Playwright E2E
 - 前端协作入口已收口到 [FRONTEND_TASK_WORKFLOW.md](./docs/collaboration/FRONTEND_TASK_WORKFLOW.md)
@@ -292,10 +296,9 @@ just db-clean-alpha-runtime-local
 
 1. 文档同步和入口压缩，保持 README / KICKOFF / DEVELOPMENT_LOG / constraints 与真实实现一致
 2. 上线实施方案：Linux binary 发布包、外部 PostgreSQL、`config-center.example.com` 示例入口域名、反向代理/TLS、初始化和生产变量清单
-3. 资源生命周期收口：projects / config_files 删除能力与引用检查
-4. 低风险运营页面：项目成员、sync records、heartbeats、audit logs
-5. 前端单元 / 组件测试基线和更完整页面级 E2E
-6. Config Workspace 统一升级
+3. 前端单元 / 组件测试补量和更完整页面级 E2E，优先覆盖 deployment list / workspace overlay / Draft 历史面板
+4. Config Workspace 后续增强：Release/history 右栏、Merge Workspace
+5. 覆盖率持续补量和 `sqlx-check` 恢复时机评估
 
 ## License
 

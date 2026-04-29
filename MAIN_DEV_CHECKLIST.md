@@ -49,7 +49,7 @@ just dev-web
 
 ```bash
 pnpm --dir apps/web build
-pnpm --dir apps/web run test:e2e
+just test-e2e-local
 ```
 
 ## 推荐节奏

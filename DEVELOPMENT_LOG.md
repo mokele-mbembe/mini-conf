@@ -12,6 +12,26 @@
 
 ## 1.1 最近完成
 
+2026-04-29 本轮完成 Deployment 配置入口与 Workspace 交互收束：
+
+- Deployment 列表页成为配置工作主入口，Templates 和 Deployment Instances 都支持行内展开紧凑详情，不再要求进入单独详情页查看配置状态
+- 新增 `DeploymentConfigExpansion`，统一展示实例元信息、配置文件、Current Draft / Latest Release / Not Configured、Missing Required / Missing Optional、Saved Versions 数量和 Latest Release revision
+- 列表主行直接提供唯一 `打开工作台` 入口，展开区只承担状态说明，避免同一实例下出现多个功能相近的 workspace 按钮
+- 表格行空白区域点击可展开 / 收起详情；按钮、输入控件、选择器等交互元素不会误触发行展开
+- `DraftEditorOverlay` 改为内部持有 active config，workspace 内切换配置不再同步修改父页面 query，也不再带动底层页面切换
+- `useDraftWorkspaceResources` 拆出 workspace shell 缓存：deployment + config list 只在实例维度加载，配置切换时只刷新当前 config / draft / saved versions 等必要资源
+- 旧 `DeploymentInstanceDetailPage.vue` 已降级为兼容重定向 shim；旧详情 URL 会跳回 deployment list，并通过 `expandedDeploymentId` 展开对应实例；携带 `draftConfigFileId` 时仍可直接打开 overlay
+- Draft/Preview 返回 deployment 的路径已回到列表展开态，不再把旧详情页作为主要导航面
+- 状态标签文案已从含糊的 `Draft / 无内容` 收口为 `Current Draft / Latest Release / Not Configured / Missing Required / Missing Optional`
+- E2E 已迁移相关场景：部署生命周期行内操作、列表展开打开 workspace、overlay 保存后刷新列表提示、preview restore 和部署列表分区
+- 本轮验证通过：
+  - `pnpm --dir apps/web exec eslint . --ext .vue,.ts,.tsx`
+  - `pnpm --dir apps/web typecheck`
+  - `pnpm --dir apps/web format:check`
+  - `just test-frontend`
+  - `pnpm --dir apps/web build`
+  - targeted Playwright：`deployment lifecycle path|draft overlay|deployment list: expanded instance|deployment preview: view releases|deployment list page`
+
 2026-04-27 本轮继续收口 Config Workspace 页面层职责：
 
 - 新增 `useSavedVersionsPanel` composable，把 Saved Versions 列表加载、详情选择、备注保存、恢复和删除副作用从 `DraftEditorPage.vue` 抽出
