@@ -19,8 +19,6 @@ const ProjectEnvironmentListPage = () =>
   import("@/modules/project-environments/pages/ProjectEnvironmentListPage.vue");
 const DeploymentInstanceListPage = () =>
   import("@/modules/deployments/pages/DeploymentInstanceListPage.vue");
-const DeploymentInstanceDetailPage = () =>
-  import("@/modules/deployments/pages/DeploymentInstanceDetailPage.vue");
 const DeploymentPreviewPage = () =>
   import("@/modules/deployments/pages/DeploymentPreviewPage.vue");
 const DraftEditorPage = () =>
@@ -124,7 +122,16 @@ export const routes: RouteRecordRaw[] = [
       {
         path: ROUTE_PATHS.DEPLOYMENT_DETAIL,
         name: ROUTE_NAMES.DEPLOYMENT_DETAIL,
-        component: DeploymentInstanceDetailPage,
+        redirect: (to) => ({
+          name: ROUTE_NAMES.DEPLOYMENT_LIST,
+          params: {
+            projectId: to.params.projectId,
+          },
+          query: {
+            ...to.query,
+            expandedDeploymentId: String(to.params.deploymentId),
+          },
+        }),
       },
       {
         path: ROUTE_PATHS.DEPLOYMENT_PREVIEW,

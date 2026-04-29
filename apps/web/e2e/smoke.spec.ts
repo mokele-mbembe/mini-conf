@@ -387,14 +387,10 @@ test("deployment lifecycle path: environment → inactive deployment → activat
   await activateTokenDialog.getByRole("button", { name: "关闭" }).click();
 
   await expect(deploymentRow).toContainText("启用中");
-  await deploymentRow.getByRole("button", { name: "查看" }).click();
-
-  await expect(page).toHaveURL(
-    new RegExp(`/projects/${projectId}/deployments/\\d+`),
-  );
-  await expect(page.getByRole("button", { name: "重置 Token" })).toBeVisible();
-
-  await page.getByRole("button", { name: "重置 Token" }).click();
+  await expect(
+    deploymentRow.getByRole("button", { name: "重置 Token" }),
+  ).toBeVisible();
+  await deploymentRow.getByRole("button", { name: "重置 Token" }).click();
   const resetConfirmDialog = page.getByRole("dialog", {
     name: "重置访问凭证",
   });
@@ -408,17 +404,17 @@ test("deployment lifecycle path: environment → inactive deployment → activat
   await expect(resetTokenDialog.locator("textarea")).not.toHaveValue("");
   await resetTokenDialog.getByRole("button", { name: "关闭" }).click();
 
-  await page.getByRole("button", { name: "停用" }).click();
+  await deploymentRow.getByRole("button", { name: "停用" }).click();
   const deactivateConfirmDialog = page.getByRole("dialog", {
     name: "停用部署实例",
   });
   await expect(deactivateConfirmDialog).toContainText("确认停用部署实例");
   await deactivateConfirmDialog.getByRole("button", { name: "OK" }).click();
 
-  await expect(page.getByRole("button", { name: "激活" })).toBeVisible();
-  await expect(page.locator(".deployment-instance-detail-page")).toContainText(
-    "未启用",
-  );
+  await expect(
+    deploymentRow.getByRole("button", { name: "激活" }),
+  ).toBeVisible();
+  await expect(deploymentRow).toContainText("未启用");
 });
 
 test("admin user dialogs retain form values after failed submit", async ({
@@ -996,16 +992,23 @@ test("draft overlay: unsaved close confirmation stays above editor", async ({
 }) => {
   const suffix = Date.now().toString();
   await login(page);
-  const { projectId, deploymentId, configFileId } =
-    await setupDraftEditorContext(page, suffix);
+  const { projectId } = await setupDraftEditorContext(page, suffix);
 
-  await page.goto(`/projects/${projectId}/deployments/${deploymentId}`);
-  await page.getByRole("button", { name: "打开工作台" }).click();
+  await page.goto(`/projects/${projectId}/deployments`);
+  const listUrl = page.url();
+  const instanceSection = page
+    .locator(".deployment-instance-list-page__section")
+    .nth(1);
+  const instanceRow = instanceSection.locator(".el-table__row", {
+    hasText: `e2e-di-${suffix}`,
+  });
+  await expect(instanceRow).toBeVisible({ timeout: 10_000 });
+  await instanceRow.getByRole("button", { name: "打开工作台" }).click();
 
   await expect(page.locator(".draft-editor-overlay")).toBeVisible({
     timeout: 10_000,
   });
-  await expect(page).toHaveURL(new RegExp(`draftConfigFileId=${configFileId}`));
+  await expect(page).toHaveURL(listUrl);
 
   await fillDraftEditor(page, "key: overlay-confirm");
   await page.getByRole("button", { name: "关闭" }).click();
@@ -1020,33 +1023,41 @@ test("draft overlay: unsaved close confirmation stays above editor", async ({
 
   await confirmDialog.getByRole("button", { name: "取消" }).click();
   await expect(page.locator(".draft-editor-overlay")).toBeVisible();
-  await expect(page).toHaveURL(new RegExp(`draftConfigFileId=${configFileId}`));
+  await expect(page).toHaveURL(listUrl);
 });
 
-test("draft overlay: deployment detail refreshes workspace hints after saved draft closes", async ({
+test("draft overlay: deployment list refreshes workspace hints after saved draft closes", async ({
   page,
 }) => {
   const suffix = Date.now().toString();
   const content = `key: detail-refresh-${suffix}`;
   await login(page);
-  const { projectId, deploymentId, configFileId } =
-    await setupDraftEditorContext(page, suffix);
+  const { projectId } = await setupDraftEditorContext(page, suffix);
 
-  await page.goto(`/projects/${projectId}/deployments/${deploymentId}`);
+  await page.goto(`/projects/${projectId}/deployments`);
+  const listUrl = page.url();
+  const instanceSection = page
+    .locator(".deployment-instance-list-page__section")
+    .nth(1);
+  const instanceRow = instanceSection.locator(".el-table__row", {
+    hasText: `e2e-di-${suffix}`,
+  });
+  await expect(instanceRow).toBeVisible({ timeout: 10_000 });
+  await instanceRow.locator("td").nth(2).click();
 
-  const detailRow = page
-    .locator(".el-table__body tr", { hasText: `e2e-cfg-${suffix}` })
-    .first();
-  await expect(detailRow).toContainText("Not Configured", { timeout: 10_000 });
-  await expect(detailRow).toContainText("Missing Optional");
-  await expect(detailRow).toContainText("Saved Versions 0");
-  await expect(detailRow).toContainText("无 Release");
+  const expanded = instanceSection.locator(".deployment-config-expansion", {
+    hasText: `e2e-cfg-${suffix}`,
+  });
+  await expect(expanded).toContainText("Not Configured", { timeout: 10_000 });
+  await expect(expanded).toContainText("Missing Optional");
+  await expect(expanded).toContainText("Saved Versions 0");
+  await expect(expanded).toContainText("无 Release");
 
-  await page.getByRole("button", { name: "打开工作台" }).click();
+  await instanceRow.getByRole("button", { name: "打开工作台" }).click();
   await expect(page.locator(".draft-editor-overlay")).toBeVisible({
     timeout: 10_000,
   });
-  await expect(page).toHaveURL(new RegExp(`draftConfigFileId=${configFileId}`));
+  await expect(page).toHaveURL(listUrl);
 
   await fillDraftEditor(page, content);
   await page.getByRole("button", { name: "保存", exact: true }).click();
@@ -1058,10 +1069,10 @@ test("draft overlay: deployment detail refreshes workspace hints after saved dra
   await expect(page.locator(".draft-editor-overlay")).toHaveCount(0, {
     timeout: 10_000,
   });
-  await expect(page).not.toHaveURL(/draftConfigFileId=/);
-  await expect(detailRow).toContainText("Current Draft", { timeout: 10_000 });
-  await expect(detailRow).toContainText("可预览");
-  await expect(detailRow).toContainText("Saved Versions 1");
+  await expect(page).toHaveURL(listUrl);
+  await expect(expanded).toContainText("Current Draft", { timeout: 10_000 });
+  await expect(expanded).toContainText("可预览");
+  await expect(expanded).toContainText("Saved Versions 1");
 });
 
 test("draft overlay: preview page refreshes after saved draft closes", async ({
@@ -1109,10 +1120,7 @@ test("deployment list: expanded instance opens workspace without changing the li
 }) => {
   const suffix = Date.now().toString();
   await login(page);
-  const { projectId, deploymentId } = await setupDraftEditorContext(
-    page,
-    suffix,
-  );
+  const { projectId } = await setupDraftEditorContext(page, suffix);
 
   const extraConfigResponse = await postWithCsrf(page, "/api/config-files", {
     data: {
@@ -1134,18 +1142,17 @@ test("deployment list: expanded instance opens workspace without changing the li
     hasText: `e2e-di-${suffix}`,
   });
   await expect(instanceRow).toBeVisible({ timeout: 10_000 });
-  await instanceRow.locator(".el-table__expand-icon").click();
+  await instanceRow.locator("td").nth(2).click();
 
-  const expanded = instanceSection.locator(
-    ".deployment-instance-list-page__expanded",
-    { hasText: `e2e-cfg-${suffix}` },
-  );
+  const expanded = instanceSection.locator(".deployment-config-expansion", {
+    hasText: `e2e-cfg-${suffix}`,
+  });
   await expect(expanded).toBeVisible({ timeout: 10_000 });
   await expect(expanded).toContainText(`e2e-cfg-extra-${suffix}`);
   await expect(expanded).toContainText("Not Configured");
   await expect(expanded).toContainText("Missing Optional");
 
-  await expanded.getByRole("button", { name: "打开工作台" }).first().click();
+  await instanceRow.getByRole("button", { name: "打开工作台" }).click();
   const overlay = page.locator(".draft-editor-overlay");
   await expect(overlay).toBeVisible({ timeout: 10_000 });
   await expect(page).toHaveURL(listUrl);
@@ -1157,8 +1164,6 @@ test("deployment list: expanded instance opens workspace without changing the li
   await expect(overlay).toHaveCount(0, { timeout: 10_000 });
   await expect(page).toHaveURL(listUrl);
   await expect(expanded).toBeVisible();
-
-  expect(deploymentId).toBeGreaterThan(0);
 });
 
 test("deployment preview: view releases and restore latest release to current draft", async ({

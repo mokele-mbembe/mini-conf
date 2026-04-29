@@ -492,10 +492,12 @@ async function handleDiscardDraft(row: DeploymentPreviewItem) {
 
 function backToDeployment() {
   router.push({
-    name: ROUTE_NAMES.DEPLOYMENT_DETAIL,
+    name: ROUTE_NAMES.DEPLOYMENT_LIST,
     params: {
       projectId: route.params.projectId,
-      deploymentId: route.params.deploymentId,
+    },
+    query: {
+      expandedDeploymentId: String(deploymentId.value),
     },
   });
 }
