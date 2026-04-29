@@ -10,6 +10,7 @@ function mountOverlay(
   return mount(DraftEditorOverlay, {
     props: {
       visible: true,
+      deploymentId: 7,
       configFileId: 3,
       ...props,
     },
@@ -20,6 +21,7 @@ function mountOverlay(
           name: "DraftEditorPage",
           props: {
             embedded: Boolean,
+            deploymentIdOverride: Number,
             configFileIdOverride: Number,
           },
           emits: ["close", "switch-config"],
@@ -50,6 +52,7 @@ describe("DraftEditorOverlay", () => {
 
     expect(editor.exists()).toBe(true);
     expect(editor.props("embedded")).toBe(true);
+    expect(editor.props("deploymentIdOverride")).toBe(7);
     expect(editor.props("configFileIdOverride")).toBe(3);
     expect(wrapper.find(".draft-editor-overlay").attributes("role")).toBe(
       "dialog",
@@ -70,14 +73,16 @@ describe("DraftEditorOverlay", () => {
     ).toBe(false);
   });
 
-  it("forwards close and config switch events", async () => {
+  it("forwards close and keeps config switches local", async () => {
     const wrapper = mountOverlay();
 
     await wrapper.find('[data-test="close"]').trigger("click");
     await wrapper.find('[data-test="switch"]').trigger("click");
+    const editor = wrapper.findComponent({ name: "DraftEditorPage" });
 
     expect(wrapper.emitted("request-close")).toHaveLength(1);
-    expect(wrapper.emitted("switch-config")).toEqual([[4]]);
+    expect(editor.props("configFileIdOverride")).toBe(4);
+    expect(wrapper.emitted("switch-config")).toBeUndefined();
   });
 
   it("routes backdrop and Escape close through the embedded editor guard", async () => {

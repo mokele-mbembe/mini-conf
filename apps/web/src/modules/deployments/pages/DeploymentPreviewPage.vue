@@ -161,29 +161,49 @@
 
               <el-table-column
                 :label="t('deployments.column.actions')"
-                width="200"
+                width="340"
                 align="center"
                 fixed="right"
               >
                 <template #default="{ row }">
-                  <el-button
-                    text
-                    type="primary"
-                    size="small"
-                    @click="openDraft(row.config_file_id)"
-                  >
-                    {{ t("deployments.action.editDraft") }}
-                  </el-button>
-                  <el-button
-                    v-if="row.source === 'draft'"
-                    text
-                    type="danger"
-                    size="small"
-                    :loading="discardingConfigId === row.config_file_id"
-                    @click="handleDiscardDraft(row)"
-                  >
-                    {{ t("drafts.action.discard") }}
-                  </el-button>
+                  <div class="deployment-preview-page__row-actions">
+                    <el-button
+                      text
+                      type="primary"
+                      size="small"
+                      @click="openDraft(row.config_file_id)"
+                    >
+                      {{ t("deployments.action.editCurrentDraft") }}
+                    </el-button>
+                    <el-button
+                      text
+                      type="primary"
+                      size="small"
+                      @click="openReleases(row.config_file_id)"
+                    >
+                      {{ t("preview.action.viewReleases") }}
+                    </el-button>
+                    <el-button
+                      v-if="latestReleaseMap[row.config_file_id]"
+                      text
+                      type="warning"
+                      size="small"
+                      :loading="restoringReleaseConfigId === row.config_file_id"
+                      @click="handleRestoreLatestRelease(row)"
+                    >
+                      {{ t("preview.action.restoreLatestRelease") }}
+                    </el-button>
+                    <el-button
+                      v-if="row.source === 'draft'"
+                      text
+                      type="danger"
+                      size="small"
+                      :loading="discardingConfigId === row.config_file_id"
+                      @click="handleDiscardDraft(row)"
+                    >
+                      {{ t("drafts.action.discard") }}
+                    </el-button>
+                  </div>
                 </template>
               </el-table-column>
             </el-table>
@@ -213,7 +233,6 @@
       :visible="draftOverlayVisible"
       :config-file-id="draftOverlayConfigFileId"
       @request-close="closeDraftOverlay"
-      @switch-config="switchDraftOverlayConfig"
     />
   </div>
 </template>
@@ -232,6 +251,7 @@ import NotFoundState from "@/shared/states/NotFoundState.vue";
 import { ROUTE_NAMES } from "@/shared/constants/routes";
 import * as deploymentInstancesApi from "@/api/deployment-instances";
 import * as draftsApi from "@/api/drafts";
+import * as releasesApi from "@/api/releases";
 import { ApiRequestError } from "@/api/error";
 import { getErrorMessage } from "@/shared/constants/error-messages";
 import type {
@@ -239,6 +259,7 @@ import type {
   DeploymentInstanceSummary,
   DeploymentPreviewItem,
 } from "@/api/types/deployment-instance";
+import type { ReleaseSummary } from "@/api/types/release";
 import { useI18nText } from "@/shared/i18n";
 
 const route = useRoute();
@@ -267,6 +288,8 @@ const preview = ref<DeploymentBundlePreviewResponse | null>(null);
 const resourceLoading = ref(false);
 const resourceError = ref<ApiRequestError | null>(null);
 const discardingConfigId = ref<number | null>(null);
+const restoringReleaseConfigId = ref<number | null>(null);
+const latestReleaseMap = ref<Record<number, ReleaseSummary>>({});
 const draftOverlayConfigFileId = computed(() => {
   const raw = route.query.draftConfigFileId;
   const value = Array.isArray(raw) ? raw[0] : raw;
@@ -305,6 +328,7 @@ async function loadPreviewResources() {
   resourceError.value = null;
   deployment.value = null;
   preview.value = null;
+  latestReleaseMap.value = {};
 
   try {
     const deploymentResult =
@@ -324,6 +348,7 @@ async function loadPreviewResources() {
     }
 
     preview.value = await deploymentInstancesApi.previewDeploymentBundle(did);
+    await loadLatestReleaseHints();
   } catch (err) {
     if (err instanceof ApiRequestError) {
       resourceError.value = err;
@@ -335,6 +360,26 @@ async function loadPreviewResources() {
     }
   } finally {
     resourceLoading.value = false;
+  }
+}
+
+async function loadLatestReleaseHints() {
+  latestReleaseMap.value = {};
+  const did = deploymentId.value;
+  if (Number.isNaN(did) || !canPreview.value) return;
+
+  try {
+    const releaseResult = await releasesApi.listReleases({
+      project_id: projectId.value,
+      deployment_instance_id: did,
+    });
+    const map: Record<number, ReleaseSummary> = {};
+    for (const release of releaseResult.items) {
+      map[release.config_file_id] ??= release;
+    }
+    latestReleaseMap.value = map;
+  } catch {
+    // Non-critical row actions; keep preview usable even if release hints fail.
   }
 }
 
@@ -377,6 +422,40 @@ async function copyBundleJson() {
     ElMessage.success(t("toast.preview.bundleCopied"));
   } catch {
     ElMessage.error(t("toast.operationFailed"));
+  }
+}
+
+async function handleRestoreLatestRelease(row: DeploymentPreviewItem) {
+  try {
+    await ElMessageBox.confirm(
+      t("preview.restoreLatestRelease.prompt"),
+      t("preview.restoreLatestRelease.title"),
+      {
+        confirmButtonText: t("preview.restoreLatestRelease.confirm"),
+        cancelButtonText: t("common.cancel"),
+        type: "warning",
+      },
+    );
+  } catch {
+    return;
+  }
+
+  restoringReleaseConfigId.value = row.config_file_id;
+  try {
+    await draftsApi.cloneDraft(deploymentId.value, row.config_file_id, {
+      source_deployment_instance_id: deploymentId.value,
+      source_kind: "latest_release",
+    });
+    ElMessage.success(t("toast.preview.restoredLatestRelease"));
+    await loadPreviewResources();
+  } catch (err) {
+    if (err instanceof ApiRequestError) {
+      ElMessage.error(getErrorMessage(err.code, err.message));
+    } else {
+      ElMessage.error(t("toast.operationFailed"));
+    }
+  } finally {
+    restoringReleaseConfigId.value = null;
   }
 }
 
@@ -435,10 +514,23 @@ function openDraft(configFileId: number) {
   });
 }
 
-function closeDraftOverlay() {
+function openReleases(configFileId: number) {
+  router.push({
+    name: ROUTE_NAMES.RELEASE_LIST,
+    params: {
+      projectId: route.params.projectId,
+    },
+    query: {
+      deployment_instance_id: String(deploymentId.value),
+      config_file_id: String(configFileId),
+    },
+  });
+}
+
+async function closeDraftOverlay() {
   const query = { ...route.query };
   delete query.draftConfigFileId;
-  router.push({
+  await router.push({
     name: ROUTE_NAMES.DEPLOYMENT_PREVIEW,
     params: {
       projectId: route.params.projectId,
@@ -446,20 +538,7 @@ function closeDraftOverlay() {
     },
     query,
   });
-}
-
-function switchDraftOverlayConfig(configFileId: number) {
-  router.push({
-    name: ROUTE_NAMES.DEPLOYMENT_PREVIEW,
-    params: {
-      projectId: route.params.projectId,
-      deploymentId: route.params.deploymentId,
-    },
-    query: {
-      ...route.query,
-      draftConfigFileId: String(configFileId),
-    },
-  });
+  await loadPreviewResources();
 }
 
 onMounted(loadAll);
@@ -480,12 +559,18 @@ watch(
 }
 
 .deployment-preview-page__header-actions,
-.deployment-preview-page__bundle-header {
+.deployment-preview-page__bundle-header,
+.deployment-preview-page__row-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: var(--spacing-sm);
+}
+
+.deployment-preview-page__row-actions {
+  justify-content: center;
+  gap: var(--spacing-xs);
 }
 
 .deployment-preview-page__notice,

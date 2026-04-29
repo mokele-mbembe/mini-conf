@@ -159,6 +159,15 @@
             <el-button @click="copyContent">
               {{ t("releases.detail.copyContent") }}
             </el-button>
+            <el-button
+              v-if="canShowRestoreToDraft"
+              type="warning"
+              :loading="restoringToDraft"
+              :disabled="restoreToDraftDisabled"
+              @click="restoreToCurrentDraft"
+            >
+              {{ t("releases.detail.restoreToDraft") }}
+            </el-button>
           </div>
         </template>
       </div>
@@ -169,7 +178,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { useProjectContext } from "@/modules/projects/composables/useProjectContext";
 import ProjectTabs from "@/modules/projects/components/ProjectTabs.vue";
 import ConfigCodeEditor from "@/modules/config-workspace/components/ConfigCodeEditor.vue";
@@ -181,6 +190,7 @@ import NotFoundState from "@/shared/states/NotFoundState.vue";
 import * as releasesApi from "@/api/releases";
 import * as deploymentInstancesApi from "@/api/deployment-instances";
 import * as configFilesApi from "@/api/config-files";
+import * as draftsApi from "@/api/drafts";
 import { ApiRequestError } from "@/api/error";
 import { getErrorMessage } from "@/shared/constants/error-messages";
 import { ROUTE_NAMES } from "@/shared/constants/routes";
@@ -208,7 +218,24 @@ const deployment = ref<DeploymentInstanceSummary | null>(null);
 const configFile = ref<ConfigFileSummary | null>(null);
 const detailLoading = ref(false);
 const detailError = ref<ApiRequestError | null>(null);
+const restoringToDraft = ref(false);
 let detailLoadSeq = 0;
+
+const canManageDraft = computed(() => {
+  const role = project.value?.current_user_role;
+  return role === "admin" || role === "editor";
+});
+
+const canShowRestoreToDraft = computed(
+  () =>
+    canManageDraft.value &&
+    deployment.value !== null &&
+    !deployment.value.is_archived,
+);
+
+const restoreToDraftDisabled = computed(
+  () => detail.value?.content_redacted ?? true,
+);
 
 const deploymentLabel = computed(() => {
   if (!detail.value) return "";
@@ -307,6 +334,77 @@ async function copyContent() {
     ElMessage.success(t("releases.detail.contentCopied"));
   } catch {
     ElMessage.error(t("toast.operationFailed"));
+  }
+}
+
+async function restoreToCurrentDraft() {
+  if (
+    !detail.value ||
+    !canShowRestoreToDraft.value ||
+    restoreToDraftDisabled.value
+  ) {
+    return;
+  }
+
+  const release = detail.value.release;
+  try {
+    await ElMessageBox.confirm(
+      t("releases.detail.restorePrompt", { revision: release.revision }),
+      t("releases.detail.restoreTitle"),
+      {
+        confirmButtonText: t("releases.detail.restoreConfirm"),
+        cancelButtonText: t("common.cancel"),
+        type: "warning",
+      },
+    );
+  } catch {
+    return;
+  }
+
+  restoringToDraft.value = true;
+  try {
+    const baseVersion = await loadCurrentDraftBaseVersion(
+      release.deployment_instance_id,
+      release.config_file_id,
+    );
+    await draftsApi.updateDraft(
+      release.deployment_instance_id,
+      release.config_file_id,
+      {
+        content: detail.value.content,
+        format: release.format,
+        base_version: baseVersion,
+      },
+    );
+    ElMessage.success(
+      t("toast.releases.restoredToDraft", { revision: release.revision }),
+    );
+  } catch (err) {
+    if (err instanceof ApiRequestError) {
+      ElMessage.error(getErrorMessage(err.code, err.message));
+    } else {
+      ElMessage.error(t("toast.operationFailed"));
+    }
+  } finally {
+    restoringToDraft.value = false;
+  }
+}
+
+async function loadCurrentDraftBaseVersion(
+  deploymentId: number,
+  configFileId: number,
+): Promise<number> {
+  try {
+    const draft = await draftsApi.getDraft(deploymentId, configFileId);
+    return draft.version;
+  } catch (err) {
+    if (
+      err instanceof ApiRequestError &&
+      (err.status === 404 || err.code === "draft_not_found")
+    ) {
+      return 0;
+    }
+    throw err;
   }
 }
 

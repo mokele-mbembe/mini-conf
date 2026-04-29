@@ -38,6 +38,9 @@ export function useDraftWorkspaceResources(
   const resourceError = ref<ApiRequestError | null>(null);
   const draftWasMissing = ref(false);
   const previewStatusMap = ref<Record<number, string>>({});
+  const shellProjectId = ref<number | null>(null);
+  const shellDeploymentId = ref<number | null>(null);
+  const previewStatusDeploymentId = ref<number | null>(null);
 
   const resourceNotFound = computed(() => resourceError.value?.status === 404);
   const resourceForbidden = computed(() => resourceError.value?.status === 403);
@@ -55,13 +58,13 @@ export function useDraftWorkspaceResources(
   });
 
   async function loadDraftResources(context: LoadDraftResourcesOptions) {
+    const pid = options.projectId.value;
     const did = options.deploymentId.value;
     const cid = options.configFileId.value;
-    if (Number.isNaN(did) || Number.isNaN(cid)) return;
+    if (Number.isNaN(pid) || Number.isNaN(did) || Number.isNaN(cid)) return;
 
     resourceLoading.value = true;
     resourceError.value = null;
-    deployment.value = null;
     configFile.value = null;
     draft.value = null;
     content.value = "";
@@ -70,22 +73,24 @@ export function useDraftWorkspaceResources(
     context.resetSavedVersions();
 
     try {
-      const [deploymentResult, configResult, configListResult] =
-        await Promise.all([
-          deploymentInstancesApi.getDeploymentInstance(did),
-          configFilesApi.getConfigFile(cid),
-          configFilesApi.listConfigFiles({
-            project_id: options.projectId.value,
-            status: "active",
-          }),
-        ]);
-      deployment.value = deploymentResult;
+      await loadWorkspaceShell(pid, did);
+
+      if (deployment.value === null) {
+        resourceError.value = new ApiRequestError(404, {
+          code: "resource_not_found",
+          message: "resource not found",
+        });
+        return;
+      }
+
+      const configResult =
+        configFiles.value.find((item) => item.id === cid) ??
+        (await configFilesApi.getConfigFile(cid));
       configFile.value = configResult;
-      configFiles.value = configListResult.items;
 
       if (
-        deploymentResult.project_id !== options.projectId.value ||
-        configResult.project_id !== options.projectId.value
+        deployment.value.project_id !== pid ||
+        configResult.project_id !== pid
       ) {
         resourceError.value = new ApiRequestError(404, {
           code: "resource_not_found",
@@ -98,7 +103,7 @@ export function useDraftWorkspaceResources(
         return;
       }
 
-      void loadPreviewStatus(did);
+      void loadPreviewStatusIfNeeded(did);
       if (options.canViewSavedVersions.value) {
         await context.loadSavedVersions({ keepSelection: false });
       }
@@ -129,6 +134,43 @@ export function useDraftWorkspaceResources(
     }
   }
 
+  async function loadWorkspaceShell(projectId: number, deploymentId: number) {
+    if (
+      shellProjectId.value === projectId &&
+      shellDeploymentId.value === deploymentId &&
+      deployment.value !== null &&
+      configFiles.value.length > 0
+    ) {
+      return;
+    }
+
+    deployment.value = null;
+    configFiles.value = [];
+    previewStatusMap.value = {};
+    previewStatusDeploymentId.value = null;
+
+    const [deploymentResult, configListResult] = await Promise.all([
+      deploymentInstancesApi.getDeploymentInstance(deploymentId),
+      configFilesApi.listConfigFiles({
+        project_id: projectId,
+        status: "active",
+      }),
+    ]);
+
+    deployment.value = deploymentResult;
+    configFiles.value = configListResult.items;
+    shellProjectId.value = projectId;
+    shellDeploymentId.value = deploymentId;
+  }
+
+  async function loadPreviewStatusIfNeeded(deploymentId: number) {
+    if (previewStatusDeploymentId.value === deploymentId) {
+      return;
+    }
+
+    await loadPreviewStatus(deploymentId);
+  }
+
   async function loadPreviewStatus(deploymentId: number) {
     try {
       const preview =
@@ -145,6 +187,7 @@ export function useDraftWorkspaceResources(
         }
       }
       previewStatusMap.value = map;
+      previewStatusDeploymentId.value = deploymentId;
     } catch {
       // Non-critical; silently ignore.
     }

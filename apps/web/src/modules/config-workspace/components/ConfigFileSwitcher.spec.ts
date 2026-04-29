@@ -83,8 +83,8 @@ describe("ConfigFileSwitcher", () => {
     expect(wrapper.text()).toContain("配置文件");
     expect(wrapper.text()).toContain("main");
     expect(wrapper.text()).toContain("vision");
-    expect(wrapper.text()).toContain("Draft");
-    expect(wrapper.text()).toContain("必选缺失");
+    expect(wrapper.text()).toContain("Current Draft");
+    expect(wrapper.text()).toContain("Missing Required");
     expect(
       wrapper.findAll(".tag-stub").map((tag) => tag.attributes("data-type")),
     ).toEqual(["warning", "danger"]);

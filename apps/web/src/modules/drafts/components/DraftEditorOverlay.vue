@@ -16,9 +16,10 @@
         <DraftEditorPage
           ref="editorRef"
           embedded
-          :config-file-id-override="configFileId"
+          :deployment-id-override="deploymentId"
+          :config-file-id-override="activeConfigFileId"
           @close="emit('request-close')"
-          @switch-config="emit('switch-config', $event)"
+          @switch-config="switchActiveConfigFile"
         />
       </section>
     </div>
@@ -31,15 +32,18 @@ import DraftEditorPage from "@/modules/drafts/pages/DraftEditorPage.vue";
 
 const props = defineProps<{
   visible: boolean;
+  deploymentId?: number | null;
   configFileId: number | null;
 }>();
 
 const emit = defineEmits<{
   "request-close": [];
-  "switch-config": [configFileId: number];
 }>();
 
-const isActive = computed(() => props.visible && props.configFileId !== null);
+const activeConfigFileId = ref<number | null>(null);
+const isActive = computed(
+  () => props.visible && activeConfigFileId.value !== null,
+);
 const surfaceRef = ref<HTMLElement | null>(null);
 const editorRef = ref<{ requestClose: () => Promise<void> | void } | null>(
   null,
@@ -72,6 +76,18 @@ async function requestEditorClose() {
 
   emit("request-close");
 }
+
+function switchActiveConfigFile(configFileId: number) {
+  activeConfigFileId.value = configFileId;
+}
+
+watch(
+  () => [props.visible, props.configFileId] as const,
+  ([visible, configFileId]) => {
+    activeConfigFileId.value = visible ? configFileId : null;
+  },
+  { immediate: true },
+);
 
 watch(
   isActive,

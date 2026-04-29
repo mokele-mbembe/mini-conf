@@ -359,9 +359,146 @@
             <el-table
               v-loading="instanceList.loading.value"
               :data="instanceList.items.value"
+              row-key="id"
               stripe
               style="width: 100%"
+              @expand-change="handleInstanceExpandChange"
             >
+              <el-table-column type="expand" width="44">
+                <template #default="{ row }">
+                  <div class="deployment-instance-list-page__expanded">
+                    <div class="deployment-instance-list-page__expanded-meta">
+                      <span
+                        class="deployment-instance-list-page__expanded-label"
+                      >
+                        {{ t("deployments.expanded.meta") }}
+                      </span>
+                      <span class="deployment-instance-list-page__code">
+                        {{ row.deployment_key }}
+                      </span>
+                      <span>{{ row.name }}</span>
+                      <el-tag size="small" type="info">
+                        {{ row.environment_name }} ({{ row.environment_code }})
+                      </el-tag>
+                      <StatusBadge :status="row.status" />
+                      <span
+                        class="deployment-instance-list-page__expanded-pair"
+                      >
+                        {{ t("deployments.expanded.token") }}
+                        <el-tag
+                          size="small"
+                          :type="row.status === 'active' ? 'success' : 'info'"
+                        >
+                          {{ tokenStatusLabel(row) }}
+                        </el-tag>
+                      </span>
+                      <span
+                        class="deployment-instance-list-page__expanded-pair"
+                      >
+                        {{ t("deployments.expanded.updatedAt") }}
+                        <span>{{ deploymentUpdatedAt(row) }}</span>
+                      </span>
+                    </div>
+
+                    <LoadingState
+                      v-if="expandedDetail(row.id)?.loading"
+                      class="deployment-instance-list-page__expanded-state"
+                    />
+
+                    <ErrorState
+                      v-else-if="expandedDetail(row.id)?.error"
+                      :title="t('deployments.expanded.configLoadError')"
+                      :subtitle="expandedDetailErrorMessage(row.id)"
+                      @retry="loadExpandedDeploymentDetail(row, true)"
+                    />
+
+                    <EmptyState
+                      v-else-if="isExpandedDetailEmpty(row.id)"
+                      :description="t('deployments.configs.empty')"
+                    />
+
+                    <div
+                      v-else-if="expandedDetail(row.id)"
+                      class="deployment-instance-list-page__expanded-configs"
+                    >
+                      <div
+                        class="deployment-instance-list-page__expanded-label"
+                      >
+                        {{ t("deployments.expanded.configs") }}
+                      </div>
+                      <div
+                        v-for="configFile in expandedDetail(row.id)
+                          ?.configFiles"
+                        :key="configFile.id"
+                        class="deployment-instance-list-page__config-row"
+                      >
+                        <div class="deployment-instance-list-page__config-main">
+                          <span class="deployment-instance-list-page__code">
+                            {{ configFile.code }}
+                          </span>
+                          <span>{{ configFile.name }}</span>
+                          <el-tag size="small" type="info">
+                            {{ configFile.format }}
+                          </el-tag>
+                          <el-tag
+                            v-if="configFile.is_required"
+                            size="small"
+                            type="danger"
+                          >
+                            {{ t("configFiles.required") }}
+                          </el-tag>
+                        </div>
+
+                        <div
+                          class="deployment-instance-list-page__config-hints"
+                        >
+                          <el-tag
+                            size="small"
+                            :type="configStateTagType(row.id, configFile.id)"
+                          >
+                            {{ configStateLabel(row.id, configFile.id) }}
+                          </el-tag>
+                          <el-tag
+                            size="small"
+                            :type="
+                              configReadinessTagType(row.id, configFile.id)
+                            "
+                          >
+                            {{ configReadinessLabel(row.id, configFile.id) }}
+                          </el-tag>
+                          <span class="deployment-instance-list-page__muted">
+                            {{
+                              configSavedVersionsLabel(row.id, configFile.id)
+                            }}
+                          </span>
+                          <span class="deployment-instance-list-page__muted">
+                            {{
+                              configLatestReleaseLabel(row.id, configFile.id)
+                            }}
+                          </span>
+                        </div>
+
+                        <el-button
+                          v-if="canOpenWorkspace(row)"
+                          text
+                          type="primary"
+                          size="small"
+                          @click="openDraftOverlay(row, configFile.id)"
+                        >
+                          {{ t("deployments.expanded.openWorkspace") }}
+                        </el-button>
+                        <span
+                          v-else
+                          class="deployment-instance-list-page__muted"
+                        >
+                          {{ t("common.notAvailable") }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+              </el-table-column>
+
               <el-table-column
                 prop="environment_code"
                 :label="t('deployments.column.environment')"
@@ -515,11 +652,19 @@
       @restored="handleArchivedDrawerRestored"
       @deleted="instanceList.load"
     />
+
+    <DraftEditorOverlay
+      v-if="draftOverlayVisible"
+      :visible="draftOverlayVisible"
+      :deployment-id="draftOverlayDeploymentId"
+      :config-file-id="draftOverlayConfigFileId"
+      @request-close="closeDraftOverlay"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, defineAsyncComponent, onMounted, ref, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useRoute, useRouter } from "vue-router";
 import { useProjectContext } from "@/modules/projects/composables/useProjectContext";
@@ -535,20 +680,42 @@ import StatusBadge from "@/shared/components/StatusBadge.vue";
 import EmptyState from "@/shared/states/EmptyState.vue";
 import ErrorState from "@/shared/states/ErrorState.vue";
 import ForbiddenState from "@/shared/states/ForbiddenState.vue";
+import LoadingState from "@/shared/states/LoadingState.vue";
 import NotFoundState from "@/shared/states/NotFoundState.vue";
 import { ROUTE_NAMES } from "@/shared/constants/routes";
 import * as deploymentInstancesApi from "@/api/deployment-instances";
+import * as configFilesApi from "@/api/config-files";
+import * as releasesApi from "@/api/releases";
+import * as savedVersionsApi from "@/api/saved-versions";
 import { ApiRequestError } from "@/api/error";
 import { getErrorMessage } from "@/shared/constants/error-messages";
+import type { ConfigFileSummary } from "@/api/types/config-file";
 import type {
+  DeploymentPreviewItem,
   DeploymentInstanceSummary,
   DeploymentTokenResponse,
 } from "@/api/types/deployment-instance";
 import { useI18nText } from "@/shared/i18n";
 
+interface ConfigHistoryHint {
+  savedVersionsCount: number;
+  latestReleaseRevision: string | null;
+}
+
+interface ExpandedDeploymentDetail {
+  loading: boolean;
+  error: ApiRequestError | null;
+  configFiles: ConfigFileSummary[];
+  previewStatusMap: Record<number, DeploymentPreviewItem>;
+  configHistoryMap: Record<number, ConfigHistoryHint>;
+}
+
 const route = useRoute();
 const router = useRouter();
 const { t } = useI18nText();
+const DraftEditorOverlay = defineAsyncComponent(
+  () => import("@/modules/drafts/components/DraftEditorOverlay.vue"),
+);
 
 const {
   project,
@@ -589,6 +756,14 @@ const tokenDialogVisible = ref(false);
 const tokenDialogMode = ref<"activate" | "reset">("activate");
 const tokenPayload = ref<DeploymentTokenResponse | null>(null);
 const actionTarget = ref<{ id: number; action: string } | null>(null);
+const expandedDetails = ref<Record<number, ExpandedDeploymentDetail>>({});
+const draftOverlayDeploymentId = ref<number | null>(null);
+const draftOverlayConfigFileId = ref<number | null>(null);
+const draftOverlayVisible = computed(
+  () =>
+    draftOverlayDeploymentId.value !== null &&
+    draftOverlayConfigFileId.value !== null,
+);
 
 async function loadAll() {
   const id = projectId.value;
@@ -624,6 +799,248 @@ function canArchiveRow(row: DeploymentInstanceSummary) {
     !row.is_archived &&
     row.status === "inactive"
   );
+}
+
+function canOpenWorkspace(row: DeploymentInstanceSummary) {
+  const role = project.value?.current_user_role;
+  return (
+    (role === "admin" || role === "editor") &&
+    !row.is_template &&
+    !row.is_archived
+  );
+}
+
+function expandedDetail(id: number) {
+  return expandedDetails.value[id];
+}
+
+function isExpandedDetailEmpty(id: number) {
+  const detail = expandedDetails.value[id];
+  return detail !== undefined && detail.configFiles.length === 0;
+}
+
+function setExpandedDetail(id: number, detail: ExpandedDeploymentDetail) {
+  expandedDetails.value = {
+    ...expandedDetails.value,
+    [id]: detail,
+  };
+}
+
+function emptyExpandedDetail(): ExpandedDeploymentDetail {
+  return {
+    loading: false,
+    error: null,
+    configFiles: [],
+    previewStatusMap: {},
+    configHistoryMap: {},
+  };
+}
+
+async function handleInstanceExpandChange(
+  row: DeploymentInstanceSummary,
+  expandedRows: DeploymentInstanceSummary[],
+) {
+  if (!expandedRows.some((item) => item.id === row.id)) {
+    return;
+  }
+
+  await loadExpandedDeploymentDetail(row);
+}
+
+async function loadExpandedDeploymentDetail(
+  row: DeploymentInstanceSummary,
+  force = false,
+) {
+  const existing = expandedDetails.value[row.id];
+  if (
+    existing &&
+    !force &&
+    (existing.loading || existing.configFiles.length > 0 || existing.error)
+  ) {
+    return;
+  }
+
+  const detail = existing ?? emptyExpandedDetail();
+  setExpandedDetail(row.id, { ...detail, loading: true, error: null });
+
+  try {
+    const configFilesPromise = configFilesApi.listConfigFiles({
+      project_id: projectId.value,
+      status: "active",
+    });
+
+    if (!canOpenWorkspace(row)) {
+      const configResult = await configFilesPromise;
+      setExpandedDetail(row.id, {
+        ...emptyExpandedDetail(),
+        configFiles: configResult.items,
+      });
+      return;
+    }
+
+    const [configResult, preview, savedVersions, releases] = await Promise.all([
+      configFilesPromise,
+      deploymentInstancesApi.previewDeploymentBundle(row.id),
+      savedVersionsApi.listSavedVersions({
+        deployment_instance_id: row.id,
+      }),
+      releasesApi.listReleases({
+        project_id: projectId.value,
+        deployment_instance_id: row.id,
+      }),
+    ]);
+
+    const previewStatusMap: Record<number, DeploymentPreviewItem> = {};
+    for (const item of preview.items) {
+      previewStatusMap[item.config_file_id] = item;
+    }
+
+    const configHistoryMap: Record<number, ConfigHistoryHint> = {};
+    for (const configFile of configResult.items) {
+      configHistoryMap[configFile.id] = {
+        savedVersionsCount: 0,
+        latestReleaseRevision: null,
+      };
+    }
+
+    for (const item of savedVersions.items) {
+      const hint =
+        configHistoryMap[item.config_file_id] ??
+        (configHistoryMap[item.config_file_id] = {
+          savedVersionsCount: 0,
+          latestReleaseRevision: null,
+        });
+      hint.savedVersionsCount += 1;
+    }
+
+    for (const item of releases.items) {
+      const hint =
+        configHistoryMap[item.config_file_id] ??
+        (configHistoryMap[item.config_file_id] = {
+          savedVersionsCount: 0,
+          latestReleaseRevision: null,
+        });
+      hint.latestReleaseRevision ??= item.revision;
+    }
+
+    setExpandedDetail(row.id, {
+      loading: false,
+      error: null,
+      configFiles: configResult.items,
+      previewStatusMap,
+      configHistoryMap,
+    });
+  } catch (err) {
+    const error =
+      err instanceof ApiRequestError
+        ? err
+        : new ApiRequestError(0, {
+            code: "unknown_error",
+            message: t("deployments.expanded.configLoadError"),
+          });
+    setExpandedDetail(row.id, {
+      ...emptyExpandedDetail(),
+      error,
+    });
+  }
+}
+
+function expandedDetailErrorMessage(id: number) {
+  const error = expandedDetails.value[id]?.error;
+  if (!error) return undefined;
+  return getErrorMessage(error.code, error.message);
+}
+
+function previewItem(rowId: number, configFileId: number) {
+  return expandedDetails.value[rowId]?.previewStatusMap[configFileId] ?? null;
+}
+
+function historyHint(rowId: number, configFileId: number) {
+  return expandedDetails.value[rowId]?.configHistoryMap[configFileId] ?? null;
+}
+
+function configStateTagType(rowId: number, configFileId: number) {
+  const item = previewItem(rowId, configFileId);
+  if (!item) return "info";
+  if (item.source === "draft") return "warning";
+  if (item.source === "latest_release") return "success";
+  return "info";
+}
+
+function configStateLabel(rowId: number, configFileId: number) {
+  const item = previewItem(rowId, configFileId);
+  if (!item) return t("preview.source.none");
+  if (item.source === "draft" || item.source === "latest_release") {
+    return t(`preview.source.${item.source}`);
+  }
+  return t("preview.source.none");
+}
+
+function configReadinessTagType(rowId: number, configFileId: number) {
+  const item = previewItem(rowId, configFileId);
+  if (!item) return "info";
+  if (item.status === "missing_required") return "danger";
+  if (item.status === "missing_optional") return "info";
+  return "success";
+}
+
+function configReadinessLabel(rowId: number, configFileId: number) {
+  const item = previewItem(rowId, configFileId);
+  if (!item) return t("preview.source.none");
+  return t(`preview.status.${item.status}`);
+}
+
+function configSavedVersionsLabel(rowId: number, configFileId: number) {
+  const hint = historyHint(rowId, configFileId);
+  return t("deployments.configs.savedVersionsCount", {
+    count: hint?.savedVersionsCount ?? 0,
+  });
+}
+
+function configLatestReleaseLabel(rowId: number, configFileId: number) {
+  const revision = historyHint(rowId, configFileId)?.latestReleaseRevision;
+  if (!revision) return t("deployments.configs.noRelease");
+  return t("deployments.configs.latestRelease", { revision });
+}
+
+function tokenStatusLabel(row: DeploymentInstanceSummary) {
+  return row.status === "active"
+    ? t("deployments.expanded.tokenActive")
+    : t("deployments.expanded.tokenInactive");
+}
+
+function deploymentUpdatedAt(row: DeploymentInstanceSummary) {
+  const value = (row as DeploymentInstanceSummary & { updated_at?: string })
+    .updated_at;
+  if (!value) return t("deployments.expanded.noUpdatedAt");
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
+}
+
+function openDraftOverlay(
+  row: DeploymentInstanceSummary,
+  configFileId: number,
+) {
+  draftOverlayDeploymentId.value = row.id;
+  draftOverlayConfigFileId.value = configFileId;
+}
+
+async function closeDraftOverlay() {
+  const deploymentId = draftOverlayDeploymentId.value;
+  const row =
+    deploymentId === null
+      ? null
+      : instanceList.items.value.find((item) => item.id === deploymentId);
+
+  draftOverlayDeploymentId.value = null;
+  draftOverlayConfigFileId.value = null;
+
+  await instanceList.load();
+  if (row) {
+    await loadExpandedDeploymentDetail(row, true);
+  }
 }
 
 function openTokenDialog(
@@ -836,6 +1253,74 @@ watch(
   font-size: 0.9em;
 }
 
+.deployment-instance-list-page__muted {
+  color: var(--el-text-color-secondary);
+}
+
+.deployment-instance-list-page__expanded {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  padding: 10px 12px 12px 44px;
+  background: var(--el-fill-color-lighter);
+}
+
+.deployment-instance-list-page__expanded-meta,
+.deployment-instance-list-page__config-row,
+.deployment-instance-list-page__config-main,
+.deployment-instance-list-page__config-hints {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.deployment-instance-list-page__expanded-meta {
+  gap: 6px 10px;
+  color: var(--el-text-color-regular);
+  font-size: 13px;
+}
+
+.deployment-instance-list-page__expanded-label {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.deployment-instance-list-page__expanded-pair {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.deployment-instance-list-page__expanded-state {
+  padding: var(--spacing-sm) 0;
+}
+
+.deployment-instance-list-page__expanded-configs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.deployment-instance-list-page__config-row {
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--color-border-light);
+}
+
+.deployment-instance-list-page__config-main {
+  min-width: 220px;
+  flex: 1;
+  gap: 6px;
+}
+
+.deployment-instance-list-page__config-hints {
+  min-width: 320px;
+  gap: 6px;
+  font-size: 12px;
+}
+
 .deployment-instance-list-page__pagination {
   display: flex;
   justify-content: flex-end;
@@ -860,6 +1345,19 @@ watch(
 
   .deployment-instance-list-page__actions {
     justify-content: flex-start;
+  }
+
+  .deployment-instance-list-page__expanded {
+    padding-left: 12px;
+  }
+
+  .deployment-instance-list-page__config-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .deployment-instance-list-page__config-hints {
+    min-width: 0;
   }
 }
 </style>

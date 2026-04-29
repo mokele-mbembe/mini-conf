@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 // Smoke test: Login → Project List → Project Detail
 // Covers the critical happy path to catch white screens, redirect loops,
@@ -237,6 +237,18 @@ async function fillDraftEditor(page: Page, value: string) {
     process.platform === "darwin" ? "Meta+A" : "Control+A",
   );
   await page.keyboard.insertText(value);
+}
+
+async function expectElementCenterInside(locator: Locator, selector: string) {
+  const isInside = await locator.evaluate((element, targetSelector) => {
+    const rect = element.getBoundingClientRect();
+    const topmost = document.elementFromPoint(
+      rect.left + rect.width / 2,
+      rect.top + rect.height / 2,
+    );
+    return Boolean(topmost?.closest(targetSelector));
+  }, selector);
+  expect(isInside).toBeTruthy();
 }
 
 test("setup path: platform admin login redirects to setup and can complete", async ({
@@ -979,6 +991,275 @@ async function setupDraftEditorContext(
   };
 }
 
+test("draft overlay: unsaved close confirmation stays above editor", async ({
+  page,
+}) => {
+  const suffix = Date.now().toString();
+  await login(page);
+  const { projectId, deploymentId, configFileId } =
+    await setupDraftEditorContext(page, suffix);
+
+  await page.goto(`/projects/${projectId}/deployments/${deploymentId}`);
+  await page.getByRole("button", { name: "打开工作台" }).click();
+
+  await expect(page.locator(".draft-editor-overlay")).toBeVisible({
+    timeout: 10_000,
+  });
+  await expect(page).toHaveURL(new RegExp(`draftConfigFileId=${configFileId}`));
+
+  await fillDraftEditor(page, "key: overlay-confirm");
+  await page.getByRole("button", { name: "关闭" }).click();
+
+  const confirmDialog = page.locator(".el-message-box").first();
+  await expect(confirmDialog).toBeVisible({ timeout: 5_000 });
+  await expect(confirmDialog).toContainText("当前内容未保存");
+
+  const leaveButton = confirmDialog.getByRole("button", { name: "离开" });
+  await expect(leaveButton).toBeVisible();
+  await expectElementCenterInside(leaveButton, ".el-message-box");
+
+  await confirmDialog.getByRole("button", { name: "取消" }).click();
+  await expect(page.locator(".draft-editor-overlay")).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`draftConfigFileId=${configFileId}`));
+});
+
+test("draft overlay: deployment detail refreshes workspace hints after saved draft closes", async ({
+  page,
+}) => {
+  const suffix = Date.now().toString();
+  const content = `key: detail-refresh-${suffix}`;
+  await login(page);
+  const { projectId, deploymentId, configFileId } =
+    await setupDraftEditorContext(page, suffix);
+
+  await page.goto(`/projects/${projectId}/deployments/${deploymentId}`);
+
+  const detailRow = page
+    .locator(".el-table__body tr", { hasText: `e2e-cfg-${suffix}` })
+    .first();
+  await expect(detailRow).toContainText("Not Configured", { timeout: 10_000 });
+  await expect(detailRow).toContainText("Missing Optional");
+  await expect(detailRow).toContainText("Saved Versions 0");
+  await expect(detailRow).toContainText("无 Release");
+
+  await page.getByRole("button", { name: "打开工作台" }).click();
+  await expect(page.locator(".draft-editor-overlay")).toBeVisible({
+    timeout: 10_000,
+  });
+  await expect(page).toHaveURL(new RegExp(`draftConfigFileId=${configFileId}`));
+
+  await fillDraftEditor(page, content);
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(page.locator(".el-message", { hasText: "已保存" })).toBeVisible({
+    timeout: 5_000,
+  });
+  await page.getByRole("button", { name: "关闭" }).click();
+
+  await expect(page.locator(".draft-editor-overlay")).toHaveCount(0, {
+    timeout: 10_000,
+  });
+  await expect(page).not.toHaveURL(/draftConfigFileId=/);
+  await expect(detailRow).toContainText("Current Draft", { timeout: 10_000 });
+  await expect(detailRow).toContainText("可预览");
+  await expect(detailRow).toContainText("Saved Versions 1");
+});
+
+test("draft overlay: preview page refreshes after saved draft closes", async ({
+  page,
+}) => {
+  const suffix = Date.now().toString();
+  const content = `key: overlay-refresh-${suffix}`;
+  await login(page);
+  const { projectId, deploymentId, configFileId } =
+    await setupDraftEditorContext(page, suffix);
+
+  await page.goto(`/projects/${projectId}/deployments/${deploymentId}/preview`);
+
+  const previewRow = page
+    .locator(".el-table__body tr", { hasText: `e2e-cfg-${suffix}` })
+    .first();
+  await expect(previewRow).toContainText("Not Configured", { timeout: 10_000 });
+  await expect(previewRow).toContainText("Missing Optional");
+
+  await previewRow.getByRole("button", { name: "编辑 Current Draft" }).click();
+  await expect(page.locator(".draft-editor-overlay")).toBeVisible({
+    timeout: 10_000,
+  });
+  await expect(page).toHaveURL(new RegExp(`draftConfigFileId=${configFileId}`));
+
+  await fillDraftEditor(page, content);
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(page.locator(".el-message", { hasText: "已保存" })).toBeVisible({
+    timeout: 5_000,
+  });
+  await page.getByRole("button", { name: "关闭" }).click();
+
+  await expect(page.locator(".draft-editor-overlay")).toHaveCount(0, {
+    timeout: 10_000,
+  });
+  await expect(page).not.toHaveURL(/draftConfigFileId=/);
+  await expect(previewRow).toContainText("可预览", { timeout: 10_000 });
+  await expect(
+    page.locator(".deployment-preview-page__json textarea"),
+  ).toHaveValue(new RegExp(content));
+});
+
+test("deployment list: expanded instance opens workspace without changing the list route", async ({
+  page,
+}) => {
+  const suffix = Date.now().toString();
+  await login(page);
+  const { projectId, deploymentId } = await setupDraftEditorContext(
+    page,
+    suffix,
+  );
+
+  const extraConfigResponse = await postWithCsrf(page, "/api/config-files", {
+    data: {
+      project_id: projectId,
+      code: `e2e-cfg-extra-${suffix}`,
+      name: `E2E Extra Config ${suffix}`,
+      format: "json",
+    },
+  });
+  expect(extraConfigResponse.ok()).toBeTruthy();
+
+  await page.goto(`/projects/${projectId}/deployments`);
+  const listUrl = page.url();
+
+  const instanceSection = page
+    .locator(".deployment-instance-list-page__section")
+    .nth(1);
+  const instanceRow = instanceSection.locator(".el-table__row", {
+    hasText: `e2e-di-${suffix}`,
+  });
+  await expect(instanceRow).toBeVisible({ timeout: 10_000 });
+  await instanceRow.locator(".el-table__expand-icon").click();
+
+  const expanded = instanceSection.locator(
+    ".deployment-instance-list-page__expanded",
+    { hasText: `e2e-cfg-${suffix}` },
+  );
+  await expect(expanded).toBeVisible({ timeout: 10_000 });
+  await expect(expanded).toContainText(`e2e-cfg-extra-${suffix}`);
+  await expect(expanded).toContainText("Not Configured");
+  await expect(expanded).toContainText("Missing Optional");
+
+  await expanded.getByRole("button", { name: "打开工作台" }).first().click();
+  const overlay = page.locator(".draft-editor-overlay");
+  await expect(overlay).toBeVisible({ timeout: 10_000 });
+  await expect(page).toHaveURL(listUrl);
+
+  await overlay.getByText(`e2e-cfg-extra-${suffix}`).click();
+  await expect(page).toHaveURL(listUrl);
+
+  await page.getByRole("button", { name: "关闭" }).click();
+  await expect(overlay).toHaveCount(0, { timeout: 10_000 });
+  await expect(page).toHaveURL(listUrl);
+  await expect(expanded).toBeVisible();
+
+  expect(deploymentId).toBeGreaterThan(0);
+});
+
+test("deployment preview: view releases and restore latest release to current draft", async ({
+  page,
+}) => {
+  const suffix = Date.now().toString();
+  const releaseContent = `key: release-source-${suffix}`;
+  const draftContent = `key: draft-before-restore-${suffix}`;
+  await login(page);
+  const { projectId, deploymentId, configFileId } =
+    await setupDraftEditorContext(page, suffix);
+
+  const firstDraftResponse = await putWithCsrf(
+    page,
+    `/api/drafts/${deploymentId}/${configFileId}`,
+    {
+      data: {
+        content: releaseContent,
+        format: "yaml",
+        base_version: 0,
+      },
+    },
+  );
+  expect(firstDraftResponse.ok()).toBeTruthy();
+  const firstDraft = (await firstDraftResponse.json()) as { version: number };
+
+  const publishResponse = await postWithCsrf(page, "/api/releases/publish", {
+    data: {
+      project_id: projectId,
+      deployment_instance_id: deploymentId,
+      config_file_id: configFileId,
+      change_summary: "Preview restore source",
+    },
+  });
+  expect(publishResponse.ok()).toBeTruthy();
+  const release = (await publishResponse.json()) as {
+    id: number;
+    revision: string;
+  };
+
+  const secondDraftResponse = await putWithCsrf(
+    page,
+    `/api/drafts/${deploymentId}/${configFileId}`,
+    {
+      data: {
+        content: draftContent,
+        format: "yaml",
+        base_version: firstDraft.version,
+      },
+    },
+  );
+  expect(secondDraftResponse.ok()).toBeTruthy();
+
+  await page.goto(`/projects/${projectId}/deployments/${deploymentId}/preview`);
+
+  const previewRow = page
+    .locator(".el-table__body tr", { hasText: `e2e-cfg-${suffix}` })
+    .first();
+  await expect(previewRow).toContainText("Current Draft", { timeout: 10_000 });
+  await expect(
+    previewRow.getByRole("button", {
+      name: "恢复 latest release 到 Current Draft",
+    }),
+  ).toBeVisible();
+
+  await previewRow.getByRole("button", { name: "查看 Releases" }).click();
+  await expect(page).toHaveURL(
+    new RegExp(
+      `/projects/${projectId}/releases\\?deployment_instance_id=${deploymentId}&config_file_id=${configFileId}`,
+    ),
+    { timeout: 10_000 },
+  );
+  await expect(page.locator(".release-list-page__table")).toContainText(
+    release.revision,
+  );
+  await expect(page.locator(".release-list-page__table")).toContainText(
+    "Preview restore source",
+  );
+
+  await page.goto(`/projects/${projectId}/deployments/${deploymentId}/preview`);
+  await previewRow
+    .getByRole("button", { name: "恢复 latest release 到 Current Draft" })
+    .click();
+
+  const restoreDialog = page.getByRole("dialog", { name: "恢复最新 Release" });
+  await expect(restoreDialog).toBeVisible();
+  await restoreDialog.getByRole("button", { name: "确认恢复" }).click();
+
+  await expect(
+    page.locator(".el-message", {
+      hasText: "已恢复最新 Release 到 Current Draft",
+    }),
+  ).toBeVisible({ timeout: 5_000 });
+  await expect(
+    page.locator(".deployment-preview-page__json textarea"),
+  ).toHaveValue(new RegExp(releaseContent), { timeout: 10_000 });
+  await expect(
+    page.locator(".deployment-preview-page__json textarea"),
+  ).not.toHaveValue(new RegExp(draftContent));
+});
+
 test("saved versions: save → list → note → restore → delete", async ({
   page,
 }) => {
@@ -1518,6 +1799,101 @@ test("release detail and diff: publish draft → view detail → view diff", asy
   await expect(
     lineDiff.locator(".is-added").filter({ hasText: "feature: enabled" }),
   ).toBeVisible();
+});
+
+test("release detail: restore historical release to current draft", async ({
+  page,
+}) => {
+  const suffix = Date.now().toString();
+  const releaseContent = `key: historical-release-${suffix}`;
+  const currentDraftContent = `key: current-draft-${suffix}`;
+  await login(page);
+  const { projectId, deploymentId, configFileId } =
+    await setupDraftEditorContext(page, suffix);
+
+  const firstDraftResponse = await putWithCsrf(
+    page,
+    `/api/drafts/${deploymentId}/${configFileId}`,
+    {
+      data: {
+        content: releaseContent,
+        format: "yaml",
+        base_version: 0,
+      },
+    },
+  );
+  expect(firstDraftResponse.ok()).toBeTruthy();
+  const firstDraft = (await firstDraftResponse.json()) as { version: number };
+
+  const firstReleaseResponse = await postWithCsrf(
+    page,
+    "/api/releases/publish",
+    {
+      data: {
+        project_id: projectId,
+        deployment_instance_id: deploymentId,
+        config_file_id: configFileId,
+        change_summary: "Historical restore source",
+      },
+    },
+  );
+  expect(firstReleaseResponse.ok()).toBeTruthy();
+  const firstRelease = (await firstReleaseResponse.json()) as {
+    id: number;
+    revision: string;
+  };
+
+  const secondDraftResponse = await putWithCsrf(
+    page,
+    `/api/drafts/${deploymentId}/${configFileId}`,
+    {
+      data: {
+        content: currentDraftContent,
+        format: "yaml",
+        base_version: firstDraft.version,
+      },
+    },
+  );
+  expect(secondDraftResponse.ok()).toBeTruthy();
+
+  const secondReleaseResponse = await postWithCsrf(
+    page,
+    "/api/releases/publish",
+    {
+      data: {
+        project_id: projectId,
+        deployment_instance_id: deploymentId,
+        config_file_id: configFileId,
+        change_summary: "Newer release",
+      },
+    },
+  );
+  expect(secondReleaseResponse.ok()).toBeTruthy();
+
+  await page.goto(`/projects/${projectId}/releases/${firstRelease.id}`);
+
+  const restoreButton = page.getByRole("button", {
+    name: "恢复此发布版本到 Current Draft",
+  });
+  await expect(restoreButton).toBeVisible({ timeout: 10_000 });
+  await restoreButton.click();
+
+  const restoreDialog = page.getByRole("dialog", { name: "恢复发布版本" });
+  await expect(restoreDialog).toContainText(firstRelease.revision);
+  await restoreDialog.getByRole("button", { name: "确认恢复" }).click();
+
+  await expect(
+    page.locator(".el-message", {
+      hasText: `Release ${firstRelease.revision} 已恢复到 Current Draft`,
+    }),
+  ).toBeVisible({ timeout: 5_000 });
+
+  await page.goto(
+    `/projects/${projectId}/deployments/${deploymentId}/configs/${configFileId}/draft`,
+  );
+  const editor = getDraftEditor(page);
+  await expect(editor).toBeVisible({ timeout: 10_000 });
+  await expect(editor).toHaveText(releaseContent, { timeout: 10_000 });
 });
 
 // ---------------------------------------------------------------------------

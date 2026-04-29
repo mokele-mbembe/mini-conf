@@ -286,8 +286,86 @@
                 </el-table-column>
 
                 <el-table-column
+                  :label="t('deployments.configs.status')"
+                  min-width="170"
+                  align="center"
+                >
+                  <template #default="{ row }">
+                    <div
+                      v-if="previewStatusMap[row.id]"
+                      class="deployment-instance-detail-page__config-status"
+                    >
+                      <el-tag
+                        size="small"
+                        :type="sourceTagType(previewStatusMap[row.id].source)"
+                      >
+                        {{ sourceLabel(previewStatusMap[row.id].source) }}
+                      </el-tag>
+                      <el-tag
+                        size="small"
+                        :type="statusTagType(previewStatusMap[row.id].status)"
+                      >
+                        {{
+                          previewStatusLabel(previewStatusMap[row.id].status)
+                        }}
+                      </el-tag>
+                      <span
+                        v-if="previewStatusMap[row.id].revision"
+                        class="deployment-instance-detail-page__revision"
+                      >
+                        {{ previewStatusMap[row.id].revision }}
+                      </span>
+                    </div>
+                    <span v-else class="deployment-instance-detail-page__muted">
+                      —
+                    </span>
+                  </template>
+                </el-table-column>
+
+                <el-table-column
+                  :label="t('deployments.configs.history')"
+                  min-width="190"
+                  align="center"
+                >
+                  <template #default="{ row }">
+                    <div
+                      v-if="configHistoryMap[row.id]"
+                      class="deployment-instance-detail-page__config-history"
+                    >
+                      <el-tag size="small" type="info">
+                        {{
+                          t("deployments.configs.savedVersionsCount", {
+                            count: configHistoryMap[row.id].savedVersionsCount,
+                          })
+                        }}
+                      </el-tag>
+                      <span
+                        v-if="configHistoryMap[row.id].latestReleaseRevision"
+                        class="deployment-instance-detail-page__revision"
+                      >
+                        {{
+                          t("deployments.configs.latestRelease", {
+                            revision:
+                              configHistoryMap[row.id].latestReleaseRevision,
+                          })
+                        }}
+                      </span>
+                      <span
+                        v-else
+                        class="deployment-instance-detail-page__muted"
+                      >
+                        {{ t("deployments.configs.noRelease") }}
+                      </span>
+                    </div>
+                    <span v-else class="deployment-instance-detail-page__muted">
+                      —
+                    </span>
+                  </template>
+                </el-table-column>
+
+                <el-table-column
                   :label="t('deployments.column.actions')"
-                  width="140"
+                  width="150"
                   align="center"
                   fixed="right"
                 >
@@ -299,7 +377,7 @@
                       size="small"
                       @click="openDraft(row.id)"
                     >
-                      {{ t("deployments.action.editDraft") }}
+                      {{ t("deployments.action.openWorkspace") }}
                     </el-button>
                     <span v-else class="deployment-instance-detail-page__muted">
                       —
@@ -331,7 +409,6 @@
       :visible="draftOverlayVisible"
       :config-file-id="draftOverlayConfigFileId"
       @request-close="closeDraftOverlay"
-      @switch-config="switchDraftOverlayConfig"
     />
   </div>
 </template>
@@ -354,14 +431,22 @@ import NotFoundState from "@/shared/states/NotFoundState.vue";
 import { ROUTE_NAMES } from "@/shared/constants/routes";
 import * as deploymentInstancesApi from "@/api/deployment-instances";
 import * as configFilesApi from "@/api/config-files";
+import * as releasesApi from "@/api/releases";
+import * as savedVersionsApi from "@/api/saved-versions";
 import { ApiRequestError } from "@/api/error";
 import { getErrorMessage } from "@/shared/constants/error-messages";
 import type { ConfigFileSummary } from "@/api/types/config-file";
 import type {
+  DeploymentPreviewItem,
   DeploymentInstanceSummary,
   DeploymentTokenResponse,
 } from "@/api/types/deployment-instance";
 import { useI18nText } from "@/shared/i18n";
+
+interface ConfigHistoryHint {
+  savedVersionsCount: number;
+  latestReleaseRevision: string | null;
+}
 
 const route = useRoute();
 const router = useRouter();
@@ -395,6 +480,8 @@ const detailError = ref<ApiRequestError | null>(null);
 const configFiles = ref<ConfigFileSummary[]>([]);
 const configListLoading = ref(false);
 const configListError = ref<ApiRequestError | null>(null);
+const previewStatusMap = ref<Record<number, DeploymentPreviewItem>>({});
+const configHistoryMap = ref<Record<number, ConfigHistoryHint>>({});
 type DeploymentActionLoading =
   | "activate"
   | "deactivate"
@@ -550,11 +637,98 @@ async function loadConfigFiles() {
   }
 }
 
+async function loadConfigPreviewStatus() {
+  previewStatusMap.value = {};
+  const id = deploymentId.value;
+  if (Number.isNaN(id) || !canPreview.value) return;
+
+  try {
+    const preview = await deploymentInstancesApi.previewDeploymentBundle(id);
+    const map: Record<number, DeploymentPreviewItem> = {};
+    for (const item of preview.items) {
+      map[item.config_file_id] = item;
+    }
+    previewStatusMap.value = map;
+  } catch {
+    // Non-critical status hints; keep the deployment detail usable.
+  }
+}
+
+async function loadConfigHistoryHints() {
+  configHistoryMap.value = {};
+  const id = deploymentId.value;
+  if (Number.isNaN(id) || !canEditDraft.value) return;
+
+  try {
+    const [savedVersions, releases] = await Promise.all([
+      savedVersionsApi.listSavedVersions({
+        deployment_instance_id: id,
+      }),
+      releasesApi.listReleases({
+        deployment_instance_id: id,
+      }),
+    ]);
+
+    const map: Record<number, ConfigHistoryHint> = {};
+    for (const configFile of configFiles.value) {
+      map[configFile.id] = {
+        savedVersionsCount: 0,
+        latestReleaseRevision: null,
+      };
+    }
+
+    for (const item of savedVersions.items) {
+      const hint =
+        map[item.config_file_id] ??
+        (map[item.config_file_id] = {
+          savedVersionsCount: 0,
+          latestReleaseRevision: null,
+        });
+      hint.savedVersionsCount += 1;
+    }
+
+    for (const item of releases.items) {
+      const hint =
+        map[item.config_file_id] ??
+        (map[item.config_file_id] = {
+          savedVersionsCount: 0,
+          latestReleaseRevision: null,
+        });
+      hint.latestReleaseRevision ??= item.revision;
+    }
+
+    configHistoryMap.value = map;
+  } catch {
+    // Non-critical history hints; keep the deployment detail usable.
+  }
+}
+
 async function loadAll() {
   const id = projectId.value;
   if (Number.isNaN(id)) return;
   await fetchProject(id);
   await Promise.all([loadDeploymentInstance(), loadConfigFiles()]);
+  await Promise.all([loadConfigPreviewStatus(), loadConfigHistoryHints()]);
+}
+
+function sourceLabel(source: string): string {
+  return t(`preview.source.${source}`);
+}
+
+function previewStatusLabel(status: string): string {
+  return t(`preview.status.${status}`);
+}
+
+function sourceTagType(source: string) {
+  if (source === "draft") return "warning";
+  if (source === "latest_release") return "success";
+  return "info";
+}
+
+function statusTagType(status: string) {
+  if (status === "missing_required") return "danger";
+  if (status === "missing_optional") return "info";
+  return "success";
 }
 
 function openTokenDialog(
@@ -774,10 +948,10 @@ function openDraft(configFileId: number) {
   });
 }
 
-function closeDraftOverlay() {
+async function closeDraftOverlay() {
   const query = { ...route.query };
   delete query.draftConfigFileId;
-  router.push({
+  await router.push({
     name: ROUTE_NAMES.DEPLOYMENT_DETAIL,
     params: {
       projectId: route.params.projectId,
@@ -785,20 +959,8 @@ function closeDraftOverlay() {
     },
     query,
   });
-}
-
-function switchDraftOverlayConfig(configFileId: number) {
-  router.push({
-    name: ROUTE_NAMES.DEPLOYMENT_DETAIL,
-    params: {
-      projectId: route.params.projectId,
-      deploymentId: route.params.deploymentId,
-    },
-    query: {
-      ...route.query,
-      draftConfigFileId: String(configFileId),
-    },
-  });
+  await Promise.all([loadDeploymentInstance(), loadConfigFiles()]);
+  await Promise.all([loadConfigPreviewStatus(), loadConfigHistoryHints()]);
 }
 
 function handleCloneSuccess(item: DeploymentInstanceSummary) {
@@ -859,6 +1021,20 @@ watch(
   flex-wrap: wrap;
   gap: var(--spacing-sm);
   justify-content: flex-end;
+}
+
+.deployment-instance-detail-page__config-status,
+.deployment-instance-detail-page__config-history {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  align-items: center;
+  justify-content: center;
+}
+
+.deployment-instance-detail-page__revision {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
 }
 
 .deployment-instance-detail-page__header-actions {

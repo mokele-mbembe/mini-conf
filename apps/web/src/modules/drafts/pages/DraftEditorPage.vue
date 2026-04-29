@@ -219,10 +219,12 @@ const { t } = useI18nText();
 const props = withDefaults(
   defineProps<{
     embedded?: boolean;
+    deploymentIdOverride?: number | null;
     configFileIdOverride?: number | null;
   }>(),
   {
     embedded: false,
+    deploymentIdOverride: null,
     configFileIdOverride: null,
   },
 );
@@ -240,7 +242,9 @@ const {
 } = useProjectContext();
 
 const projectId = computed(() => Number(route.params.projectId));
-const deploymentId = computed(() => Number(route.params.deploymentId));
+const deploymentId = computed(
+  () => props.deploymentIdOverride ?? Number(route.params.deploymentId),
+);
 const configFileId = computed(
   () => props.configFileIdOverride ?? Number(route.params.configFileId),
 );
@@ -436,7 +440,7 @@ function backToDeployment() {
     name: ROUTE_NAMES.DEPLOYMENT_DETAIL,
     params: {
       projectId: route.params.projectId,
-      deploymentId: route.params.deploymentId,
+      deploymentId: String(deploymentId.value),
     },
   });
 }
@@ -446,7 +450,7 @@ function goToPreview() {
     name: ROUTE_NAMES.DEPLOYMENT_PREVIEW,
     params: {
       projectId: route.params.projectId,
-      deploymentId: route.params.deploymentId,
+      deploymentId: String(deploymentId.value),
     },
   });
 }
@@ -454,8 +458,13 @@ function goToPreview() {
 onMounted(loadAll);
 
 watch(
-  () => [projectId.value, deploymentId.value, configFileId.value],
+  () => [projectId.value, deploymentId.value],
   () => loadAll(),
+);
+
+watch(
+  () => configFileId.value,
+  () => loadDraftResources(),
 );
 </script>
 
