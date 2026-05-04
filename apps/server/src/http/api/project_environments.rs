@@ -126,7 +126,7 @@ pub(crate) async fn list_project_environments(
     .bind(project_id)
     .fetch_all(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to list project environments"))?;
 
     Ok(Json(ProjectEnvironmentListResponse {
         items: rows.into_iter().map(map_project_environment_row).collect(),
@@ -199,7 +199,7 @@ pub(crate) async fn get_project_environment(
     .bind(environment_id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to get project environment"))?
     .ok_or_else(|| {
         ApiError::not_found_with(
             "project_environment_not_found",
@@ -260,7 +260,10 @@ pub(crate) async fn create_project_environment(
     )
     .await?;
 
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to create project environment"))?;
     let row = sqlx::query(
         r#"
         INSERT INTO project_environments (
@@ -312,7 +315,9 @@ pub(crate) async fn create_project_environment(
         },
     )
     .await?;
-    tx.commit().await.map_err(|_| ApiError::internal())?;
+    tx.commit()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to create project environment"))?;
 
     Ok((StatusCode::CREATED, Json(summary)))
 }
@@ -367,7 +372,10 @@ pub(crate) async fn update_project_environment(
     )
     .await?;
 
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to update project environment"))?;
     let row = sqlx::query(
         r#"
         UPDATE project_environments
@@ -427,7 +435,9 @@ pub(crate) async fn update_project_environment(
         },
     )
     .await?;
-    tx.commit().await.map_err(|_| ApiError::internal())?;
+    tx.commit()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to update project environment"))?;
 
     Ok(Json(summary))
 }
@@ -476,7 +486,10 @@ pub(crate) async fn delete_project_environment(
     )
     .await?;
 
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to delete project environment"))?;
 
     let exists = sqlx::query_scalar::<_, i64>(
         r#"
@@ -490,7 +503,7 @@ pub(crate) async fn delete_project_environment(
     .bind(environment_id)
     .fetch_one(&mut *tx)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to delete project environment"))?;
 
     if exists == 0 {
         return Err(ApiError::not_found_with(
@@ -511,7 +524,7 @@ pub(crate) async fn delete_project_environment(
     .bind(environment_id)
     .fetch_one(&mut *tx)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to delete project environment"))?;
 
     if deployment_count > 0 {
         return Err(ApiError::conflict(
@@ -531,7 +544,7 @@ pub(crate) async fn delete_project_environment(
     .bind(environment_id)
     .execute(&mut *tx)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to delete project environment"))?;
 
     write_audit_log(
         &mut *tx,
@@ -547,7 +560,9 @@ pub(crate) async fn delete_project_environment(
         },
     )
     .await?;
-    tx.commit().await.map_err(|_| ApiError::internal())?;
+    tx.commit()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to delete project environment"))?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -598,7 +613,7 @@ fn map_project_environment_write_error(error: SqlxError) -> ApiError {
         );
     }
 
-    ApiError::internal()
+    ApiError::internal_with(error, "failed to write project environment")
 }
 
 fn required(value: Option<String>, field: &'static str) -> Result<String, ApiError> {

@@ -106,7 +106,7 @@ pub(crate) async fn list_clone_sources(
     .bind(query.project_id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to list clone sources"))?
     .ok_or_else(|| {
         ApiError::not_found_with(
             "deployment_instance_not_found",
@@ -181,7 +181,7 @@ pub(crate) async fn list_clone_sources(
     .bind(limit + 1)
     .fetch_all(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to list clone sources"))?;
 
     let has_more = rows.len() as i64 > limit;
     let items: Vec<CloneSourceSummary> = rows

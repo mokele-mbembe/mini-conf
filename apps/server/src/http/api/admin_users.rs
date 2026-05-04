@@ -163,7 +163,7 @@ pub(crate) async fn list_admin_users(
     .bind(offset)
     .fetch_all(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to list admin users"))?;
 
     let total = rows
         .first()
@@ -216,7 +216,10 @@ pub(crate) async fn create_admin_user(
     validate_password_strength(&payload.password)?;
     let password_hash = hash_password(&payload.password)?;
 
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to create admin user"))?;
     let row = sqlx::query(
         r#"
         INSERT INTO users (
@@ -269,7 +272,9 @@ pub(crate) async fn create_admin_user(
     )
     .await?;
 
-    tx.commit().await.map_err(|_| ApiError::internal())?;
+    tx.commit()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to create admin user"))?;
 
     Ok((StatusCode::CREATED, Json(map_admin_user_summary_row(&row))))
 }
@@ -325,7 +330,7 @@ pub(crate) async fn get_admin_user(
     .bind(id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to get admin user"))?
     .ok_or_else(|| ApiError::not_found_with("user_not_found", "user not found"))?;
 
     let project_rows = sqlx::query(
@@ -340,7 +345,7 @@ pub(crate) async fn get_admin_user(
     .bind(id)
     .fetch_all(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to get admin user"))?;
 
     Ok(Json(AdminUserDetail {
         id: row.get("id"),
@@ -425,7 +430,10 @@ pub(crate) async fn update_admin_user(
         target_must_change_password,
     );
 
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to update admin user"))?;
     let row = sqlx::query(
         r#"
         UPDATE users
@@ -457,7 +465,7 @@ pub(crate) async fn update_admin_user(
     .bind(target_must_change_password)
     .fetch_one(&mut *tx)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to update admin user"))?;
 
     if existing.status == "active" && target_status == "disabled" {
         sqlx::query(
@@ -471,7 +479,7 @@ pub(crate) async fn update_admin_user(
         .bind(id)
         .execute(&mut *tx)
         .await
-        .map_err(|_| ApiError::internal())?;
+        .map_err(|error| ApiError::internal_with(error, "failed to update admin user"))?;
     }
 
     write_audit_log(
@@ -491,7 +499,9 @@ pub(crate) async fn update_admin_user(
     )
     .await?;
 
-    tx.commit().await.map_err(|_| ApiError::internal())?;
+    tx.commit()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to update admin user"))?;
 
     Ok(Json(map_admin_user_summary_row(&row)))
 }
@@ -540,7 +550,10 @@ pub(crate) async fn reset_admin_user_password(
     validate_password_strength(&payload.new_password)?;
     let password_hash = hash_password(&payload.new_password)?;
 
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to reset admin user password"))?;
     sqlx::query(
         r#"
         UPDATE users
@@ -557,7 +570,7 @@ pub(crate) async fn reset_admin_user_password(
     .bind(payload.must_change_password)
     .execute(&mut *tx)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to reset admin user password"))?;
 
     sqlx::query(
         r#"
@@ -570,7 +583,7 @@ pub(crate) async fn reset_admin_user_password(
     .bind(id)
     .execute(&mut *tx)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to reset admin user password"))?;
 
     write_audit_log(
         &mut *tx,
@@ -589,7 +602,9 @@ pub(crate) async fn reset_admin_user_password(
     )
     .await?;
 
-    tx.commit().await.map_err(|_| ApiError::internal())?;
+    tx.commit()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to reset admin user password"))?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -650,7 +665,7 @@ async fn load_existing_admin_user(
     .bind(id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to load existing admin user"))?
     .ok_or_else(|| ApiError::not_found_with("user_not_found", "user not found"))?;
 
     Ok(ExistingAdminUser {
@@ -685,7 +700,7 @@ async fn ensure_last_platform_admin_rule(
     )
     .fetch_one(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to ensure last platform admin rule"))?;
 
     if active_platform_admin_count <= 1 {
         return Err(ApiError::conflict(
@@ -718,7 +733,7 @@ fn map_admin_user_write_error(error: SqlxError) -> ApiError {
         return ApiError::conflict("user_username_conflict", "username already exists");
     }
 
-    ApiError::internal()
+    ApiError::internal_with(error, "failed to write admin user")
 }
 
 fn collect_changed_user_fields(

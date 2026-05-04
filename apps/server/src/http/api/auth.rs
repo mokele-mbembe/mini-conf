@@ -75,7 +75,7 @@ pub(crate) async fn get_csrf(State(state): State<AppState>) -> Result<Response, 
     let mut response = StatusCode::NO_CONTENT.into_response();
     response.headers_mut().append(
         header::SET_COOKIE,
-        csrf_cookie_header(&generate_csrf_token(), state.config().session_cookie_secure),
+        csrf_cookie_header(&generate_csrf_token(), state.config().session_cookie_secure)?,
     );
     Ok(response)
 }
@@ -126,7 +126,7 @@ pub(crate) async fn login(
     .bind(&payload.username)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to fetch login user"))?;
     let Some(row) = row else {
         write_audit_log_best_effort(
             pool,
@@ -193,7 +193,7 @@ pub(crate) async fn login(
     .bind(user_id)
     .execute(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to update user login timestamp"))?;
 
     sqlx::query(
         r#"
@@ -205,7 +205,7 @@ pub(crate) async fn login(
     .bind(hash_bearer_token(&session_token))
     .execute(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to create auth session"))?;
     write_audit_log_best_effort(
         pool,
         AuditLogEntry {
@@ -234,11 +234,11 @@ pub(crate) async fn login(
     .into_response();
     response.headers_mut().append(
         header::SET_COOKIE,
-        session_cookie_header(&session_token, state.config().session_cookie_secure),
+        session_cookie_header(&session_token, state.config().session_cookie_secure)?,
     );
     response.headers_mut().append(
         header::SET_COOKIE,
-        csrf_cookie_header(&csrf_token, state.config().session_cookie_secure),
+        csrf_cookie_header(&csrf_token, state.config().session_cookie_secure)?,
     );
     Ok(response)
 }
@@ -289,7 +289,7 @@ pub(crate) async fn me(
     .into_response();
     response.headers_mut().append(
         header::SET_COOKIE,
-        csrf_cookie_header(&csrf, state.config().session_cookie_secure),
+        csrf_cookie_header(&csrf, state.config().session_cookie_secure)?,
     );
     Ok(response)
 }
@@ -344,7 +344,7 @@ pub(crate) async fn change_password(
     .bind(auth.user_id)
     .fetch_one(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to fetch current password hash"))?;
     let password_hash: String = row.get("password_hash");
 
     if !verify_password(&payload.current_password, &password_hash)? {
@@ -355,7 +355,9 @@ pub(crate) async fn change_password(
     }
 
     let new_password_hash = hash_password(&payload.new_password)?;
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let mut tx = pool.begin().await.map_err(|error| {
+        ApiError::internal_with(error, "failed to start password change transaction")
+    })?;
     sqlx::query(
         r#"
         UPDATE users
@@ -371,7 +373,7 @@ pub(crate) async fn change_password(
     .bind(new_password_hash)
     .execute(&mut *tx)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to update user password"))?;
 
     sqlx::query(
         r#"
@@ -386,7 +388,7 @@ pub(crate) async fn change_password(
     .bind(auth.session_id)
     .execute(&mut *tx)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to revoke other auth sessions"))?;
 
     write_audit_log(
         &mut *tx,
@@ -403,7 +405,9 @@ pub(crate) async fn change_password(
     )
     .await?;
 
-    tx.commit().await.map_err(|_| ApiError::internal())?;
+    tx.commit().await.map_err(|error| {
+        ApiError::internal_with(error, "failed to commit password change transaction")
+    })?;
 
     let csrf = csrf_token(cookie_header)
         .map(str::to_owned)
@@ -422,7 +426,7 @@ pub(crate) async fn change_password(
     .into_response();
     response.headers_mut().append(
         header::SET_COOKIE,
-        csrf_cookie_header(&csrf, state.config().session_cookie_secure),
+        csrf_cookie_header(&csrf, state.config().session_cookie_secure)?,
     );
     Ok(response)
 }
@@ -461,11 +465,11 @@ pub(crate) async fn logout(
     let mut response = StatusCode::NO_CONTENT.into_response();
     response.headers_mut().append(
         header::SET_COOKIE,
-        clear_session_cookie_header(state.config().session_cookie_secure),
+        clear_session_cookie_header(state.config().session_cookie_secure)?,
     );
     response.headers_mut().append(
         header::SET_COOKIE,
-        clear_csrf_cookie_header(state.config().session_cookie_secure),
+        clear_csrf_cookie_header(state.config().session_cookie_secure)?,
     );
     Ok(response)
 }

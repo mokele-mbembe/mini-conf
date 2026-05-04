@@ -46,7 +46,7 @@ pub async fn authenticate_open_request(
     .bind(&token_hash)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to authenticate open request"))?
     .ok_or_else(|| ApiError::unauthorized("invalid_token", "Invalid deployment token"))?;
 
     let credential_id: i64 = row.get("id");
@@ -62,7 +62,7 @@ pub async fn authenticate_open_request(
     .bind(credential_id)
     .execute(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to authenticate open request"))?;
 
     Ok(AuthenticatedDeployment {
         deployment_instance_id,
@@ -101,11 +101,12 @@ pub fn hash_password(password: &str) -> Result<String, ApiError> {
     Argon2::default()
         .hash_password(password.as_bytes(), &salt)
         .map(|hash| hash.to_string())
-        .map_err(|_| ApiError::internal())
+        .map_err(|error| ApiError::internal_with(error, "failed to hash password"))
 }
 
 pub fn verify_password(password: &str, password_hash: &str) -> Result<bool, ApiError> {
-    let parsed = PasswordHash::new(password_hash).map_err(|_| ApiError::internal())?;
+    let parsed = PasswordHash::new(password_hash)
+        .map_err(|error| ApiError::internal_with(error, "failed to verify password"))?;
 
     Ok(Argon2::default()
         .verify_password(password.as_bytes(), &parsed)
@@ -146,7 +147,7 @@ pub fn deployment_token_preview(token: &str) -> String {
     }
 }
 
-pub fn session_cookie_header(token: &str, secure: bool) -> HeaderValue {
+pub fn session_cookie_header(token: &str, secure: bool) -> Result<HeaderValue, ApiError> {
     let cookie = Cookie::build((ADMIN_SESSION_COOKIE, token.to_owned()))
         .path("/")
         .http_only(true)
@@ -155,18 +156,18 @@ pub fn session_cookie_header(token: &str, secure: bool) -> HeaderValue {
         .build();
 
     HeaderValue::from_str(&cookie.encoded().to_string())
-        .expect("session cookie should always produce a valid header")
+        .map_err(|error| ApiError::internal_with(error, "failed to build session cookie header"))
 }
 
-pub fn clear_session_cookie_header(secure: bool) -> HeaderValue {
+pub fn clear_session_cookie_header(secure: bool) -> Result<HeaderValue, ApiError> {
     let secure_attr = if secure { "; Secure" } else { "" };
     HeaderValue::from_str(&format!(
         "{ADMIN_SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax{secure_attr}; Max-Age=0"
     ))
-    .expect("clear session cookie should always produce a valid header")
+    .map_err(|error| ApiError::internal_with(error, "failed to build clear session cookie header"))
 }
 
-pub fn csrf_cookie_header(token: &str, secure: bool) -> HeaderValue {
+pub fn csrf_cookie_header(token: &str, secure: bool) -> Result<HeaderValue, ApiError> {
     let cookie = Cookie::build((ADMIN_CSRF_COOKIE, token.to_owned()))
         .path("/")
         .http_only(false)
@@ -175,15 +176,15 @@ pub fn csrf_cookie_header(token: &str, secure: bool) -> HeaderValue {
         .build();
 
     HeaderValue::from_str(&cookie.encoded().to_string())
-        .expect("csrf cookie should always produce a valid header")
+        .map_err(|error| ApiError::internal_with(error, "failed to build csrf cookie header"))
 }
 
-pub fn clear_csrf_cookie_header(secure: bool) -> HeaderValue {
+pub fn clear_csrf_cookie_header(secure: bool) -> Result<HeaderValue, ApiError> {
     let secure_attr = if secure { "; Secure" } else { "" };
     HeaderValue::from_str(&format!(
         "{ADMIN_CSRF_COOKIE}=; Path=/; SameSite=Lax{secure_attr}; Max-Age=0"
     ))
-    .expect("clear csrf cookie should always produce a valid header")
+    .map_err(|error| ApiError::internal_with(error, "failed to build clear csrf cookie header"))
 }
 
 pub fn csrf_token(cookie_header: Option<&str>) -> Option<&str> {
@@ -214,7 +215,7 @@ pub async fn authenticate_admin_session(
     .bind(&token_hash)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to authenticate admin session"))?
     .ok_or_else(|| {
         ApiError::unauthorized("auth_session_expired", "Authentication session expired")
     })?;
@@ -236,7 +237,7 @@ pub async fn authenticate_admin_session(
     .bind(session_id)
     .execute(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to authenticate admin session"))?;
 
     Ok(AuthenticatedUser {
         session_id,
@@ -266,7 +267,7 @@ pub async fn revoke_admin_session(
     .bind(hash_bearer_token(token))
     .execute(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to revoke admin session"))?;
 
     Ok(())
 }
@@ -290,11 +291,8 @@ fn cookie_value<'a>(cookie_header: Option<&'a str>, cookie_name: &str) -> Option
 }
 
 fn hex_char(value: u8) -> char {
-    match value {
-        0..=9 => (b'0' + value) as char,
-        10..=15 => (b'a' + (value - 10)) as char,
-        _ => unreachable!("nibble should always be within 0..=15"),
-    }
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    HEX[(value & 0x0f) as usize] as char
 }
 
 fn bearer_token(headers: &HeaderMap) -> Result<&str, ApiError> {
@@ -327,6 +325,8 @@ mod tests {
         hash_bearer_token, session_cookie_header,
     };
     use axum::http::{HeaderMap, HeaderValue, header};
+
+    type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
     #[test]
     fn hashes_bearer_token_to_sha256_hex() {
@@ -394,37 +394,36 @@ mod tests {
     }
 
     #[test]
-    fn bearer_token_rejects_empty_token() {
+    fn bearer_token_rejects_empty_token() -> TestResult {
         for raw in ["Bearer ", "Bearer    "] {
             let mut headers = HeaderMap::new();
-            headers.insert(
-                header::AUTHORIZATION,
-                HeaderValue::from_str(raw).expect("test header value should be valid"),
-            );
+            headers.insert(header::AUTHORIZATION, HeaderValue::from_str(raw)?);
 
             assert_eq!(
                 bearer_token(&headers).map_err(|error| error.into_body().code),
                 Err("invalid_token".to_owned())
             );
         }
+        Ok(())
     }
 
     #[test]
-    fn session_cookie_header_sets_expected_security_attributes() {
-        let value = session_cookie_header("session-token", true);
-        let cookie = value.to_str().expect("session cookie should be ascii");
+    fn session_cookie_header_sets_expected_security_attributes() -> TestResult {
+        let value = session_cookie_header("session-token", true)?;
+        let cookie = value.to_str()?;
 
         assert!(cookie.contains("mini_conf_session=session-token"));
         assert!(cookie.contains("Path=/"));
         assert!(cookie.contains("HttpOnly"));
         assert!(cookie.contains("Secure"));
         assert!(cookie.contains("SameSite=Lax"));
+        Ok(())
     }
 
     #[test]
-    fn clear_session_cookie_header_expires_session_cookie() {
-        let value = clear_session_cookie_header(true);
-        let cookie = value.to_str().expect("clear cookie should be ascii");
+    fn clear_session_cookie_header_expires_session_cookie() -> TestResult {
+        let value = clear_session_cookie_header(true)?;
+        let cookie = value.to_str()?;
 
         assert!(cookie.contains("mini_conf_session="));
         assert!(cookie.contains("Path=/"));
@@ -432,30 +431,33 @@ mod tests {
         assert!(cookie.contains("Secure"));
         assert!(cookie.contains("SameSite=Lax"));
         assert!(cookie.contains("Max-Age=0"));
+        Ok(())
     }
 
     #[test]
-    fn csrf_cookie_header_sets_expected_attributes() {
-        let value = csrf_cookie_header("csrf-token", true);
-        let cookie = value.to_str().expect("csrf cookie should be ascii");
+    fn csrf_cookie_header_sets_expected_attributes() -> TestResult {
+        let value = csrf_cookie_header("csrf-token", true)?;
+        let cookie = value.to_str()?;
 
         assert!(cookie.contains("mini_conf_csrf=csrf-token"));
         assert!(cookie.contains("Path=/"));
         assert!(cookie.contains("Secure"));
         assert!(cookie.contains("SameSite=Lax"));
         assert!(!cookie.contains("HttpOnly"));
+        Ok(())
     }
 
     #[test]
-    fn clear_csrf_cookie_header_expires_cookie() {
-        let value = clear_csrf_cookie_header(true);
-        let cookie = value.to_str().expect("clear csrf cookie should be ascii");
+    fn clear_csrf_cookie_header_expires_cookie() -> TestResult {
+        let value = clear_csrf_cookie_header(true)?;
+        let cookie = value.to_str()?;
 
         assert!(cookie.contains("mini_conf_csrf="));
         assert!(cookie.contains("Path=/"));
         assert!(cookie.contains("Secure"));
         assert!(cookie.contains("SameSite=Lax"));
         assert!(cookie.contains("Max-Age=0"));
+        Ok(())
     }
 
     #[test]

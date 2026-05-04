@@ -151,11 +151,9 @@ async fn release_returns_payload_and_cache_headers() -> TestResult {
             Request::builder()
                 .uri("/api/open/releases/20260405.0001")
                 .header(header::AUTHORIZATION, format!("Bearer {TEST_TOKEN}"))
-                .body(Body::empty())
-                .expect("request should build"),
+                .body(Body::empty())?,
         )
-        .await
-        .expect("request should succeed");
+        .await?;
 
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(
@@ -205,11 +203,9 @@ async fn release_returns_not_modified_when_etag_matches() -> TestResult {
                 .uri("/api/open/releases/20260405.0001")
                 .header(header::IF_NONE_MATCH, "\"abc123\"")
                 .header(header::AUTHORIZATION, format!("Bearer {TEST_TOKEN}"))
-                .body(Body::empty())
-                .expect("request should build"),
+                .body(Body::empty())?,
         )
-        .await
-        .expect("request should succeed");
+        .await?;
 
     assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
     assert_eq!(
@@ -248,11 +244,9 @@ async fn release_returns_not_found_for_unknown_revision() -> TestResult {
             Request::builder()
                 .uri("/api/open/releases/20260405.9999")
                 .header(header::AUTHORIZATION, format!("Bearer {TEST_TOKEN}"))
-                .body(Body::empty())
-                .expect("request should build"),
+                .body(Body::empty())?,
         )
-        .await
-        .expect("request should succeed");
+        .await?;
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
     let payload: ErrorResponse = read_json(response).await?;

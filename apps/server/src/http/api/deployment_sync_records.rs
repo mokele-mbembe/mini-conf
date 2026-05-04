@@ -89,7 +89,7 @@ pub(crate) async fn list_deployment_sync_records(
     .bind(normalize_optional(query.status))
     .fetch_all(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to list deployment sync records"))?;
 
     Ok(Json(DeploymentSyncRecordListResponse {
         items: rows.iter().map(map_sync_record_row).collect(),

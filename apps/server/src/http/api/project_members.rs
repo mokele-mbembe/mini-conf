@@ -120,7 +120,7 @@ pub(crate) async fn list_project_members(
     .bind(project_id)
     .fetch_all(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to list project members"))?;
 
     Ok(Json(ProjectMemberListResponse {
         items: rows.iter().map(map_project_member_row).collect(),
@@ -188,13 +188,16 @@ pub(crate) async fn create_project_member(
     .bind(&payload.username)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to create project member"))?
     .ok_or_else(|| ApiError::not_found_with("user_not_found", "user not found"))?;
 
     let target_user_id: i64 = target.get("id");
     let target_username: String = target.get("username");
 
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to create project member"))?;
     let row = sqlx::query(
         r#"
         INSERT INTO project_members (project_id, user_id, role)
@@ -232,7 +235,9 @@ pub(crate) async fn create_project_member(
     )
     .await?;
 
-    tx.commit().await.map_err(|_| ApiError::internal())?;
+    tx.commit()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to create project member"))?;
 
     Ok((StatusCode::CREATED, Json(map_project_member_row(&row))))
 }
@@ -290,7 +295,10 @@ pub(crate) async fn update_project_member(
     let existing = load_existing_project_member(pool, project_id, member_id).await?;
     ensure_last_admin_rule(pool, project_id, &existing, payload.role).await?;
 
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to update project member"))?;
     let row = sqlx::query(
         r#"
         UPDATE project_members
@@ -312,7 +320,7 @@ pub(crate) async fn update_project_member(
     .bind(&existing.username)
     .fetch_one(&mut *tx)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to update project member"))?;
 
     write_audit_log(
         &mut *tx,
@@ -330,7 +338,9 @@ pub(crate) async fn update_project_member(
     )
     .await?;
 
-    tx.commit().await.map_err(|_| ApiError::internal())?;
+    tx.commit()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to update project member"))?;
 
     Ok(Json(map_project_member_row(&row)))
 }
@@ -381,7 +391,10 @@ pub(crate) async fn delete_project_member(
     let existing = load_existing_project_member(pool, project_id, member_id).await?;
     ensure_last_admin_rule(pool, project_id, &existing, ProjectRole::Viewer).await?;
 
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to delete project member"))?;
     sqlx::query(
         r#"
         DELETE FROM project_members
@@ -393,7 +406,7 @@ pub(crate) async fn delete_project_member(
     .bind(project_id)
     .execute(&mut *tx)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to delete project member"))?;
 
     write_audit_log(
         &mut *tx,
@@ -411,7 +424,9 @@ pub(crate) async fn delete_project_member(
     )
     .await?;
 
-    tx.commit().await.map_err(|_| ApiError::internal())?;
+    tx.commit()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to delete project member"))?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -452,7 +467,7 @@ async fn load_existing_project_member(
     .bind(member_id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to load existing project member"))?
     .ok_or_else(|| {
         ApiError::not_found_with("project_member_not_found", "project member not found")
     })?;
@@ -484,7 +499,7 @@ async fn ensure_last_admin_rule(
     .bind(project_id)
     .fetch_one(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to ensure last admin rule"))?;
 
     if admin_count <= 1 {
         return Err(ApiError::conflict(
@@ -514,7 +529,7 @@ fn map_project_member_write_error(error: SqlxError) -> ApiError {
         return ApiError::conflict("project_member_conflict", "project member already exists");
     }
 
-    ApiError::internal()
+    ApiError::internal_with(error, "failed to write project member")
 }
 
 fn required(value: Option<String>, field: &'static str) -> Result<String, ApiError> {

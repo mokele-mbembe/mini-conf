@@ -69,7 +69,10 @@ pub(crate) async fn complete_setup(
     };
 
     let auth = require_platform_admin(pool, &headers).await?;
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to complete setup"))?;
 
     let result = sqlx::query(
         r#"
@@ -90,7 +93,7 @@ pub(crate) async fn complete_setup(
     .bind(auth.user_id)
     .fetch_one(&mut *tx)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to complete setup"))?;
 
     let already_completed: bool = result.get("already_completed");
     if !already_completed {
@@ -110,7 +113,9 @@ pub(crate) async fn complete_setup(
         .await?;
     }
 
-    tx.commit().await.map_err(|_| ApiError::internal())?;
+    tx.commit()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to complete setup"))?;
 
     Ok(Json(load_setup_status(pool).await?))
 }
@@ -137,7 +142,7 @@ async fn load_setup_status(pool: &PgPool) -> Result<SetupStatusResponse, ApiErro
     )
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to load setup status"))?;
 
     let response = if let Some(row) = row {
         let setup_completed_at: Option<String> = row.get("setup_completed_at");

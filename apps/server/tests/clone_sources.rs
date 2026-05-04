@@ -388,7 +388,7 @@ async fn list_clone_sources_returns_availability_metadata() -> TestResult {
         .items
         .iter()
         .find(|i| i.deployment_key == "source-a")
-        .unwrap();
+        .ok_or_else(|| std::io::Error::other("expected source-a"))?;
     assert!(a.available_sources.draft);
     assert!(!a.available_sources.latest_release);
 
@@ -396,7 +396,7 @@ async fn list_clone_sources_returns_availability_metadata() -> TestResult {
         .items
         .iter()
         .find(|i| i.deployment_key == "source-b")
-        .unwrap();
+        .ok_or_else(|| std::io::Error::other("expected source-b"))?;
     assert!(!b.available_sources.draft);
     assert!(b.available_sources.latest_release);
 
@@ -404,7 +404,7 @@ async fn list_clone_sources_returns_availability_metadata() -> TestResult {
         .items
         .iter()
         .find(|i| i.deployment_key == "source-c")
-        .unwrap();
+        .ok_or_else(|| std::io::Error::other("expected source-c"))?;
     assert!(c.available_sources.draft);
     assert!(c.available_sources.latest_release);
 
@@ -412,7 +412,7 @@ async fn list_clone_sources_returns_availability_metadata() -> TestResult {
         .items
         .iter()
         .find(|i| i.deployment_key == "source-d")
-        .unwrap();
+        .ok_or_else(|| std::io::Error::other("expected source-d"))?;
     assert!(!d.available_sources.draft);
     assert!(!d.available_sources.latest_release);
 
@@ -512,12 +512,15 @@ async fn list_clone_sources_supports_cursor_pagination() -> TestResult {
     assert_eq!(page1.items.len(), 2);
     assert!(page1.next_cursor.is_some());
     assert_eq!(page1.next_cursor, Some(id2));
+    let next_cursor = page1
+        .next_cursor
+        .ok_or_else(|| std::io::Error::other("expected next cursor"))?;
 
     // Second page: cursor=id2
     let uri = format!(
         "{}&limit=2&cursor={}",
         clone_sources_uri(project_id, target_id, config_file_id),
-        page1.next_cursor.unwrap()
+        next_cursor
     );
     let response = app
         .oneshot(

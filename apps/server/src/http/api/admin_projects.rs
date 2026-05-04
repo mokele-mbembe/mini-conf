@@ -124,7 +124,7 @@ pub(crate) async fn list_admin_projects(
     .bind(offset)
     .fetch_all(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to list admin projects"))?;
 
     let total = rows
         .first()
@@ -245,7 +245,12 @@ pub(crate) async fn create_platform_project_with_initial_admin(
     .bind(initial_admin_user_id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| {
+        ApiError::internal_with(
+            error,
+            "failed to create platform project with initial admin",
+        )
+    })?
     .ok_or_else(|| ApiError::not_found_with("user_not_found", "user not found"))?;
 
     let initial_admin_status: String = target_user.get("status");
@@ -259,7 +264,12 @@ pub(crate) async fn create_platform_project_with_initial_admin(
     let initial_admin_user_id: i64 = target_user.get("id");
     let initial_admin_username: String = target_user.get("username");
 
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let mut tx = pool.begin().await.map_err(|error| {
+        ApiError::internal_with(
+            error,
+            "failed to create platform project with initial admin",
+        )
+    })?;
     let project_row = sqlx::query(
         r#"
         INSERT INTO projects (code, name, description, status)
@@ -286,7 +296,12 @@ pub(crate) async fn create_platform_project_with_initial_admin(
     .bind(initial_admin_user_id)
     .execute(&mut *tx)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| {
+        ApiError::internal_with(
+            error,
+            "failed to create platform project with initial admin",
+        )
+    })?;
 
     write_audit_log(
         &mut *tx,
@@ -322,7 +337,12 @@ pub(crate) async fn create_platform_project_with_initial_admin(
     )
     .await?;
 
-    tx.commit().await.map_err(|_| ApiError::internal())?;
+    tx.commit().await.map_err(|error| {
+        ApiError::internal_with(
+            error,
+            "failed to create platform project with initial admin",
+        )
+    })?;
 
     Ok(CreatePlatformProjectResponse {
         project: PlatformProject {
@@ -375,7 +395,7 @@ fn map_platform_project_write_error(error: SqlxError) -> ApiError {
         return ApiError::conflict("project_code_conflict", "project code already exists");
     }
 
-    ApiError::internal()
+    ApiError::internal_with(error, "failed to write platform project")
 }
 
 fn validate_optional_project_status(value: Option<String>) -> Result<Option<String>, ApiError> {

@@ -113,7 +113,7 @@ pub(crate) async fn list_projects(
     .bind(normalize_optional(query.status))
     .fetch_all(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to list projects"))?;
 
     let items = rows.iter().map(map_project_row).collect();
 
@@ -166,7 +166,7 @@ pub(crate) async fn get_project(
     .bind(auth.user_id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to get project"))?
     .ok_or_else(|| ApiError::not_found_with("project_not_found", "project not found"))?;
 
     Ok(Json(map_project_row(&row)))
@@ -221,7 +221,10 @@ pub(crate) async fn update_project(
     )
     .await?;
 
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to update project"))?;
     let row = sqlx::query(
         r#"
         UPDATE projects
@@ -261,7 +264,9 @@ pub(crate) async fn update_project(
     )
     .await?;
 
-    tx.commit().await.map_err(|_| ApiError::internal())?;
+    tx.commit()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to update project"))?;
 
     Ok(Json(summary))
 }
@@ -378,7 +383,7 @@ pub(crate) async fn delete_project_by_id(
     .bind(project_id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to delete project by id"))?
     .ok_or_else(|| ApiError::not_found_with("project_not_found", "project not found"))?;
 
     let reference_row = sqlx::query(
@@ -397,7 +402,7 @@ pub(crate) async fn delete_project_by_id(
     .bind(project_id)
     .fetch_one(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to delete project by id"))?;
 
     let reference_counts = [
         reference_row.get::<i64, _>("config_file_count"),
@@ -419,13 +424,16 @@ pub(crate) async fn delete_project_by_id(
 
     let project_code: String = project_row.get("code");
     let project_status: String = project_row.get("status");
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to delete project by id"))?;
 
     sqlx::query("UPDATE audit_logs SET project_id = NULL WHERE project_id = $1")
         .bind(project_id)
         .execute(&mut *tx)
         .await
-        .map_err(|_| ApiError::internal())?;
+        .map_err(|error| ApiError::internal_with(error, "failed to delete project by id"))?;
 
     write_audit_log(
         &mut *tx,
@@ -448,13 +456,13 @@ pub(crate) async fn delete_project_by_id(
         .bind(project_id)
         .execute(&mut *tx)
         .await
-        .map_err(|_| ApiError::internal())?;
+        .map_err(|error| ApiError::internal_with(error, "failed to delete project by id"))?;
 
     let delete_result = sqlx::query("DELETE FROM projects WHERE id = $1")
         .bind(project_id)
         .execute(&mut *tx)
         .await
-        .map_err(|_| ApiError::internal())?;
+        .map_err(|error| ApiError::internal_with(error, "failed to delete project by id"))?;
     if delete_result.rows_affected() == 0 {
         return Err(ApiError::not_found_with(
             "project_not_found",
@@ -462,7 +470,9 @@ pub(crate) async fn delete_project_by_id(
         ));
     }
 
-    tx.commit().await.map_err(|_| ApiError::internal())?;
+    tx.commit()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to delete project by id"))?;
 
     Ok(())
 }
@@ -510,7 +520,7 @@ fn map_project_write_error(error: SqlxError) -> ApiError {
         return ApiError::conflict("project_code_conflict", "project code already exists");
     }
 
-    ApiError::internal()
+    ApiError::internal_with(error, "failed to write project")
 }
 
 fn required(value: Option<String>, field: &'static str) -> Result<String, ApiError> {
@@ -569,9 +579,12 @@ fn validate_status(value: Option<String>) -> Result<String, ApiError> {
 #[cfg(test)]
 mod tests {
     use super::{CreateProjectRequest, UpdateProjectRequest};
+    use std::io;
+
+    type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
     #[test]
-    fn create_project_request_validation_trims_required_fields() {
+    fn create_project_request_validation_trims_required_fields() -> TestResult {
         let payload = CreateProjectRequest {
             code: Some(" coffee-main ".to_owned()),
             name: Some(" Coffee Main ".to_owned()),
@@ -579,19 +592,19 @@ mod tests {
             initial_admin_user_id: Some(42),
         };
 
-        let validated = match payload.validate() {
-            Ok(validated) => validated,
-            Err(error) => panic!("request should validate: {:?}", error.into_body()),
-        };
+        let validated = payload
+            .validate()
+            .map_err(|error| io::Error::other(format!("{:?}", error.into_body())))?;
 
         assert_eq!(validated.code, "coffee-main");
         assert_eq!(validated.name, "Coffee Main");
         assert_eq!(validated.description.as_deref(), Some("Retail"));
         assert_eq!(validated.initial_admin_user_id, 42);
+        Ok(())
     }
 
     #[test]
-    fn update_project_request_validation_rejects_unknown_status() {
+    fn update_project_request_validation_rejects_unknown_status() -> TestResult {
         let payload = UpdateProjectRequest {
             code: Some("coffee-main".to_owned()),
             name: Some("Coffee Main".to_owned()),
@@ -600,12 +613,15 @@ mod tests {
         };
 
         let error = match payload.validate() {
-            Ok(_) => panic!("unknown project status should be rejected"),
+            Ok(_) => {
+                return Err(io::Error::other("unknown project status should be rejected").into());
+            }
             Err(error) => error,
         };
 
         let body = error.into_body();
         assert_eq!(body.code, "invalid_request");
         assert_eq!(body.message, "invalid project status");
+        Ok(())
     }
 }

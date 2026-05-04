@@ -258,7 +258,7 @@ pub(crate) async fn list_deployment_instances(
     .bind(visibility_filter.as_str())
     .fetch_one(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to list deployment instances"))?;
 
     let rows = sqlx::query(
         r#"
@@ -322,7 +322,7 @@ pub(crate) async fn list_deployment_instances(
     .bind(offset)
     .fetch_all(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to list deployment instances"))?;
 
     Ok(Json(DeploymentInstanceListResponse {
         items: rows.into_iter().map(map_deployment_row).collect(),
@@ -386,7 +386,10 @@ pub(crate) async fn create_deployment_instance(
         ));
     }
 
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to create deployment instance"))?;
     let row = sqlx::query(
         r#"
         INSERT INTO deployment_instances (
@@ -451,7 +454,9 @@ pub(crate) async fn create_deployment_instance(
         },
     )
     .await?;
-    tx.commit().await.map_err(|_| ApiError::internal())?;
+    tx.commit()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to create deployment instance"))?;
 
     Ok((StatusCode::CREATED, Json(summary)))
 }
@@ -526,7 +531,7 @@ pub(crate) async fn get_deployment_instance(
     .bind(auth.user_id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to get deployment instance"))?
     .ok_or_else(|| {
         ApiError::not_found_with(
             "deployment_instance_not_found",
@@ -597,7 +602,10 @@ pub(crate) async fn update_deployment_instance(
         ));
     }
 
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to update deployment instance"))?;
     let row = sqlx::query(
         r#"
         UPDATE deployment_instances
@@ -665,7 +673,9 @@ pub(crate) async fn update_deployment_instance(
         },
     )
     .await?;
-    tx.commit().await.map_err(|_| ApiError::internal())?;
+    tx.commit()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to update deployment instance"))?;
 
     Ok(Json(summary))
 }
@@ -739,7 +749,10 @@ pub(crate) async fn clone_deployment_instance(
         ));
     }
 
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to clone deployment instance"))?;
     let environment =
         load_project_environment_for_assignment(pool, template.project_id, payload.environment_id)
             .await?;
@@ -817,7 +830,9 @@ pub(crate) async fn clone_deployment_instance(
     )
     .await?;
 
-    tx.commit().await.map_err(|_| ApiError::internal())?;
+    tx.commit()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to clone deployment instance"))?;
 
     Ok((StatusCode::CREATED, Json(cloned)))
 }
@@ -901,7 +916,7 @@ pub(crate) async fn preview_deployment_bundle(
     .bind(id)
     .fetch_all(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to preview deployment bundle"))?;
 
     let mut items = Vec::with_capacity(rows.len());
     let mut bundle_items = Vec::new();
@@ -959,14 +974,14 @@ pub(crate) async fn preview_deployment_bundle(
             };
 
         if let (Some(content), Some(revision), Some(content_hash)) =
-            (content.clone(), revision.clone(), content_hash.clone())
+            (&content, &revision, &content_hash)
         {
             bundle_items.push(ConfigBundleItem {
                 config: code.clone(),
-                revision,
-                content_hash,
+                revision: revision.clone(),
+                content_hash: content_hash.clone(),
                 format: bundle_format,
-                content,
+                content: content.clone(),
             });
         }
 
@@ -1137,7 +1152,9 @@ pub(crate) async fn activate_deployment_instance(
         ));
     }
 
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let mut tx = pool.begin().await.map_err(|error| {
+        ApiError::internal_with(error, "failed to activate deployment instance")
+    })?;
     sqlx::query(
         r#"
         UPDATE deployment_instances
@@ -1148,7 +1165,7 @@ pub(crate) async fn activate_deployment_instance(
     .bind(id)
     .execute(&mut *tx)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to activate deployment instance"))?;
 
     let token = generate_deployment_token();
     let token_hash = hash_bearer_token(&token);
@@ -1175,7 +1192,9 @@ pub(crate) async fn activate_deployment_instance(
         },
     )
     .await?;
-    tx.commit().await.map_err(|_| ApiError::internal())?;
+    tx.commit().await.map_err(|error| {
+        ApiError::internal_with(error, "failed to activate deployment instance")
+    })?;
 
     Ok(Json(response))
 }
@@ -1236,7 +1255,9 @@ pub(crate) async fn deactivate_deployment_instance(
         ));
     }
 
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let mut tx = pool.begin().await.map_err(|error| {
+        ApiError::internal_with(error, "failed to deactivate deployment instance")
+    })?;
     sqlx::query(
         r#"
         UPDATE deployment_instances
@@ -1247,7 +1268,7 @@ pub(crate) async fn deactivate_deployment_instance(
     .bind(id)
     .execute(&mut *tx)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to deactivate deployment instance"))?;
     sqlx::query(
         r#"
         UPDATE deployment_credentials
@@ -1259,7 +1280,7 @@ pub(crate) async fn deactivate_deployment_instance(
     .bind(id)
     .execute(&mut *tx)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to deactivate deployment instance"))?;
     write_audit_log(
         &mut *tx,
         AuditLogEntry {
@@ -1274,7 +1295,9 @@ pub(crate) async fn deactivate_deployment_instance(
         },
     )
     .await?;
-    tx.commit().await.map_err(|_| ApiError::internal())?;
+    tx.commit().await.map_err(|error| {
+        ApiError::internal_with(error, "failed to deactivate deployment instance")
+    })?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -1347,7 +1370,10 @@ pub(crate) async fn archive_deployment_instance(
         ));
     }
 
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to archive deployment instance"))?;
     let row = sqlx::query(
         r#"
         UPDATE deployment_instances di
@@ -1391,7 +1417,7 @@ pub(crate) async fn archive_deployment_instance(
     .bind(payload.reason)
     .fetch_optional(&mut *tx)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to archive deployment instance"))?
     .ok_or_else(|| {
         ApiError::conflict(
             "deployment_instance_archive_conflict",
@@ -1416,7 +1442,9 @@ pub(crate) async fn archive_deployment_instance(
         },
     )
     .await?;
-    tx.commit().await.map_err(|_| ApiError::internal())?;
+    tx.commit()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to archive deployment instance"))?;
 
     Ok(Json(summary))
 }
@@ -1476,7 +1504,10 @@ pub(crate) async fn restore_deployment_instance(
         ));
     }
 
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to restore deployment instance"))?;
     let row = sqlx::query(
         r#"
         UPDATE deployment_instances di
@@ -1518,7 +1549,7 @@ pub(crate) async fn restore_deployment_instance(
     .bind(id)
     .fetch_optional(&mut *tx)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to restore deployment instance"))?
     .ok_or_else(|| {
         ApiError::conflict(
             "deployment_instance_restore_conflict",
@@ -1542,7 +1573,9 @@ pub(crate) async fn restore_deployment_instance(
         },
     )
     .await?;
-    tx.commit().await.map_err(|_| ApiError::internal())?;
+    tx.commit()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to restore deployment instance"))?;
 
     Ok(Json(summary))
 }
@@ -1610,7 +1643,10 @@ pub(crate) async fn delete_deployment_instance(
         ));
     }
 
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to delete deployment instance"))?;
     let tombstone_result = sqlx::query(
         r#"
         UPDATE deployment_instances
@@ -1627,10 +1663,10 @@ pub(crate) async fn delete_deployment_instance(
     )
     .bind(id)
     .bind(auth.user_id)
-    .bind(delete_reason.clone())
+    .bind(delete_reason.as_deref())
     .execute(&mut *tx)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to delete deployment instance"))?;
     if tombstone_result.rows_affected() == 0 {
         return Err(ApiError::conflict(
             "deployment_instance_delete_conflict",
@@ -1648,7 +1684,7 @@ pub(crate) async fn delete_deployment_instance(
     .bind(id)
     .execute(&mut *tx)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to delete deployment instance"))?;
 
     sqlx::query(
         r#"
@@ -1659,7 +1695,7 @@ pub(crate) async fn delete_deployment_instance(
     .bind(id)
     .execute(&mut *tx)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to delete deployment instance"))?;
 
     sqlx::query(
         r#"
@@ -1672,7 +1708,7 @@ pub(crate) async fn delete_deployment_instance(
     .bind(id)
     .execute(&mut *tx)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to delete deployment instance"))?;
 
     write_audit_log(
         &mut *tx,
@@ -1690,7 +1726,9 @@ pub(crate) async fn delete_deployment_instance(
         },
     )
     .await?;
-    tx.commit().await.map_err(|_| ApiError::internal())?;
+    tx.commit()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to delete deployment instance"))?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -1838,7 +1876,7 @@ fn map_deployment_write_error(error: SqlxError) -> ApiError {
         }
     }
 
-    ApiError::internal()
+    ApiError::internal_with(error, "failed to write deployment instance")
 }
 
 async fn load_project_environment_for_assignment(
@@ -1859,7 +1897,9 @@ async fn load_project_environment_for_assignment(
     .bind(environment_id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| {
+        ApiError::internal_with(error, "failed to load project environment for assignment")
+    })?
     .ok_or_else(|| {
         ApiError::not_found_with(
             "project_environment_not_found",
@@ -1889,7 +1929,7 @@ async fn load_template_context(
     .bind(id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to load template context"))?
     .ok_or_else(|| {
         ApiError::not_found_with(
             "deployment_instance_not_found",
@@ -1926,7 +1966,7 @@ async fn load_deployment_context(
     .bind(id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to load deployment context"))?
     .ok_or_else(|| {
         ApiError::not_found_with(
             "deployment_instance_not_found",
@@ -1972,7 +2012,9 @@ async fn upsert_default_deployment_credential(
     .bind(token_hash)
     .fetch_one(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| {
+        ApiError::internal_with(error, "failed to upsert default deployment credential")
+    })?;
 
     Ok(row.get("credential_name"))
 }
@@ -2005,7 +2047,12 @@ async fn upsert_default_deployment_credential_in_tx(
     .bind(token_hash)
     .fetch_one(&mut **tx)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| {
+        ApiError::internal_with(
+            error,
+            "failed to upsert default deployment credential in tx",
+        )
+    })?;
 
     Ok(row.get("credential_name"))
 }
@@ -2034,7 +2081,7 @@ async fn load_preview_context(
     .bind(deployment_id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to load preview context"))?
     .ok_or_else(|| {
         ApiError::not_found_with(
             "deployment_instance_not_found",
@@ -2087,7 +2134,7 @@ async fn clone_drafts_from_template(
     .bind(editor_user_id)
     .execute(&mut **tx)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to clone drafts from template"))?;
 
     Ok(())
 }

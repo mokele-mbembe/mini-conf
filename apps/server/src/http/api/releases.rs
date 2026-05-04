@@ -133,7 +133,7 @@ pub(crate) async fn list_releases(
     .bind(query.config_file_id)
     .fetch_all(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to list releases"))?;
 
     Ok(Json(ReleaseListResponse {
         items: rows.iter().map(map_release_row).collect(),
@@ -497,7 +497,7 @@ async fn load_publish_context(
     .bind(project_id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to load publish context"))?
     .ok_or_else(|| ApiError::not_found_with("project_not_found", "project not found"))?;
 
     let deployment_row = sqlx::query(
@@ -515,7 +515,7 @@ async fn load_publish_context(
     .bind(deployment_instance_id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to load publish context"))?
     .ok_or_else(|| {
         ApiError::not_found_with(
             "deployment_instance_not_found",
@@ -542,7 +542,7 @@ async fn load_publish_context(
     .bind(config_file_id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to load publish context"))?
     .ok_or_else(|| ApiError::not_found_with("config_file_not_found", "config file not found"))?;
 
     if row.get::<i64, _>("project_id") != project_id {
@@ -592,7 +592,7 @@ async fn ensure_required_configs_present(
     .bind(deployment_instance_id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to ensure required configs present"))?;
 
     if missing_required.is_some() {
         return Err(ApiError::conflict(
@@ -622,7 +622,7 @@ async fn load_draft_for_publish(
     .bind(config_file_id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to load draft for publish"))?
     .ok_or_else(|| ApiError::not_found_with("draft_not_found", "draft not found"))?;
 
     Ok(DraftForPublish {
@@ -660,7 +660,7 @@ async fn load_release_by_id(pool: &sqlx::PgPool, id: i64) -> Result<ReleaseRecor
     .bind(id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to load release by id"))?
     .ok_or_else(|| ApiError::not_found_with("release_not_found", "release not found"))?;
 
     Ok(map_release_record(&row))
@@ -701,7 +701,7 @@ async fn find_latest_release(
     .bind(config_file_id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to find latest release"))?;
 
     Ok(row.map(|row| map_release_record(&row)))
 }
@@ -747,7 +747,7 @@ async fn find_previous_release_before_id(
     .bind(release_id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to find previous release before id"))?;
 
     Ok(row.map(|row| map_release_record(&row)))
 }
@@ -764,7 +764,7 @@ async fn next_revision(pool: &sqlx::PgPool) -> Result<String, ApiError> {
     )
     .fetch_one(pool)
     .await
-    .map_err(|_| ApiError::internal())
+    .map_err(|error| ApiError::internal_with(error, "failed to generate next revision"))
 }
 
 fn map_release_record(row: &sqlx::postgres::PgRow) -> ReleaseRecord {

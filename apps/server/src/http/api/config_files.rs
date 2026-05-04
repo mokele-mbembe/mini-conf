@@ -146,7 +146,7 @@ pub(crate) async fn list_config_files(
     .bind(normalize_optional(query.status))
     .fetch_all(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to list config files"))?;
 
     Ok(Json(ConfigFileListResponse {
         items: rows.into_iter().map(map_config_file_row).collect(),
@@ -198,7 +198,10 @@ pub(crate) async fn create_config_file(
     )
     .await?;
 
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to create config file"))?;
     let row = sqlx::query(
         r#"
         INSERT INTO config_files (
@@ -255,7 +258,9 @@ pub(crate) async fn create_config_file(
     )
     .await?;
 
-    tx.commit().await.map_err(|_| ApiError::internal())?;
+    tx.commit()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to create config file"))?;
 
     Ok((StatusCode::CREATED, Json(summary)))
 }
@@ -317,7 +322,7 @@ pub(crate) async fn get_config_file(
     .bind(auth.user_id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to get config file"))?
     .ok_or_else(|| ApiError::not_found_with("config_file_not_found", "config file not found"))?;
 
     Ok(Json(map_config_file_row(row)))
@@ -373,7 +378,7 @@ pub(crate) async fn update_config_file(
     .bind(id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to update config file"))?
     .ok_or_else(|| ApiError::not_found_with("config_file_not_found", "config file not found"))?;
 
     require_project_role(
@@ -397,7 +402,10 @@ pub(crate) async fn update_config_file(
         .await?;
     }
 
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to update config file"))?;
     let row = sqlx::query(
         r#"
         UPDATE config_files
@@ -458,7 +466,9 @@ pub(crate) async fn update_config_file(
     )
     .await?;
 
-    tx.commit().await.map_err(|_| ApiError::internal())?;
+    tx.commit()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to update config file"))?;
 
     Ok(Json(summary))
 }
@@ -507,7 +517,7 @@ pub(crate) async fn delete_config_file(
     .bind(id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to delete config file"))?
     .ok_or_else(|| ApiError::not_found_with("config_file_not_found", "config file not found"))?;
 
     let project_id: i64 = row.get("project_id");
@@ -534,7 +544,7 @@ pub(crate) async fn delete_config_file(
     .bind(id)
     .fetch_one(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to delete config file"))?;
 
     let reference_counts = [
         reference_row.get::<i64, _>("draft_count"),
@@ -553,12 +563,15 @@ pub(crate) async fn delete_config_file(
 
     let config_file_code: String = row.get("code");
     let config_file_status: String = row.get("status");
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to delete config file"))?;
     let delete_result = sqlx::query("DELETE FROM config_files WHERE id = $1")
         .bind(id)
         .execute(&mut *tx)
         .await
-        .map_err(|_| ApiError::internal())?;
+        .map_err(|error| ApiError::internal_with(error, "failed to delete config file"))?;
     if delete_result.rows_affected() == 0 {
         return Err(ApiError::not_found_with(
             "config_file_not_found",
@@ -583,7 +596,9 @@ pub(crate) async fn delete_config_file(
     )
     .await?;
 
-    tx.commit().await.map_err(|_| ApiError::internal())?;
+    tx.commit()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to delete config file"))?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -652,7 +667,7 @@ fn map_config_file_write_error(error: SqlxError) -> ApiError {
         }
     }
 
-    ApiError::internal()
+    ApiError::internal_with(error, "failed to write config file")
 }
 
 fn required(value: Option<String>, field: &'static str) -> Result<String, ApiError> {
@@ -761,9 +776,12 @@ fn invalid_body_message(field: &'static str) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::{CreateConfigFileRequest, UpdateConfigFileRequest};
+    use std::io;
+
+    type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
     #[test]
-    fn create_config_file_request_validation_defaults_and_trims() {
+    fn create_config_file_request_validation_defaults_and_trims() -> TestResult {
         let payload = CreateConfigFileRequest {
             project_id: Some(7),
             code: Some(" main ".to_owned()),
@@ -779,10 +797,9 @@ mod tests {
             description: Some(" Primary ".to_owned()),
         };
 
-        let validated = match payload.validate() {
-            Ok(validated) => validated,
-            Err(error) => panic!("request should validate: {:?}", error.into_body()),
-        };
+        let validated = payload
+            .validate()
+            .map_err(|error| io::Error::other(format!("{:?}", error.into_body())))?;
 
         assert_eq!(validated.project_id, 7);
         assert_eq!(validated.code, "main");
@@ -795,10 +812,11 @@ mod tests {
             Some(&["$.wifi.password".to_owned()][..])
         );
         assert_eq!(validated.description.as_deref(), Some("Primary"));
+        Ok(())
     }
 
     #[test]
-    fn update_config_file_request_validation_rejects_unknown_status() {
+    fn update_config_file_request_validation_rejects_unknown_status() -> TestResult {
         let payload = UpdateConfigFileRequest {
             project_id: Some(7),
             code: Some("main".to_owned()),
@@ -812,17 +830,22 @@ mod tests {
         };
 
         let error = match payload.validate() {
-            Ok(_) => panic!("unknown config file status should be rejected"),
+            Ok(_) => {
+                return Err(
+                    io::Error::other("unknown config file status should be rejected").into(),
+                );
+            }
             Err(error) => error,
         };
 
         let body = error.into_body();
         assert_eq!(body.code, "invalid_request");
         assert_eq!(body.message, "invalid config file status");
+        Ok(())
     }
 
     #[test]
-    fn create_config_file_request_validation_rejects_unknown_sensitivity() {
+    fn create_config_file_request_validation_rejects_unknown_sensitivity() -> TestResult {
         let payload = CreateConfigFileRequest {
             project_id: Some(7),
             code: Some("main".to_owned()),
@@ -835,12 +858,17 @@ mod tests {
         };
 
         let error = match payload.validate() {
-            Ok(_) => panic!("unknown config file sensitivity should be rejected"),
+            Ok(_) => {
+                return Err(
+                    io::Error::other("unknown config file sensitivity should be rejected").into(),
+                );
+            }
             Err(error) => error,
         };
 
         let body = error.into_body();
         assert_eq!(body.code, "invalid_request");
         assert_eq!(body.message, "invalid config file sensitivity");
+        Ok(())
     }
 }

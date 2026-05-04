@@ -91,7 +91,7 @@ pub(crate) async fn list_audit_logs(
         .bind(normalize_optional(query.resource_type))
         .fetch_all(pool)
         .await
-        .map_err(|_| ApiError::internal())?
+        .map_err(|error| ApiError::internal_with(error, "failed to list audit logs"))?
     } else {
         sqlx::query(
             r#"
@@ -128,7 +128,7 @@ pub(crate) async fn list_audit_logs(
               .bind(auth.is_platform_admin)
         .fetch_all(pool)
         .await
-        .map_err(|_| ApiError::internal())?
+        .map_err(|error| ApiError::internal_with(error, "failed to list audit logs"))?
     };
 
     Ok(Json(AuditLogListResponse {

@@ -64,18 +64,18 @@ async fn read_json<T: serde::de::DeserializeOwned>(
     Ok(serde_json::from_slice(&body)?)
 }
 
-fn session_cookie(response: &axum::response::Response) -> String {
+fn session_cookie(response: &axum::response::Response) -> TestResult<String> {
     response
         .headers()
         .get(header::SET_COOKIE)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.split(';').next())
-        .expect("set-cookie should contain a session cookie")
-        .to_owned()
+        .map(str::to_owned)
+        .ok_or_else(|| std::io::Error::other("set-cookie should contain a session cookie").into())
 }
 
 fn auth_cookie_parts(response: &axum::response::Response) -> TestResult<(String, String, String)> {
-    let session = session_cookie(response);
+    let session = session_cookie(response)?;
     let csrf_cookie = cookie_value(response, "mini_conf_csrf")?;
     let csrf_token = csrf_cookie
         .strip_prefix("mini_conf_csrf=")
@@ -216,7 +216,7 @@ async fn me_returns_current_user_from_session_cookie() -> TestResult {
     };
 
     let login_response = login_response(&app, "admin", "admin123456").await?;
-    let cookie = session_cookie(&login_response);
+    let cookie = session_cookie(&login_response)?;
 
     let response = app
         .oneshot(
@@ -371,7 +371,7 @@ async fn logout_requires_matching_csrf_token_when_cookie_is_present() -> TestRes
     };
 
     let login_response = login_response(&app, "admin", "admin123456").await?;
-    let session = session_cookie(&login_response);
+    let session = session_cookie(&login_response)?;
     let csrf = cookie_value(&login_response, "mini_conf_csrf")?;
     let cookie_header = format!("{session}; {csrf}");
 

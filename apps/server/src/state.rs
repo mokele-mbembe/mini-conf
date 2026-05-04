@@ -21,8 +21,8 @@ impl AppState {
             identity,
             config,
             db_pool,
-            login_throttle: LoginThrottle::new(),
-            open_api_rate_limiter: OpenApiRateLimiter::new(),
+            login_throttle: Arc::new(LoginThrottle::new()),
+            open_api_rate_limiter: Arc::new(OpenApiRateLimiter::new()),
         }
     }
 
@@ -38,12 +38,12 @@ impl AppState {
         self.db_pool.as_ref()
     }
 
-    pub fn login_throttle(&self) -> &Arc<LoginThrottle> {
-        &self.login_throttle
+    pub fn login_throttle(&self) -> &LoginThrottle {
+        self.login_throttle.as_ref()
     }
 
-    pub fn open_api_rate_limiter(&self) -> &Arc<OpenApiRateLimiter> {
-        &self.open_api_rate_limiter
+    pub fn open_api_rate_limiter(&self) -> &OpenApiRateLimiter {
+        self.open_api_rate_limiter.as_ref()
     }
 }
 

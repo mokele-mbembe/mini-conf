@@ -132,7 +132,7 @@ alpha-full-local:
   else echo "Skipping alpha full: Cargo workspace not initialized"; fi
 
 coverage:
-  @if [ -f Cargo.toml ]; then cargo llvm-cov --workspace --ignore-filename-regex 'apps/server/src/(bin/.*|main.rs)$' --lcov --output-path target/lcov.info; else echo "Skipping backend coverage: Cargo.toml not found"; fi
+  @if [ -f Cargo.toml ]; then cargo llvm-cov --workspace --no-cfg-coverage --ignore-filename-regex 'apps/server/src/(bin/.*|main.rs)$' --lcov --output-path target/lcov.info; else echo "Skipping backend coverage: Cargo.toml not found"; fi
 
 coverage-check:
   @if [ ! -f Cargo.toml ]; then \
@@ -140,7 +140,7 @@ coverage-check:
   elif ! cargo llvm-cov --version >/dev/null 2>&1; then \
     echo "Skipping backend coverage check: cargo-llvm-cov is not installed"; \
   else \
-    cargo llvm-cov --workspace --ignore-filename-regex 'apps/server/src/(bin/.*|main.rs)$' --summary-only --fail-under-lines "${COVERAGE_MIN_LINES:-36}"; \
+    cargo llvm-cov --workspace --no-cfg-coverage --ignore-filename-regex 'apps/server/src/(bin/.*|main.rs)$' --summary-only --fail-under-lines "${COVERAGE_MIN_LINES:-36}"; \
   fi
 
 sqlx-check:
@@ -276,7 +276,16 @@ ci-local-db:
   else echo "Skipping local DB CI: Cargo workspace not initialized"; fi
 
 ci-local-full:
-  @just ci-local
+  @if [ -f Cargo.toml ]; then \
+    source scripts/local-db-env.sh; \
+    if [ -z "${TEST_DATABASE_URL:-}" ]; then \
+      echo "TEST_DATABASE_URL is required; local full CI needs database-backed coverage" >&2; \
+      exit 1; \
+    fi; \
+    just ci-local; \
+  else \
+    just ci-local; \
+  fi
   @just ci-local-db
   @just test-e2e-local
 

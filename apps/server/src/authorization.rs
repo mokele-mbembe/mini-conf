@@ -124,7 +124,7 @@ pub async fn load_project_role(
     .bind(user_id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to load project role"))?;
 
     row.map(|row| ProjectRole::parse(row.get::<String, _>("role").as_str()))
         .transpose()

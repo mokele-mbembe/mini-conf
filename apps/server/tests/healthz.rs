@@ -9,6 +9,8 @@ use server::error::ErrorResponse;
 use server::state::AppState;
 use tower::util::ServiceExt;
 
+type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
+
 fn test_app() -> axum::Router {
     server::app(AppState::new(
         AppIdentity::new("mini-conf-server", "integration-test"),
@@ -17,27 +19,21 @@ fn test_app() -> axum::Router {
     ))
 }
 
-async fn read_json<T: serde::de::DeserializeOwned>(response: axum::response::Response) -> T {
-    let body = to_bytes(response.into_body(), usize::MAX)
-        .await
-        .expect("body should be readable");
+async fn read_json<T: serde::de::DeserializeOwned>(
+    response: axum::response::Response,
+) -> TestResult<T> {
+    let body = to_bytes(response.into_body(), usize::MAX).await?;
 
-    serde_json::from_slice(&body).expect("payload should be valid json")
+    Ok(serde_json::from_slice(&body)?)
 }
 
 #[tokio::test]
-async fn healthz_endpoint_returns_json_payload() {
+async fn healthz_endpoint_returns_json_payload() -> TestResult {
     let app = test_app();
 
     let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/api/healthz")
-                .body(Body::empty())
-                .expect("request should build"),
-        )
-        .await
-        .expect("request should succeed");
+        .oneshot(Request::builder().uri("/api/healthz").body(Body::empty())?)
+        .await?;
 
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(
@@ -45,7 +41,7 @@ async fn healthz_endpoint_returns_json_payload() {
         Some(&header::HeaderValue::from_static("application/json"))
     );
 
-    let payload: HealthzResponse = read_json(response).await;
+    let payload: HealthzResponse = read_json(response).await?;
 
     assert_eq!(
         payload,
@@ -55,21 +51,16 @@ async fn healthz_endpoint_returns_json_payload() {
             version: "integration-test".to_owned(),
         }
     );
+    Ok(())
 }
 
 #[tokio::test]
-async fn unknown_api_route_returns_json_not_found_payload() {
+async fn unknown_api_route_returns_json_not_found_payload() -> TestResult {
     let app = test_app();
 
     let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/api/unknown")
-                .body(Body::empty())
-                .expect("request should build"),
-        )
-        .await
-        .expect("request should succeed");
+        .oneshot(Request::builder().uri("/api/unknown").body(Body::empty())?)
+        .await?;
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
     assert_eq!(
@@ -77,7 +68,7 @@ async fn unknown_api_route_returns_json_not_found_payload() {
         Some(&header::HeaderValue::from_static("application/json"))
     );
 
-    let payload: ErrorResponse = read_json(response).await;
+    let payload: ErrorResponse = read_json(response).await?;
 
     assert_eq!(
         payload,
@@ -86,10 +77,11 @@ async fn unknown_api_route_returns_json_not_found_payload() {
             message: "Route not found".to_owned(),
         }
     );
+    Ok(())
 }
 
 #[tokio::test]
-async fn head_healthz_returns_success_without_response_body() {
+async fn head_healthz_returns_success_without_response_body() -> TestResult {
     let app = test_app();
 
     let response = app
@@ -97,11 +89,9 @@ async fn head_healthz_returns_success_without_response_body() {
             Request::builder()
                 .method("HEAD")
                 .uri("/api/healthz")
-                .body(Body::empty())
-                .expect("request should build"),
+                .body(Body::empty())?,
         )
-        .await
-        .expect("request should succeed");
+        .await?;
 
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(
@@ -109,14 +99,13 @@ async fn head_healthz_returns_success_without_response_body() {
         Some(&header::HeaderValue::from_static("application/json"))
     );
 
-    let body = to_bytes(response.into_body(), usize::MAX)
-        .await
-        .expect("body should be readable");
+    let body = to_bytes(response.into_body(), usize::MAX).await?;
     assert!(body.is_empty(), "HEAD responses should not include a body");
+    Ok(())
 }
 
 #[tokio::test]
-async fn healthz_accepts_explicit_json_accept_header() {
+async fn healthz_accepts_explicit_json_accept_header() -> TestResult {
     let app = test_app();
 
     let response = app
@@ -124,14 +113,13 @@ async fn healthz_accepts_explicit_json_accept_header() {
             Request::builder()
                 .uri("/api/healthz")
                 .header(header::ACCEPT, "application/json")
-                .body(Body::empty())
-                .expect("request should build"),
+                .body(Body::empty())?,
         )
-        .await
-        .expect("request should succeed");
+        .await?;
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let payload: HealthzResponse = read_json(response).await;
+    let payload: HealthzResponse = read_json(response).await?;
     assert_eq!(payload.status, "ok");
+    Ok(())
 }

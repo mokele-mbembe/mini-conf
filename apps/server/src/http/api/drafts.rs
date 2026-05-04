@@ -39,7 +39,22 @@ struct ValidatedUpdateDraftRequest {
 #[derive(Debug)]
 struct ValidatedCloneDraftRequest {
     source_deployment_instance_id: i64,
-    source_kind: String,
+    source_kind: CloneSourceKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CloneSourceKind {
+    Draft,
+    LatestRelease,
+}
+
+impl CloneSourceKind {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Draft => "draft",
+            Self::LatestRelease => "latest_release",
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -132,7 +147,7 @@ pub(crate) async fn get_draft(
     .bind(config_file_id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to get draft"))?
     .ok_or_else(|| ApiError::not_found_with("draft_not_found", "draft not found"))?;
 
     Ok(Json(map_draft_row(row)))
@@ -182,7 +197,10 @@ pub(crate) async fn delete_draft(
     .await?;
     ensure_deployment_writable_for_draft(&context)?;
 
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to delete draft"))?;
 
     let deleted = sqlx::query_scalar::<_, i64>(
         r#"
@@ -196,7 +214,7 @@ pub(crate) async fn delete_draft(
     .bind(config_file_id)
     .fetch_optional(&mut *tx)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to delete draft"))?;
 
     if deleted.is_none() {
         return Err(ApiError::not_found_with(
@@ -220,7 +238,9 @@ pub(crate) async fn delete_draft(
         },
     )
     .await?;
-    tx.commit().await.map_err(|_| ApiError::internal())?;
+    tx.commit()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to delete draft"))?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -280,7 +300,10 @@ pub(crate) async fn put_draft(
     ensure_deployment_writable_for_draft(&context)?;
     validate_draft_payload(&payload, &context)?;
 
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to save draft"))?;
     let row = if let Some(existing) = sqlx::query(
         r#"
         SELECT version
@@ -294,7 +317,7 @@ pub(crate) async fn put_draft(
     .bind(config_file_id)
     .fetch_optional(&mut *tx)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to save draft"))?
     {
         let current_version: i64 = existing.get("version");
         if payload.base_version != Some(current_version) {
@@ -333,7 +356,7 @@ pub(crate) async fn put_draft(
         .bind(auth.user_id)
         .fetch_one(&mut *tx)
         .await
-        .map_err(|_| ApiError::internal())?
+        .map_err(|error| ApiError::internal_with(error, "failed to save draft"))?
     } else {
         if payload.base_version.is_some_and(|version| version != 0) {
             return Err(ApiError::conflict(
@@ -373,7 +396,7 @@ pub(crate) async fn put_draft(
         .bind(auth.user_id)
         .fetch_one(&mut *tx)
         .await
-        .map_err(|_| ApiError::internal())?
+        .map_err(|error| ApiError::internal_with(error, "failed to save draft"))?
     };
 
     let summary = map_draft_row(row);
@@ -410,7 +433,7 @@ pub(crate) async fn put_draft(
     .bind(config_file_id)
     .fetch_optional(&mut *tx)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to save draft"))?;
 
     if latest_hash.as_deref() != Some(&new_hash) {
         let sv_id: i64 = sqlx::query_scalar(
@@ -440,7 +463,7 @@ pub(crate) async fn put_draft(
         .bind(auth.user_id)
         .fetch_one(&mut *tx)
         .await
-        .map_err(|_| ApiError::internal())?;
+        .map_err(|error| ApiError::internal_with(error, "failed to save draft"))?;
 
         write_audit_log(
             &mut *tx,
@@ -460,7 +483,9 @@ pub(crate) async fn put_draft(
         .await?;
     }
 
-    tx.commit().await.map_err(|_| ApiError::internal())?;
+    tx.commit()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to save draft"))?;
 
     Ok(Json(summary))
 }
@@ -530,12 +555,15 @@ pub(crate) async fn clone_draft(
         pool,
         payload.source_deployment_instance_id,
         config_file_id,
-        &payload.source_kind,
+        payload.source_kind,
     )
     .await?;
     validate_cloned_draft(&context, &source)?;
 
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to clone draft"))?;
     let row = upsert_draft(
         &mut tx,
         target_deployment_id,
@@ -557,17 +585,19 @@ pub(crate) async fn clone_draft(
                 "deployment_instance_id": target_deployment_id,
                 "config_file_id": config_file_id,
                 "source_deployment_instance_id": payload.source_deployment_instance_id,
-                "source_kind": payload.source_kind,
+                "source_kind": payload.source_kind.as_str(),
             })),
         },
     )
     .await?;
-    tx.commit().await.map_err(|_| ApiError::internal())?;
+    tx.commit()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to clone draft"))?;
 
     Ok(Json(DraftCloneResponse {
         draft: map_draft_row(row),
         source_deployment_instance_id: payload.source_deployment_instance_id,
-        source_kind: payload.source_kind,
+        source_kind: payload.source_kind.as_str().to_owned(),
     }))
 }
 
@@ -614,7 +644,7 @@ async fn load_draft_context(
     .bind(deployment_id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to load draft context"))?
     .ok_or_else(|| {
         ApiError::not_found_with(
             "deployment_instance_not_found",
@@ -635,7 +665,7 @@ async fn load_draft_context(
     .bind(config_file_id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to load draft context"))?
     .ok_or_else(|| ApiError::not_found_with("config_file_not_found", "config file not found"))?;
 
     let config_project_id: i64 = row.get("project_id");
@@ -674,7 +704,7 @@ async fn ensure_same_project(
     .bind(source_deployment_id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to ensure same project"))?
     .ok_or_else(|| {
         ApiError::not_found_with(
             "deployment_instance_not_found",
@@ -734,10 +764,10 @@ async fn load_clone_source(
     pool: &sqlx::PgPool,
     source_deployment_id: i64,
     config_file_id: i64,
-    source_kind: &str,
+    source_kind: CloneSourceKind,
 ) -> Result<DraftCloneSource, ApiError> {
     match source_kind {
-        "draft" => {
+        CloneSourceKind::Draft => {
             let row = sqlx::query(
                 r#"
                 SELECT content, btrim(content_hash) AS content_hash, format
@@ -751,7 +781,7 @@ async fn load_clone_source(
             .bind(config_file_id)
             .fetch_optional(pool)
             .await
-            .map_err(|_| ApiError::internal())?
+            .map_err(|error| ApiError::internal_with(error, "failed to load clone source"))?
             .ok_or_else(|| ApiError::not_found_with("draft_not_found", "draft not found"))?;
 
             Ok(DraftCloneSource {
@@ -760,7 +790,7 @@ async fn load_clone_source(
                 format: row.get("format"),
             })
         }
-        "latest_release" => {
+        CloneSourceKind::LatestRelease => {
             let row = sqlx::query(
                 r#"
                 SELECT content, btrim(content_hash) AS content_hash, format
@@ -775,7 +805,7 @@ async fn load_clone_source(
             .bind(config_file_id)
             .fetch_optional(pool)
             .await
-            .map_err(|_| ApiError::internal())?
+            .map_err(|error| ApiError::internal_with(error, "failed to load clone source"))?
             .ok_or_else(|| ApiError::not_found_with("release_not_found", "release not found"))?;
 
             Ok(DraftCloneSource {
@@ -784,7 +814,6 @@ async fn load_clone_source(
                 format: row.get("format"),
             })
         }
-        _ => unreachable!("validated source kind should only allow supported variants"),
     }
 }
 
@@ -809,7 +838,7 @@ async fn upsert_draft(
     .bind(config_file_id)
     .fetch_optional(&mut **tx)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to upsert draft"))?
     {
         sqlx::query(
             r#"
@@ -841,7 +870,7 @@ async fn upsert_draft(
         .bind(editor_user_id)
         .fetch_one(&mut **tx)
         .await
-        .map_err(|_| ApiError::internal())
+        .map_err(|error| ApiError::internal_with(error, "failed to upsert draft"))
     } else {
         sqlx::query(
             r#"
@@ -874,7 +903,7 @@ async fn upsert_draft(
         .bind(editor_user_id)
         .fetch_one(&mut **tx)
         .await
-        .map_err(|_| ApiError::internal())
+        .map_err(|error| ApiError::internal_with(error, "failed to upsert draft"))
     }
 }
 
@@ -936,7 +965,7 @@ fn required_present(value: Option<String>, field: &'static str) -> Result<String
     value.ok_or_else(|| ApiError::bad_request("invalid_request", invalid_body_message(field)))
 }
 
-fn validate_source_kind(value: Option<String>) -> Result<String, ApiError> {
+fn validate_source_kind(value: Option<String>) -> Result<CloneSourceKind, ApiError> {
     let Some(value) = normalize_optional(value) else {
         return Err(ApiError::bad_request(
             "invalid_request",
@@ -945,7 +974,8 @@ fn validate_source_kind(value: Option<String>) -> Result<String, ApiError> {
     };
 
     match value.as_str() {
-        "draft" | "latest_release" => Ok(value),
+        "draft" => Ok(CloneSourceKind::Draft),
+        "latest_release" => Ok(CloneSourceKind::LatestRelease),
         _ => Err(ApiError::bad_request(
             "invalid_request",
             "invalid draft clone source kind",
@@ -985,11 +1015,8 @@ fn hash_content(content: &str) -> String {
 }
 
 fn hex_char(value: u8) -> char {
-    match value {
-        0..=9 => (b'0' + value) as char,
-        10..=15 => (b'a' + (value - 10)) as char,
-        _ => unreachable!("nibble should always be within 0..=15"),
-    }
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    HEX[(value & 0x0f) as usize] as char
 }
 
 #[cfg(test)]

@@ -109,10 +109,10 @@ pub(crate) async fn resolve_config(
         .ok_or_else(|| ApiError::not_found_with("release_not_found", "release not found"))?;
 
     if release_is_not_modified(&query, &headers, &release) {
-        return Ok(not_modified_response(&release.content_hash));
+        return not_modified_response(&release.content_hash);
     }
 
-    Ok(resolve_response(query, deployment, release))
+    resolve_response(query, deployment, release)
 }
 
 impl ResolveConfigQuery {
@@ -181,7 +181,7 @@ async fn find_deployment(
     .bind(deployment_key)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to find deployment"))?;
 
     Ok(row.map(|row| DeploymentLookup {
         project_id: row.get("project_id"),
@@ -208,7 +208,7 @@ async fn find_config_file(
     .bind(config)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to find config file"))?;
 
     Ok(row.map(|row| row.get("id")))
 }
@@ -237,7 +237,7 @@ async fn find_latest_release(
     .bind(config_file_id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to find latest release"))?;
 
     Ok(row.map(|row| ReleaseLookup {
         revision: row.get("revision"),
@@ -268,24 +268,24 @@ fn normalize_etag(value: &str) -> &str {
     value.trim().trim_matches('"')
 }
 
-fn etag_header(content_hash: &str) -> HeaderValue {
+fn etag_header(content_hash: &str) -> Result<HeaderValue, ApiError> {
     HeaderValue::from_str(&format!("\"{content_hash}\""))
-        .expect("content hashes should always produce valid ETag headers")
+        .map_err(|error| ApiError::internal_with(error, "failed to build etag header"))
 }
 
-fn not_modified_response(content_hash: &str) -> Response {
+fn not_modified_response(content_hash: &str) -> Result<Response, ApiError> {
     let mut response = StatusCode::NOT_MODIFIED.into_response();
     response
         .headers_mut()
-        .insert(header::ETAG, etag_header(content_hash));
-    response
+        .insert(header::ETAG, etag_header(content_hash)?);
+    Ok(response)
 }
 
 fn resolve_response(
     query: ValidatedResolveConfigQuery,
     deployment: DeploymentLookup,
     release: ReleaseLookup,
-) -> Response {
+) -> Result<Response, ApiError> {
     let body = ResolveConfigResponse {
         project: query.project,
         environment: query.environment,
@@ -309,6 +309,6 @@ fn resolve_response(
     let mut response = Json(body).into_response();
     response
         .headers_mut()
-        .insert(header::ETAG, etag_header(&release.content_hash));
-    response
+        .insert(header::ETAG, etag_header(&release.content_hash)?);
+    Ok(response)
 }

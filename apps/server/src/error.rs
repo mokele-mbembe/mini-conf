@@ -4,6 +4,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
+use std::fmt::{self, Debug};
 use utoipa::ToSchema;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -72,6 +73,19 @@ impl ApiError {
         )
     }
 
+    #[track_caller]
+    pub(crate) fn internal_with(error: impl Debug, context: &'static str) -> Self {
+        let location = std::panic::Location::caller();
+        tracing::error!(
+            ?error,
+            context,
+            file = location.file(),
+            line = location.line(),
+            "internal server error"
+        );
+        Self::internal()
+    }
+
     pub fn into_body(self) -> ErrorResponse {
         ErrorResponse {
             code: self.code.to_owned(),
@@ -88,6 +102,14 @@ impl IntoResponse for ApiError {
     }
 }
 
+impl fmt::Display for ApiError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}: {}", self.code, self.message)
+    }
+}
+
+impl std::error::Error for ApiError {}
+
 #[cfg(test)]
 mod tests {
     use super::{ApiError, ErrorResponse};
@@ -97,8 +119,10 @@ mod tests {
         response::IntoResponse,
     };
 
+    type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
+
     #[tokio::test]
-    async fn not_found_error_renders_json_response() {
+    async fn not_found_error_renders_json_response() -> TestResult {
         let response = ApiError::not_found().into_response();
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
@@ -107,11 +131,8 @@ mod tests {
             Some(&header::HeaderValue::from_static("application/json"))
         );
 
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("body should be readable");
-        let payload: ErrorResponse =
-            serde_json::from_slice(&body).expect("payload should be valid json");
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let payload: ErrorResponse = serde_json::from_slice(&body)?;
 
         assert_eq!(
             payload,
@@ -120,6 +141,7 @@ mod tests {
                 message: "Route not found".to_owned(),
             }
         );
+        Ok(())
     }
 
     #[test]

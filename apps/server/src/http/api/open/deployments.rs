@@ -176,7 +176,7 @@ async fn find_deployment(
     .bind(deployment_key)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to find deployment"))?;
 
     Ok(row.map(|row| DeploymentLookup {
         deployment_id: row.get("deployment_id"),
@@ -221,5 +221,5 @@ async fn find_current_bundle(
     .bind(deployment_id)
     .fetch_all(pool)
     .await
-    .map_err(|_| ApiError::internal())
+    .map_err(|error| ApiError::internal_with(error, "failed to find current bundle"))
 }

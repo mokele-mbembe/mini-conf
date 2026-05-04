@@ -82,10 +82,10 @@ pub(crate) async fn get_release(
         .ok_or_else(|| ApiError::not_found_with("release_not_found", "release not found"))?;
 
     if release_is_not_modified(&headers, &release) {
-        return Ok(not_modified_response(&release.content_hash));
+        return not_modified_response(&release.content_hash);
     }
 
-    Ok(release_response(release))
+    release_response(release)
 }
 
 async fn find_release(
@@ -127,7 +127,7 @@ async fn find_release(
     .bind(deployment_instance_id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to find release"))?;
 
     Ok(row.map(|row| ReleaseLookup {
         project: row.get("project"),
@@ -156,20 +156,20 @@ fn normalize_etag(value: &str) -> &str {
     value.trim().trim_matches('"')
 }
 
-fn etag_header(content_hash: &str) -> HeaderValue {
+fn etag_header(content_hash: &str) -> Result<HeaderValue, ApiError> {
     HeaderValue::from_str(&format!("\"{content_hash}\""))
-        .expect("content hashes should always produce valid ETag headers")
+        .map_err(|error| ApiError::internal_with(error, "failed to build etag header"))
 }
 
-fn not_modified_response(content_hash: &str) -> Response {
+fn not_modified_response(content_hash: &str) -> Result<Response, ApiError> {
     let mut response = StatusCode::NOT_MODIFIED.into_response();
     let headers = response.headers_mut();
-    headers.insert(header::ETAG, etag_header(content_hash));
+    headers.insert(header::ETAG, etag_header(content_hash)?);
     headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
-    response
+    Ok(response)
 }
 
-fn release_response(release: ReleaseLookup) -> Response {
+fn release_response(release: ReleaseLookup) -> Result<Response, ApiError> {
     let mut response = Json(ReleaseContentResponse {
         release: ResolveRelease {
             revision: release.revision.clone(),
@@ -194,7 +194,7 @@ fn release_response(release: ReleaseLookup) -> Response {
     .into_response();
 
     let headers = response.headers_mut();
-    headers.insert(header::ETAG, etag_header(&release.content_hash));
+    headers.insert(header::ETAG, etag_header(&release.content_hash)?);
     headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
-    response
+    Ok(response)
 }

@@ -33,6 +33,8 @@ mod tests {
     };
     use tower::util::ServiceExt;
 
+    type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
+
     fn test_app() -> axum::Router {
         test_app_with_config(AppConfig::default())
     }
@@ -45,42 +47,33 @@ mod tests {
         ))
     }
 
-    fn create_static_fixture() -> PathBuf {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("time should move forward")
-            .as_nanos();
+    fn create_static_fixture() -> TestResult<PathBuf> {
+        let unique = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
         let dir = std::env::temp_dir().join(format!("mini-conf-static-{unique}"));
 
-        fs::create_dir_all(&dir).expect("static fixture dir should be created");
+        fs::create_dir_all(&dir)?;
         fs::write(
             dir.join("index.html"),
             "<html><body>mini-conf web</body></html>",
-        )
-        .expect("index file should be written");
+        )?;
 
-        dir
+        Ok(dir)
     }
 
-    fn remove_static_fixture(path: &Path) {
+    fn remove_static_fixture(path: &Path) -> TestResult {
         if path.exists() {
-            fs::remove_dir_all(path).expect("static fixture dir should be removable");
+            fs::remove_dir_all(path)?;
         }
+        Ok(())
     }
 
     #[tokio::test]
-    async fn healthz_returns_ok_payload() {
+    async fn healthz_returns_ok_payload() -> TestResult {
         let app = test_app();
 
         let response = app
-            .oneshot(
-                Request::builder()
-                    .uri("/api/healthz")
-                    .body(Body::empty())
-                    .expect("request should build"),
-            )
-            .await
-            .expect("request should succeed");
+            .oneshot(Request::builder().uri("/api/healthz").body(Body::empty())?)
+            .await?;
 
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(
@@ -92,11 +85,8 @@ mod tests {
             Some(&header::HeaderValue::from_static("DENY"))
         );
 
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("body should be readable");
-        let payload: HealthzResponse =
-            serde_json::from_slice(&body).expect("payload should be valid json");
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let payload: HealthzResponse = serde_json::from_slice(&body)?;
 
         assert_eq!(
             payload,
@@ -106,21 +96,16 @@ mod tests {
                 version: "test-version".to_owned(),
             }
         );
+        Ok(())
     }
 
     #[tokio::test]
-    async fn unknown_route_returns_json_not_found() {
+    async fn unknown_route_returns_json_not_found() -> TestResult {
         let app = test_app();
 
         let response = app
-            .oneshot(
-                Request::builder()
-                    .uri("/api/missing")
-                    .body(Body::empty())
-                    .expect("request should build"),
-            )
-            .await
-            .expect("request should succeed");
+            .oneshot(Request::builder().uri("/api/missing").body(Body::empty())?)
+            .await?;
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
         assert_eq!(
@@ -128,11 +113,8 @@ mod tests {
             Some(&header::HeaderValue::from_static("application/json"))
         );
 
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("body should be readable");
-        let payload: ErrorResponse =
-            serde_json::from_slice(&body).expect("payload should be valid json");
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let payload: ErrorResponse = serde_json::from_slice(&body)?;
 
         assert_eq!(
             payload,
@@ -141,29 +123,21 @@ mod tests {
                 message: "Route not found".to_owned(),
             }
         );
+        Ok(())
     }
 
     #[tokio::test]
-    async fn healthz_without_api_prefix_returns_json_not_found() {
+    async fn healthz_without_api_prefix_returns_json_not_found() -> TestResult {
         let app = test_app();
 
         let response = app
-            .oneshot(
-                Request::builder()
-                    .uri("/healthz")
-                    .body(Body::empty())
-                    .expect("request should build"),
-            )
-            .await
-            .expect("request should succeed");
+            .oneshot(Request::builder().uri("/healthz").body(Body::empty())?)
+            .await?;
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
 
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("body should be readable");
-        let payload: ErrorResponse =
-            serde_json::from_slice(&body).expect("payload should be valid json");
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let payload: ErrorResponse = serde_json::from_slice(&body)?;
 
         assert_eq!(
             payload,
@@ -172,10 +146,11 @@ mod tests {
                 message: "Route not found".to_owned(),
             }
         );
+        Ok(())
     }
 
     #[tokio::test]
-    async fn healthz_rejects_non_get_methods() {
+    async fn healthz_rejects_non_get_methods() -> TestResult {
         let app = test_app();
 
         let response = app
@@ -183,34 +158,27 @@ mod tests {
                 Request::builder()
                     .method(Method::POST)
                     .uri("/api/healthz")
-                    .body(Body::empty())
-                    .expect("request should build"),
+                    .body(Body::empty())?,
             )
-            .await
-            .expect("request should succeed");
+            .await?;
 
         assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn root_path_serves_static_index_when_static_dir_exists() {
-        let static_dir = create_static_fixture();
+    async fn root_path_serves_static_index_when_static_dir_exists() -> TestResult {
+        let static_dir = create_static_fixture()?;
         let app = test_app_with_config(AppConfig {
             static_dir: static_dir.clone(),
             ..AppConfig::default()
         });
 
         let response = app
-            .oneshot(
-                Request::builder()
-                    .uri("/")
-                    .body(Body::empty())
-                    .expect("request should build"),
-            )
-            .await
-            .expect("request should succeed");
+            .oneshot(Request::builder().uri("/").body(Body::empty())?)
+            .await?;
 
-        remove_static_fixture(&static_dir);
+        remove_static_fixture(&static_dir)?;
 
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(
@@ -218,34 +186,28 @@ mod tests {
             Some(&header::HeaderValue::from_static("text/html"))
         );
 
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("body should be readable");
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
 
         assert_eq!(body.as_ref(), b"<html><body>mini-conf web</body></html>");
+        Ok(())
     }
 
     #[tokio::test]
-    async fn open_resolve_requires_required_query_parameters() {
+    async fn open_resolve_requires_required_query_parameters() -> TestResult {
         let app = test_app();
 
         let response = app
             .oneshot(
                 Request::builder()
                     .uri("/api/open/configs/resolve?project=coffee-legacy&environment=prod&deployment_key=store-001")
-                    .body(Body::empty())
-                    .expect("request should build"),
+                    .body(Body::empty())?,
             )
-            .await
-            .expect("request should succeed");
+            .await?;
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("body should be readable");
-        let payload: ErrorResponse =
-            serde_json::from_slice(&body).expect("payload should be valid json");
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let payload: ErrorResponse = serde_json::from_slice(&body)?;
 
         assert_eq!(
             payload,
@@ -254,29 +216,25 @@ mod tests {
                 message: "missing required query parameter: config".to_owned(),
             }
         );
+        Ok(())
     }
 
     #[tokio::test]
-    async fn open_resolve_requires_database_bootstrap() {
+    async fn open_resolve_requires_database_bootstrap() -> TestResult {
         let app = test_app();
 
         let response = app
             .oneshot(
                 Request::builder()
                     .uri("/api/open/configs/resolve?project=coffee-legacy&environment=prod&deployment_key=store-001&config=main")
-                    .body(Body::empty())
-                    .expect("request should build"),
+                    .body(Body::empty())?,
             )
-            .await
-            .expect("request should succeed");
+            .await?;
 
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("body should be readable");
-        let payload: ErrorResponse =
-            serde_json::from_slice(&body).expect("payload should be valid json");
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let payload: ErrorResponse = serde_json::from_slice(&body)?;
 
         assert_eq!(
             payload,
@@ -285,29 +243,25 @@ mod tests {
                 message: "Database bootstrap is disabled".to_owned(),
             }
         );
+        Ok(())
     }
 
     #[tokio::test]
-    async fn open_release_requires_database_bootstrap() {
+    async fn open_release_requires_database_bootstrap() -> TestResult {
         let app = test_app();
 
         let response = app
             .oneshot(
                 Request::builder()
                     .uri("/api/open/releases/20260405.0001")
-                    .body(Body::empty())
-                    .expect("request should build"),
+                    .body(Body::empty())?,
             )
-            .await
-            .expect("request should succeed");
+            .await?;
 
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("body should be readable");
-        let payload: ErrorResponse =
-            serde_json::from_slice(&body).expect("payload should be valid json");
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let payload: ErrorResponse = serde_json::from_slice(&body)?;
 
         assert_eq!(
             payload,
@@ -316,10 +270,11 @@ mod tests {
                 message: "Database bootstrap is disabled".to_owned(),
             }
         );
+        Ok(())
     }
 
     #[tokio::test]
-    async fn auth_login_requires_required_body_fields() {
+    async fn auth_login_requires_required_body_fields() -> TestResult {
         let app = test_app();
 
         let response = app
@@ -328,19 +283,14 @@ mod tests {
                     .method(Method::POST)
                     .uri("/api/auth/login")
                     .header(header::CONTENT_TYPE, "application/json")
-                    .body(Body::from(r#"{"username":"admin"}"#))
-                    .expect("request should build"),
+                    .body(Body::from(r#"{"username":"admin"}"#))?,
             )
-            .await
-            .expect("request should succeed");
+            .await?;
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("body should be readable");
-        let payload: ErrorResponse =
-            serde_json::from_slice(&body).expect("payload should be valid json");
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let payload: ErrorResponse = serde_json::from_slice(&body)?;
 
         assert_eq!(
             payload,
@@ -349,10 +299,11 @@ mod tests {
                 message: "missing required body field: password".to_owned(),
             }
         );
+        Ok(())
     }
 
     #[tokio::test]
-    async fn create_project_requires_required_body_fields() {
+    async fn create_project_requires_required_body_fields() -> TestResult {
         let app = test_app();
 
         let response = app
@@ -361,19 +312,14 @@ mod tests {
                     .method(Method::POST)
                     .uri("/api/projects")
                     .header(header::CONTENT_TYPE, "application/json")
-                    .body(Body::from(r#"{"code":"coffee-legacy"}"#))
-                    .expect("request should build"),
+                    .body(Body::from(r#"{"code":"coffee-legacy"}"#))?,
             )
-            .await
-            .expect("request should succeed");
+            .await?;
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("body should be readable");
-        let payload: ErrorResponse =
-            serde_json::from_slice(&body).expect("payload should be valid json");
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let payload: ErrorResponse = serde_json::from_slice(&body)?;
 
         assert_eq!(
             payload,
@@ -382,10 +328,11 @@ mod tests {
                 message: "missing required body field: name".to_owned(),
             }
         );
+        Ok(())
     }
 
     #[tokio::test]
-    async fn create_project_requires_initial_admin_user_id() {
+    async fn create_project_requires_initial_admin_user_id() -> TestResult {
         let app = test_app();
 
         let response = app
@@ -396,19 +343,14 @@ mod tests {
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(
                         r#"{"code":"coffee-legacy","name":"Coffee Legacy"}"#,
-                    ))
-                    .expect("request should build"),
+                    ))?,
             )
-            .await
-            .expect("request should succeed");
+            .await?;
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("body should be readable");
-        let payload: ErrorResponse =
-            serde_json::from_slice(&body).expect("payload should be valid json");
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let payload: ErrorResponse = serde_json::from_slice(&body)?;
 
         assert_eq!(
             payload,
@@ -417,10 +359,11 @@ mod tests {
                 message: "missing required body field: initial_admin_user_id".to_owned(),
             }
         );
+        Ok(())
     }
 
     #[tokio::test]
-    async fn update_project_requires_required_body_fields() {
+    async fn update_project_requires_required_body_fields() -> TestResult {
         let app = test_app();
 
         let response = app
@@ -431,19 +374,14 @@ mod tests {
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(
                         r#"{"code":"coffee-legacy","name":"Coffee Legacy"}"#,
-                    ))
-                    .expect("request should build"),
+                    ))?,
             )
-            .await
-            .expect("request should succeed");
+            .await?;
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("body should be readable");
-        let payload: ErrorResponse =
-            serde_json::from_slice(&body).expect("payload should be valid json");
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let payload: ErrorResponse = serde_json::from_slice(&body)?;
 
         assert_eq!(
             payload,
@@ -452,10 +390,11 @@ mod tests {
                 message: "missing required body field: status".to_owned(),
             }
         );
+        Ok(())
     }
 
     #[tokio::test]
-    async fn create_config_file_requires_required_body_fields() {
+    async fn create_config_file_requires_required_body_fields() -> TestResult {
         let app = test_app();
 
         let response = app
@@ -466,19 +405,14 @@ mod tests {
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(
                         r#"{"project_id":1,"code":"main","name":"Main Config"}"#,
-                    ))
-                    .expect("request should build"),
+                    ))?,
             )
-            .await
-            .expect("request should succeed");
+            .await?;
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("body should be readable");
-        let payload: ErrorResponse =
-            serde_json::from_slice(&body).expect("payload should be valid json");
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let payload: ErrorResponse = serde_json::from_slice(&body)?;
 
         assert_eq!(
             payload,
@@ -487,10 +421,11 @@ mod tests {
                 message: "missing required body field: format".to_owned(),
             }
         );
+        Ok(())
     }
 
     #[tokio::test]
-    async fn update_config_file_requires_required_body_fields() {
+    async fn update_config_file_requires_required_body_fields() -> TestResult {
         let app = test_app();
 
         let response = app
@@ -501,19 +436,14 @@ mod tests {
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(
                         r#"{"project_id":1,"code":"main","name":"Main Config","format":"yaml"}"#,
-                    ))
-                    .expect("request should build"),
+                    ))?,
             )
-            .await
-            .expect("request should succeed");
+            .await?;
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("body should be readable");
-        let payload: ErrorResponse =
-            serde_json::from_slice(&body).expect("payload should be valid json");
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let payload: ErrorResponse = serde_json::from_slice(&body)?;
 
         assert_eq!(
             payload,
@@ -522,10 +452,11 @@ mod tests {
                 message: "missing required body field: status".to_owned(),
             }
         );
+        Ok(())
     }
 
     #[tokio::test]
-    async fn create_deployment_instance_requires_required_body_fields() {
+    async fn create_deployment_instance_requires_required_body_fields() -> TestResult {
         let app = test_app();
 
         let response = app
@@ -536,19 +467,14 @@ mod tests {
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(
                         r#"{"project_id":1,"environment_id":1,"name":"Store 001"}"#,
-                    ))
-                    .expect("request should build"),
+                    ))?,
             )
-            .await
-            .expect("request should succeed");
+            .await?;
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("body should be readable");
-        let payload: ErrorResponse =
-            serde_json::from_slice(&body).expect("payload should be valid json");
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let payload: ErrorResponse = serde_json::from_slice(&body)?;
 
         assert_eq!(
             payload,
@@ -557,10 +483,11 @@ mod tests {
                 message: "missing required body field: deployment_key".to_owned(),
             }
         );
+        Ok(())
     }
 
     #[tokio::test]
-    async fn update_deployment_instance_requires_required_body_fields() {
+    async fn update_deployment_instance_requires_required_body_fields() -> TestResult {
         let app = test_app();
 
         let response = app
@@ -571,19 +498,14 @@ mod tests {
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(
                         r#"{"environment_id":1,"deployment_key":"store-001"}"#,
-                    ))
-                    .expect("request should build"),
+                    ))?,
             )
-            .await
-            .expect("request should succeed");
+            .await?;
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("body should be readable");
-        let payload: ErrorResponse =
-            serde_json::from_slice(&body).expect("payload should be valid json");
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let payload: ErrorResponse = serde_json::from_slice(&body)?;
 
         assert_eq!(
             payload,
@@ -592,10 +514,11 @@ mod tests {
                 message: "missing required body field: name".to_owned(),
             }
         );
+        Ok(())
     }
 
     #[tokio::test]
-    async fn clone_deployment_instance_requires_required_body_fields() {
+    async fn clone_deployment_instance_requires_required_body_fields() -> TestResult {
         let app = test_app();
 
         let response = app
@@ -606,19 +529,14 @@ mod tests {
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(
                         r#"{"deployment_key":"store-002","environment_id":1}"#,
-                    ))
-                    .expect("request should build"),
+                    ))?,
             )
-            .await
-            .expect("request should succeed");
+            .await?;
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("body should be readable");
-        let payload: ErrorResponse =
-            serde_json::from_slice(&body).expect("payload should be valid json");
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let payload: ErrorResponse = serde_json::from_slice(&body)?;
 
         assert_eq!(
             payload,
@@ -627,10 +545,11 @@ mod tests {
                 message: "missing required body field: clone_source".to_owned(),
             }
         );
+        Ok(())
     }
 
     #[tokio::test]
-    async fn put_draft_requires_required_body_fields() {
+    async fn put_draft_requires_required_body_fields() -> TestResult {
         let app = test_app();
 
         let response = app
@@ -639,19 +558,14 @@ mod tests {
                     .method(Method::PUT)
                     .uri("/api/drafts/1/2")
                     .header(header::CONTENT_TYPE, "application/json")
-                    .body(Body::from(r#"{"format":"yaml"}"#))
-                    .expect("request should build"),
+                    .body(Body::from(r#"{"format":"yaml"}"#))?,
             )
-            .await
-            .expect("request should succeed");
+            .await?;
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("body should be readable");
-        let payload: ErrorResponse =
-            serde_json::from_slice(&body).expect("payload should be valid json");
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let payload: ErrorResponse = serde_json::from_slice(&body)?;
 
         assert_eq!(
             payload,
@@ -660,10 +574,11 @@ mod tests {
                 message: "invalid request body: content is required".to_owned(),
             }
         );
+        Ok(())
     }
 
     #[tokio::test]
-    async fn publish_release_requires_required_body_fields() {
+    async fn publish_release_requires_required_body_fields() -> TestResult {
         let app = test_app();
 
         let response = app
@@ -672,19 +587,14 @@ mod tests {
                     .method(Method::POST)
                     .uri("/api/releases/publish")
                     .header(header::CONTENT_TYPE, "application/json")
-                    .body(Body::from(r#"{"project_id":1,"config_file_id":2}"#))
-                    .expect("request should build"),
+                    .body(Body::from(r#"{"project_id":1,"config_file_id":2}"#))?,
             )
-            .await
-            .expect("request should succeed");
+            .await?;
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("body should be readable");
-        let payload: ErrorResponse =
-            serde_json::from_slice(&body).expect("payload should be valid json");
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let payload: ErrorResponse = serde_json::from_slice(&body)?;
 
         assert_eq!(
             payload,
@@ -693,29 +603,25 @@ mod tests {
                 message: "invalid request body: deployment_instance_id is required".to_owned(),
             }
         );
+        Ok(())
     }
 
     #[tokio::test]
-    async fn open_config_bundle_requires_required_query_parameters() {
+    async fn open_config_bundle_requires_required_query_parameters() -> TestResult {
         let app = test_app();
 
         let response = app
             .oneshot(
                 Request::builder()
                     .uri("/api/open/deployments/store-001/config-bundle?project=coffee-legacy")
-                    .body(Body::empty())
-                    .expect("request should build"),
+                    .body(Body::empty())?,
             )
-            .await
-            .expect("request should succeed");
+            .await?;
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("body should be readable");
-        let payload: ErrorResponse =
-            serde_json::from_slice(&body).expect("payload should be valid json");
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let payload: ErrorResponse = serde_json::from_slice(&body)?;
 
         assert_eq!(
             payload,
@@ -724,29 +630,25 @@ mod tests {
                 message: "missing required query parameter: environment".to_owned(),
             }
         );
+        Ok(())
     }
 
     #[tokio::test]
-    async fn open_config_bundle_requires_database_bootstrap() {
+    async fn open_config_bundle_requires_database_bootstrap() -> TestResult {
         let app = test_app();
 
         let response = app
             .oneshot(
                 Request::builder()
                     .uri("/api/open/deployments/store-001/config-bundle?project=coffee-legacy&environment=prod")
-                    .body(Body::empty())
-                    .expect("request should build"),
+                    .body(Body::empty())?,
             )
-            .await
-            .expect("request should succeed");
+            .await?;
 
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("body should be readable");
-        let payload: ErrorResponse =
-            serde_json::from_slice(&body).expect("payload should be valid json");
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let payload: ErrorResponse = serde_json::from_slice(&body)?;
 
         assert_eq!(
             payload,
@@ -755,10 +657,11 @@ mod tests {
                 message: "Database bootstrap is disabled".to_owned(),
             }
         );
+        Ok(())
     }
 
     #[tokio::test]
-    async fn open_sync_record_requires_required_body_fields() {
+    async fn open_sync_record_requires_required_body_fields() -> TestResult {
         let app = test_app();
 
         let response = app
@@ -769,19 +672,14 @@ mod tests {
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(
                         r#"{"project":"coffee-legacy","environment":"prod","deployment_key":"store-001","config":"main","status":"success"}"#,
-                    ))
-                    .expect("request should build"),
+                    ))?,
             )
-            .await
-            .expect("request should succeed");
+            .await?;
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("body should be readable");
-        let payload: ErrorResponse =
-            serde_json::from_slice(&body).expect("payload should be valid json");
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let payload: ErrorResponse = serde_json::from_slice(&body)?;
 
         assert_eq!(
             payload,
@@ -790,10 +688,11 @@ mod tests {
                 message: "missing required body field: action".to_owned(),
             }
         );
+        Ok(())
     }
 
     #[tokio::test]
-    async fn open_sync_record_requires_database_bootstrap() {
+    async fn open_sync_record_requires_database_bootstrap() -> TestResult {
         let app = test_app();
 
         let response = app
@@ -804,19 +703,14 @@ mod tests {
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(
                         r#"{"project":"coffee-legacy","environment":"prod","deployment_key":"store-001","config":"main","action":"apply","status":"success"}"#,
-                    ))
-                    .expect("request should build"),
+                    ))?,
             )
-            .await
-            .expect("request should succeed");
+            .await?;
 
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("body should be readable");
-        let payload: ErrorResponse =
-            serde_json::from_slice(&body).expect("payload should be valid json");
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let payload: ErrorResponse = serde_json::from_slice(&body)?;
 
         assert_eq!(
             payload,
@@ -825,10 +719,11 @@ mod tests {
                 message: "Database bootstrap is disabled".to_owned(),
             }
         );
+        Ok(())
     }
 
     #[tokio::test]
-    async fn open_heartbeat_requires_required_body_fields() {
+    async fn open_heartbeat_requires_required_body_fields() -> TestResult {
         let app = test_app();
 
         let response = app
@@ -839,19 +734,14 @@ mod tests {
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(
                         r#"{"project":"coffee-legacy","environment":"prod","deployment_key":"store-001"}"#,
-                    ))
-                    .expect("request should build"),
+                    ))?,
             )
-            .await
-            .expect("request should succeed");
+            .await?;
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("body should be readable");
-        let payload: ErrorResponse =
-            serde_json::from_slice(&body).expect("payload should be valid json");
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let payload: ErrorResponse = serde_json::from_slice(&body)?;
 
         assert_eq!(
             payload,
@@ -860,10 +750,11 @@ mod tests {
                 message: "missing required body field: config".to_owned(),
             }
         );
+        Ok(())
     }
 
     #[tokio::test]
-    async fn open_heartbeat_requires_database_bootstrap() {
+    async fn open_heartbeat_requires_database_bootstrap() -> TestResult {
         let app = test_app();
 
         let response = app
@@ -874,19 +765,14 @@ mod tests {
                     .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
                         r#"{"project":"coffee-legacy","environment":"prod","deployment_key":"store-001","config":"vision"}"#,
-                    ))
-                    .expect("request should build"),
+                    ))?,
             )
-            .await
-            .expect("request should succeed");
+            .await?;
 
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("body should be readable");
-        let payload: ErrorResponse =
-            serde_json::from_slice(&body).expect("payload should be valid json");
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let payload: ErrorResponse = serde_json::from_slice(&body)?;
 
         assert_eq!(
             payload,
@@ -895,5 +781,6 @@ mod tests {
                 message: "Database bootstrap is disabled".to_owned(),
             }
         );
+        Ok(())
     }
 }

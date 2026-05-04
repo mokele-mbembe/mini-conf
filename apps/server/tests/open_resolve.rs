@@ -144,11 +144,9 @@ async fn resolve_returns_release_payload_and_etag() -> TestResult {
             Request::builder()
                 .uri("/api/open/configs/resolve?project=coffee-legacy&environment=prod&deployment_key=store-001&config=main")
                 .header(header::AUTHORIZATION, format!("Bearer {TEST_TOKEN}"))
-                .body(Body::empty())
-                .expect("request should build"),
+                .body(Body::empty())?,
         )
-        .await
-        .expect("request should succeed");
+        .await?;
 
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(
@@ -181,11 +179,9 @@ async fn resolve_returns_unauthorized_when_bearer_token_is_missing() -> TestResu
         .oneshot(
             Request::builder()
                 .uri("/api/open/configs/resolve?project=coffee-legacy&environment=prod&deployment_key=store-001&config=main")
-                .body(Body::empty())
-                .expect("request should build"),
+                .body(Body::empty())?,
         )
-        .await
-        .expect("request should succeed");
+        .await?;
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     let payload: ErrorResponse = read_json(response).await?;
@@ -216,11 +212,9 @@ async fn resolve_returns_not_modified_when_client_already_has_latest_revision() 
                 .uri("/api/open/configs/resolve?project=coffee-legacy&environment=prod&deployment_key=store-001&config=main&current_revision=20260405.0001")
                 .header(header::IF_NONE_MATCH, "\"abc123\"")
                 .header(header::AUTHORIZATION, format!("Bearer {TEST_TOKEN}"))
-                .body(Body::empty())
-                .expect("request should build"),
+                .body(Body::empty())?,
         )
-        .await
-        .expect("request should succeed");
+        .await?;
 
     assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
     assert_eq!(
@@ -248,11 +242,9 @@ async fn resolve_returns_config_file_not_found_when_config_is_missing() -> TestR
             Request::builder()
                 .uri("/api/open/configs/resolve?project=coffee-legacy&environment=prod&deployment_key=store-001&config=vision")
                 .header(header::AUTHORIZATION, format!("Bearer {TEST_TOKEN}"))
-                .body(Body::empty())
-                .expect("request should build"),
+                .body(Body::empty())?,
         )
-        .await
-        .expect("request should succeed");
+        .await?;
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
     let payload: ErrorResponse = read_json(response).await?;

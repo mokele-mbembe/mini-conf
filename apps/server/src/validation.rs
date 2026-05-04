@@ -44,7 +44,7 @@ pub fn redact_content(
         return fully_redacted(format);
     }
 
-    match serialize_document(format, &document) {
+    match serialize_document(format, document) {
         Ok(content) => RedactedContent {
             content,
             redacted: true,
@@ -84,13 +84,20 @@ pub fn parse_document(format: &str, content: &str) -> Result<JsonValue, ApiError
     }
 }
 
-fn serialize_document(format: &str, document: &JsonValue) -> Result<String, ApiError> {
+fn serialize_document(format: &str, document: JsonValue) -> Result<String, ApiError> {
     match normalize_format(format) {
-        "json" => serde_json::to_string_pretty(document).map_err(|_| ApiError::internal()),
-        "yaml" | "yml" => serde_yaml::to_string(document).map_err(|_| ApiError::internal()),
-        "toml" => json_to_toml(document)
-            .and_then(|value| toml::to_string_pretty(&value).map_err(|_| ApiError::internal())),
-        _ => Err(ApiError::internal()),
+        "json" => serde_json::to_string_pretty(&document)
+            .map_err(|error| ApiError::internal_with(error, "failed to serialize document")),
+        "yaml" | "yml" => serde_yaml::to_string(&document)
+            .map_err(|error| ApiError::internal_with(error, "failed to serialize document")),
+        "toml" => json_to_toml(document).and_then(|value| {
+            toml::to_string_pretty(&value)
+                .map_err(|error| ApiError::internal_with(error, "failed to serialize document"))
+        }),
+        _ => Err(ApiError::internal_with(
+            format,
+            "failed to serialize unsupported config format",
+        )),
     }
 }
 
@@ -217,8 +224,9 @@ fn toml_to_json(value: toml::Value) -> Result<JsonValue, ApiError> {
     })
 }
 
-fn json_to_toml(value: &JsonValue) -> Result<toml::Value, ApiError> {
-    toml::Value::try_from(value.clone()).map_err(|_| ApiError::internal())
+fn json_to_toml(value: JsonValue) -> Result<toml::Value, ApiError> {
+    toml::Value::try_from(value)
+        .map_err(|error| ApiError::internal_with(error, "failed to convert json to toml"))
 }
 
 #[cfg(test)]

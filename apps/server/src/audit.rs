@@ -37,13 +37,25 @@ where
     .bind(sanitize_audit_detail(entry.detail))
     .execute(executor)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to write audit log"))?;
 
     Ok(())
 }
 
 pub async fn write_audit_log_best_effort(pool: &PgPool, entry: AuditLogEntry) {
-    let _ = write_audit_log(pool, entry).await;
+    let action = entry.action;
+    let resource_type = entry.resource_type;
+    let resource_id = entry.resource_id.clone();
+
+    if let Err(error) = write_audit_log(pool, entry).await {
+        tracing::warn!(
+            ?error,
+            action,
+            resource_type,
+            resource_id = %resource_id,
+            "failed to write audit log"
+        );
+    }
 }
 
 pub fn sanitize_audit_detail(detail: Option<Value>) -> Option<Value> {
@@ -93,17 +105,16 @@ mod tests {
                 "after_content": "still secret",
                 "role": "admin"
             }
-        })))
-        .expect("detail should remain present");
+        })));
 
         assert_eq!(
             detail,
-            serde_json::json!({
+            Some(serde_json::json!({
                 "token_preview": "mc_live_***",
                 "nested": {
                     "role": "admin"
                 }
-            })
+            }))
         );
     }
 }

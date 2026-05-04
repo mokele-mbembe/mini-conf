@@ -229,12 +229,15 @@ fn parse_bool(field: &'static str, raw: &str) -> Result<bool, ConfigError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{AppConfig, AppEnv, parse_bool};
+    use super::{AppConfig, AppEnv, ConfigError, parse_bool};
     use std::{
         collections::HashMap,
+        io,
         path::PathBuf,
         sync::{Mutex, OnceLock},
     };
+
+    type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
     fn env_lock() -> &'static Mutex<()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -247,6 +250,16 @@ mod tests {
             .iter()
             .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
             .collect()
+    }
+
+    fn required_err<T>(
+        result: Result<T, ConfigError>,
+        message: &'static str,
+    ) -> TestResult<ConfigError> {
+        match result {
+            Ok(_) => Err(io::Error::other(message).into()),
+            Err(error) => Ok(error),
+        }
     }
 
     #[test]
@@ -269,15 +282,13 @@ mod tests {
     }
 
     #[test]
-    fn from_lookup_uses_defaults_when_env_is_missing() {
-        assert_eq!(
-            AppConfig::from_lookup(|_| None).expect("config should load"),
-            AppConfig::default()
-        );
+    fn from_lookup_uses_defaults_when_env_is_missing() -> TestResult {
+        assert_eq!(AppConfig::from_lookup(|_| None)?, AppConfig::default());
+        Ok(())
     }
 
     #[test]
-    fn from_lookup_reads_all_supported_overrides() {
+    fn from_lookup_reads_all_supported_overrides() -> TestResult {
         let values = map_lookup(&[
             ("APP_ENV", "dev"),
             ("HTTP_ADDR", "127.0.0.1:9090"),
@@ -292,8 +303,7 @@ mod tests {
             ("OPENAPI_EXPORT_PATH", "var/openapi.json"),
         ]);
 
-        let config =
-            AppConfig::from_lookup(|key| values.get(key).cloned()).expect("config should load");
+        let config = AppConfig::from_lookup(|key| values.get(key).cloned())?;
 
         assert_eq!(
             config,
@@ -310,10 +320,11 @@ mod tests {
                 openapi_export_path: PathBuf::from("var/openapi.json"),
             }
         );
+        Ok(())
     }
 
     #[test]
-    fn from_lookup_accepts_common_app_env_aliases() {
+    fn from_lookup_accepts_common_app_env_aliases() -> TestResult {
         for (raw, expected) in [
             ("dev", AppEnv::Dev),
             ("development", AppEnv::Dev),
@@ -329,11 +340,11 @@ mod tests {
                     Some("postgres://db.example/mini_conf".to_owned())
                 }
                 _ => None,
-            })
-            .expect("config should load");
+            })?;
 
             assert_eq!(config.app_env, expected, "APP_ENV={raw} should parse");
         }
+        Ok(())
     }
 
     #[test]
@@ -356,39 +367,43 @@ mod tests {
     }
 
     #[test]
-    fn app_env_parse_rejects_unknown_values_directly() {
-        let error = AppEnv::parse("qa").expect_err("unknown APP_ENV should be rejected");
+    fn app_env_parse_rejects_unknown_values_directly() -> TestResult {
+        let error = required_err(AppEnv::parse("qa"), "unknown APP_ENV should be rejected")?;
 
         assert_eq!(error.field(), "APP_ENV");
         assert_eq!(error.to_string(), "APP_ENV: unsupported APP_ENV value: qa");
+        Ok(())
     }
 
     #[test]
-    fn from_lookup_rejects_unknown_app_env() {
-        let error = AppConfig::from_lookup(|key| match key {
-            "APP_ENV" => Some("qa".to_owned()),
-            _ => None,
-        })
-        .expect_err("config should reject unknown app env");
+    fn from_lookup_rejects_unknown_app_env() -> TestResult {
+        let error = required_err(
+            AppConfig::from_lookup(|key| match key {
+                "APP_ENV" => Some("qa".to_owned()),
+                _ => None,
+            }),
+            "config should reject unknown app env",
+        )?;
 
         assert_eq!(error.field(), "APP_ENV");
         assert_eq!(error.to_string(), "APP_ENV: unsupported APP_ENV value: qa");
+        Ok(())
     }
 
     #[test]
-    fn from_lookup_parses_boolean_db_boot_flag() {
+    fn from_lookup_parses_boolean_db_boot_flag() -> TestResult {
         for raw in ["1", "true", "yes", "on"] {
             let config = AppConfig::from_lookup(|key| match key {
                 "INIT_DB_ON_BOOT" => Some(raw.to_owned()),
                 _ => None,
-            })
-            .expect("config should load");
+            })?;
 
             assert!(
                 config.init_db_on_boot,
                 "INIT_DB_ON_BOOT={raw} should enable DB boot"
             );
         }
+        Ok(())
     }
 
     #[test]
@@ -403,41 +418,43 @@ mod tests {
     }
 
     #[test]
-    fn from_lookup_parses_disabled_boolean_db_boot_flag() {
+    fn from_lookup_parses_disabled_boolean_db_boot_flag() -> TestResult {
         for raw in ["0", "false", "no", "off"] {
             let config = AppConfig::from_lookup(|key| match key {
                 "INIT_DB_ON_BOOT" => Some(raw.to_owned()),
                 _ => None,
-            })
-            .expect("config should load");
+            })?;
 
             assert!(
                 !config.init_db_on_boot,
                 "INIT_DB_ON_BOOT={raw} should disable DB boot"
             );
         }
+        Ok(())
     }
 
     #[test]
-    fn from_lookup_enables_secure_cookies_in_prod_by_default() {
+    fn from_lookup_enables_secure_cookies_in_prod_by_default() -> TestResult {
         let config = AppConfig::from_lookup(|key| match key {
             "APP_ENV" => Some("prod".to_owned()),
             "DATABASE_URL" => Some("postgres://db.example/mini_conf".to_owned()),
             _ => None,
-        })
-        .expect("config should load");
+        })?;
 
         assert!(config.session_cookie_secure);
+        Ok(())
     }
 
     #[test]
-    fn from_lookup_requires_database_url_in_production_like_envs() {
+    fn from_lookup_requires_database_url_in_production_like_envs() -> TestResult {
         for app_env in ["staging", "prod"] {
-            let error = AppConfig::from_lookup(|key| match key {
-                "APP_ENV" => Some(app_env.to_owned()),
-                _ => None,
-            })
-            .expect_err("config should require database url in production-like envs");
+            let error = required_err(
+                AppConfig::from_lookup(|key| match key {
+                    "APP_ENV" => Some(app_env.to_owned()),
+                    _ => None,
+                }),
+                "config should require database url in production-like envs",
+            )?;
 
             assert_eq!(error.field(), "DATABASE_URL");
             assert_eq!(
@@ -447,21 +464,22 @@ mod tests {
                 )
             );
         }
+        Ok(())
     }
 
     #[test]
-    fn production_like_envs_connect_database_on_boot_without_db_boot() {
+    fn production_like_envs_connect_database_on_boot_without_db_boot() -> TestResult {
         for app_env in ["staging", "prod"] {
             let config = AppConfig::from_lookup(|key| match key {
                 "APP_ENV" => Some(app_env.to_owned()),
                 "DATABASE_URL" => Some("postgres://db.example/mini_conf".to_owned()),
                 _ => None,
-            })
-            .expect("config should load");
+            })?;
 
             assert!(!config.init_db_on_boot);
             assert!(config.should_connect_database_on_boot());
         }
+        Ok(())
     }
 
     #[test]
@@ -476,41 +494,49 @@ mod tests {
     }
 
     #[test]
-    fn parse_bool_rejects_unknown_values_directly() {
-        let error =
-            parse_bool("TEST_BOOL", "sometimes").expect_err("unknown bool should be rejected");
+    fn parse_bool_rejects_unknown_values_directly() -> TestResult {
+        let error = required_err(
+            parse_bool("TEST_BOOL", "sometimes"),
+            "unknown bool should be rejected",
+        )?;
 
         assert_eq!(error.field(), "TEST_BOOL");
         assert_eq!(
             error.to_string(),
             "TEST_BOOL: unsupported TEST_BOOL value: sometimes"
         );
+        Ok(())
     }
 
     #[test]
-    fn from_lookup_rejects_unknown_boolean_flag() {
-        let error = AppConfig::from_lookup(|key| match key {
-            "INIT_DB_ON_BOOT" => Some("sometimes".to_owned()),
-            _ => None,
-        })
-        .expect_err("config should reject unknown boolean flag");
+    fn from_lookup_rejects_unknown_boolean_flag() -> TestResult {
+        let error = required_err(
+            AppConfig::from_lookup(|key| match key {
+                "INIT_DB_ON_BOOT" => Some("sometimes".to_owned()),
+                _ => None,
+            }),
+            "config should reject unknown boolean flag",
+        )?;
 
         assert_eq!(error.field(), "INIT_DB_ON_BOOT");
         assert_eq!(
             error.to_string(),
             "INIT_DB_ON_BOOT: unsupported INIT_DB_ON_BOOT value: sometimes"
         );
+        Ok(())
     }
 
     #[test]
-    fn from_lookup_rejects_db_boot_outside_dev_and_test() {
+    fn from_lookup_rejects_db_boot_outside_dev_and_test() -> TestResult {
         for app_env in ["staging", "prod"] {
-            let error = AppConfig::from_lookup(|key| match key {
-                "APP_ENV" => Some(app_env.to_owned()),
-                "INIT_DB_ON_BOOT" => Some("true".to_owned()),
-                _ => None,
-            })
-            .expect_err("config should reject db boot outside dev and test");
+            let error = required_err(
+                AppConfig::from_lookup(|key| match key {
+                    "APP_ENV" => Some(app_env.to_owned()),
+                    "INIT_DB_ON_BOOT" => Some("true".to_owned()),
+                    _ => None,
+                }),
+                "config should reject db boot outside dev and test",
+            )?;
 
             assert_eq!(error.field(), "INIT_DB_ON_BOOT");
             assert_eq!(
@@ -520,16 +546,16 @@ mod tests {
                 )
             );
         }
+        Ok(())
     }
 
     #[test]
-    fn path_accessors_expose_configured_paths() {
+    fn path_accessors_expose_configured_paths() -> TestResult {
         let config = AppConfig::from_lookup(|key| match key {
             "STATIC_DIR" => Some("runtime/static".to_owned()),
             "OPENAPI_EXPORT_PATH" => Some("runtime/openapi.json".to_owned()),
             _ => None,
-        })
-        .expect("config should load");
+        })?;
 
         assert_eq!(
             config.static_dir(),
@@ -539,11 +565,14 @@ mod tests {
             config.openapi_export_path(),
             PathBuf::from("runtime/openapi.json").as_path()
         );
+        Ok(())
     }
 
     #[test]
-    fn from_env_reads_real_environment() {
-        let _guard = env_lock().lock().expect("env lock should not be poisoned");
+    fn from_env_reads_real_environment() -> TestResult {
+        let _guard = env_lock().lock().map_err(|error| {
+            io::Error::other(format!("env lock should not be poisoned: {error}"))
+        })?;
 
         // SAFETY: tests serialize access to process env with a mutex.
         unsafe {
@@ -556,7 +585,7 @@ mod tests {
             std::env::set_var("OPENAPI_EXPORT_PATH", "tmp/openapi.json");
         }
 
-        let config = AppConfig::from_env().expect("config should load");
+        let config = AppConfig::from_env()?;
 
         // SAFETY: tests serialize access to process env with a mutex.
         unsafe {
@@ -584,5 +613,6 @@ mod tests {
                 openapi_export_path: PathBuf::from("tmp/openapi.json"),
             }
         );
+        Ok(())
     }
 }

@@ -614,9 +614,12 @@ pub fn export_to(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::document;
+    use std::io;
+
+    type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
     #[test]
-    fn document_includes_core_paths_and_bearer_security() {
+    fn document_includes_core_paths_and_bearer_security() -> TestResult {
         let openapi = document();
         let paths = openapi.paths.paths;
 
@@ -651,8 +654,11 @@ mod tests {
         assert!(paths.contains_key("/api/draft-saved-versions/{id}/restore"));
         assert!(paths.contains_key("/api/open/heartbeats"));
 
-        let components = openapi.components.expect("components should exist");
+        let components = openapi
+            .components
+            .ok_or_else(|| io::Error::other("components should exist"))?;
         assert!(components.security_schemes.contains_key("bearer_auth"));
         assert!(components.security_schemes.contains_key("session_auth"));
+        Ok(())
     }
 }

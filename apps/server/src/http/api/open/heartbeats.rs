@@ -176,7 +176,7 @@ async fn find_deployment(
     .bind(deployment_key)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to find deployment"))?;
 
     Ok(row.map(|row| DeploymentLookup {
         project_id: row.get("project_id"),
@@ -202,7 +202,7 @@ async fn find_config_file(
     .bind(config)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to find config file"))?;
 
     Ok(row.map(|row| row.get("id")))
 }
@@ -243,7 +243,7 @@ async fn upsert_heartbeat(
     .bind(payload.reported_at)
     .execute(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to upsert heartbeat"))?;
 
     Ok(())
 }

@@ -417,29 +417,35 @@ fn non_empty_seed<'a>(
 mod tests {
     use super::{StartupError, build_state, run};
     use crate::config::AppConfig;
+    use std::io;
+
+    type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
     #[test]
-    fn startup_error_wraps_configuration_failures() {
-        let error = AppConfig::from_lookup(|key| match key {
+    fn startup_error_wraps_configuration_failures() -> TestResult {
+        let result = AppConfig::from_lookup(|key| match key {
             "APP_ENV" => Some("qa".to_owned()),
             _ => None,
         })
-        .map_err(StartupError::from)
-        .expect_err("config should fail");
+        .map_err(StartupError::from);
+        let error = match result {
+            Ok(_) => return Err(io::Error::other("config should fail").into()),
+            Err(error) => error,
+        };
 
         assert_eq!(
             error.to_string(),
             "configuration error: APP_ENV: unsupported APP_ENV value: qa"
         );
+        Ok(())
     }
 
     #[tokio::test]
-    async fn build_state_skips_database_connection_when_flag_is_disabled() {
-        let state = build_state(AppConfig::default())
-            .await
-            .expect("state should build without connecting db");
+    async fn build_state_skips_database_connection_when_flag_is_disabled() -> TestResult {
+        let state = build_state(AppConfig::default()).await?;
 
         assert!(state.db_pool().is_none());
+        Ok(())
     }
 
     #[tokio::test]
@@ -483,13 +489,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn run_returns_error_when_http_addr_is_invalid() {
+    async fn run_returns_error_when_http_addr_is_invalid() -> TestResult {
         let state = build_state(AppConfig {
             http_addr: "invalid-address".to_owned(),
             ..AppConfig::default()
         })
-        .await
-        .expect("state should build");
+        .await?;
 
         let result = run(state).await;
 
@@ -497,5 +502,6 @@ mod tests {
             result.is_err(),
             "run should fail for an invalid bind address"
         );
+        Ok(())
     }
 }

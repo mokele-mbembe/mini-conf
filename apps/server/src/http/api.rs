@@ -82,7 +82,7 @@ async fn require_completed_setup(
     )
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to check setup completion"))?
     .map(|row| row.get::<bool, _>("is_completed"))
     .unwrap_or(false);
 

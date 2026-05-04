@@ -228,7 +228,7 @@ async fn find_deployment(
     .bind(deployment_key)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to find deployment"))?;
 
     Ok(row.map(|row| DeploymentLookup {
         project_id: row.get("project_id"),
@@ -254,7 +254,7 @@ async fn find_config_file(
     .bind(config)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to find config file"))?;
 
     Ok(row.map(|row| row.get("id")))
 }
@@ -279,7 +279,7 @@ async fn find_release_id(
     .bind(revision)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to find release id"))?;
 
     Ok(row.map(|row| row.get("id")))
 }
@@ -331,7 +331,7 @@ async fn insert_sync_record(
     .bind(payload.reported_at)
     .execute(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to insert sync record"))?;
 
     Ok(())
 }

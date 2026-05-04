@@ -2,7 +2,7 @@ use crate::error::ApiError;
 use axum::http::{HeaderMap, HeaderName, HeaderValue, header};
 use std::{
     collections::{HashMap, VecDeque},
-    sync::{Arc, Mutex},
+    sync::Mutex,
     time::{Duration, Instant},
 };
 
@@ -59,12 +59,14 @@ struct OpenApiRateLimitEntry {
 }
 
 impl LoginThrottle {
-    pub fn new() -> Arc<Self> {
-        Arc::new(Self::default())
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn ensure_allowed(&self, key: &str) -> Result<(), ApiError> {
-        let mut entries = self.entries.lock().map_err(|_| ApiError::internal())?;
+        let mut entries = self.entries.lock().map_err(|error| {
+            ApiError::internal_with(error, "failed to lock login throttle entries")
+        })?;
         let now = Instant::now();
 
         if let Some(entry) = entries.get_mut(key) {
@@ -111,20 +113,30 @@ impl LoginThrottle {
 }
 
 impl OpenApiRateLimiter {
-    pub fn new() -> Arc<Self> {
-        Arc::new(Self::default())
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn ensure_request_allowed(&self, key: &str) -> Result<(), ApiError> {
-        self.ensure_request_allowed_for_keys(&[key.to_owned()])
+        self.ensure_request_allowed_for_keys([key])
     }
 
-    pub fn ensure_request_allowed_for_keys(&self, keys: &[String]) -> Result<(), ApiError> {
-        let mut entries = self.entries.lock().map_err(|_| ApiError::internal())?;
+    pub fn ensure_request_allowed_for_keys<I, K>(&self, keys: I) -> Result<(), ApiError>
+    where
+        I: IntoIterator<Item = K>,
+        K: AsRef<str>,
+    {
+        let keys: Vec<String> = keys
+            .into_iter()
+            .map(|key| key.as_ref().to_owned())
+            .collect();
+        let mut entries = self.entries.lock().map_err(|error| {
+            ApiError::internal_with(error, "failed to lock open api rate limit entries")
+        })?;
         let now = Instant::now();
 
-        for key in keys {
-            let entry = entries.entry(key.to_owned()).or_default();
+        for key in &keys {
+            let entry = entries.entry(key.clone()).or_default();
             prune_open_api_requests(entry, now);
 
             if entry.requests.len() >= OPEN_API_RATE_LIMIT {
@@ -136,11 +148,7 @@ impl OpenApiRateLimiter {
         }
 
         for key in keys {
-            entries
-                .entry(key.to_owned())
-                .or_default()
-                .requests
-                .push_back(now);
+            entries.entry(key).or_default().requests.push_back(now);
         }
 
         Ok(())

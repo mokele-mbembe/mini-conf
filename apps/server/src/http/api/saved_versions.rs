@@ -111,7 +111,7 @@ pub(crate) async fn list_saved_versions(
     .bind(query.config_file_id)
     .fetch_all(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to list saved versions"))?;
 
     Ok(Json(SavedVersionListResponse {
         items: rows.iter().map(map_summary_row).collect(),
@@ -176,7 +176,7 @@ pub(crate) async fn get_saved_version(
     .bind(id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to get saved version"))?
     .ok_or_else(|| {
         ApiError::not_found_with("saved_version_not_found", "saved version not found")
     })?;
@@ -261,7 +261,7 @@ pub(crate) async fn update_saved_version(
     .bind(id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to update saved version"))?
     .ok_or_else(|| {
         ApiError::not_found_with("saved_version_not_found", "saved version not found")
     })?;
@@ -278,7 +278,10 @@ pub(crate) async fn update_saved_version(
     )
     .await?;
 
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to update saved version"))?;
 
     sqlx::query(
         r#"
@@ -291,7 +294,7 @@ pub(crate) async fn update_saved_version(
     .bind(&note)
     .execute(&mut *tx)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to update saved version"))?;
 
     write_audit_log(
         &mut *tx,
@@ -309,7 +312,9 @@ pub(crate) async fn update_saved_version(
     )
     .await?;
 
-    tx.commit().await.map_err(|_| ApiError::internal())?;
+    tx.commit()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to update saved version"))?;
 
     let row = sqlx::query(
         r#"
@@ -336,7 +341,7 @@ pub(crate) async fn update_saved_version(
     .bind(id)
     .fetch_one(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to update saved version"))?;
 
     Ok(Json(SavedVersionDetailResponse {
         saved_version: map_detail_row(row),
@@ -400,7 +405,7 @@ pub(crate) async fn restore_saved_version(
     .bind(id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to restore saved version"))?
     .ok_or_else(|| {
         ApiError::not_found_with("saved_version_not_found", "saved version not found")
     })?;
@@ -422,7 +427,10 @@ pub(crate) async fn restore_saved_version(
     )
     .await?;
 
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to restore saved version"))?;
 
     let draft_row = if let Some(existing) = sqlx::query(
         r#"
@@ -437,7 +445,7 @@ pub(crate) async fn restore_saved_version(
     .bind(config_file_id)
     .fetch_optional(&mut *tx)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to restore saved version"))?
     {
         let current_version: i64 = existing.get("version");
         if payload.base_version != Some(current_version) {
@@ -476,7 +484,7 @@ pub(crate) async fn restore_saved_version(
         .bind(auth.user_id)
         .fetch_one(&mut *tx)
         .await
-        .map_err(|_| ApiError::internal())?
+        .map_err(|error| ApiError::internal_with(error, "failed to restore saved version"))?
     } else {
         if payload.base_version.is_some_and(|v| v != 0) {
             return Err(ApiError::conflict(
@@ -516,7 +524,7 @@ pub(crate) async fn restore_saved_version(
         .bind(auth.user_id)
         .fetch_one(&mut *tx)
         .await
-        .map_err(|_| ApiError::internal())?
+        .map_err(|error| ApiError::internal_with(error, "failed to restore saved version"))?
     };
 
     write_audit_log(
@@ -536,7 +544,9 @@ pub(crate) async fn restore_saved_version(
     )
     .await?;
 
-    tx.commit().await.map_err(|_| ApiError::internal())?;
+    tx.commit()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to restore saved version"))?;
 
     Ok(Json(SavedVersionRestoreResponse {
         draft: DraftResponse {
@@ -594,7 +604,7 @@ pub(crate) async fn delete_saved_version(
     .bind(id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to delete saved version"))?
     .ok_or_else(|| {
         ApiError::not_found_with("saved_version_not_found", "saved version not found")
     })?;
@@ -610,7 +620,10 @@ pub(crate) async fn delete_saved_version(
     )
     .await?;
 
-    let mut tx = pool.begin().await.map_err(|_| ApiError::internal())?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to delete saved version"))?;
 
     sqlx::query(
         r#"
@@ -623,7 +636,7 @@ pub(crate) async fn delete_saved_version(
     .bind(id)
     .execute(&mut *tx)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to delete saved version"))?;
 
     write_audit_log(
         &mut *tx,
@@ -642,7 +655,9 @@ pub(crate) async fn delete_saved_version(
     )
     .await?;
 
-    tx.commit().await.map_err(|_| ApiError::internal())?;
+    tx.commit()
+        .await
+        .map_err(|error| ApiError::internal_with(error, "failed to delete saved version"))?;
 
     Ok(StatusCode::NO_CONTENT)
 }

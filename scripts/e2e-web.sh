@@ -24,6 +24,10 @@ if ! command -v psql >/dev/null 2>&1; then
   exit 1
 fi
 
+if [[ -v NO_COLOR && -v FORCE_COLOR ]]; then
+  unset FORCE_COLOR
+fi
+
 if [[ -z "${TEST_DATABASE_URL:-}" ]]; then
   echo "TEST_DATABASE_URL is required for isolated web e2e tests" >&2
   exit 1
@@ -173,4 +177,4 @@ E2E_MANAGED_SERVER=1 \
   E2E_ADMIN_USERNAME="${admin_username}" \
   E2E_ADMIN_PASSWORD="${admin_password}" \
   PLAYWRIGHT_BASE_URL="${base_url}" \
-  pnpm --dir apps/web exec playwright test --config playwright.config.ts "$@"
+  env -u NO_COLOR pnpm --dir apps/web exec playwright test --config playwright.config.ts "$@"

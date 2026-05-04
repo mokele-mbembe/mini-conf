@@ -194,11 +194,9 @@ async fn sync_record_inserts_row_and_returns_ok() -> TestResult {
                         "detail":{"duration_ms":87},
                         "reported_at":"2026-04-05T12:05:00Z"
                     }"#,
-                ))
-                .expect("request should build"),
+                ))?,
         )
-        .await
-        .expect("request should succeed");
+        .await?;
 
     assert_eq!(response.status(), StatusCode::OK);
     let payload: DeploymentSyncResponse = read_json(response).await?;
@@ -297,11 +295,9 @@ async fn sync_record_returns_not_found_for_unknown_deployment() -> TestResult {
                         "action":"apply",
                         "status":"success"
                     }"#,
-                ))
-                .expect("request should build"),
+                ))?,
         )
-        .await
-        .expect("request should succeed");
+        .await?;
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
     let payload: ErrorResponse = read_json(response).await?;
@@ -343,11 +339,9 @@ async fn sync_record_returns_not_found_for_unknown_release() -> TestResult {
                         "revision":"20260405.9999",
                         "status":"failed"
                     }"#,
-                ))
-                .expect("request should build"),
+                ))?,
         )
-        .await
-        .expect("request should succeed");
+        .await?;
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
     let payload: ErrorResponse = read_json(response).await?;

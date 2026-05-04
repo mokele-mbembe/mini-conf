@@ -102,7 +102,7 @@ pub(crate) async fn list_deployment_heartbeats(
     .bind(query.config_file_id)
     .fetch_all(pool)
     .await
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| ApiError::internal_with(error, "failed to list deployment heartbeats"))?;
 
     Ok(Json(DeploymentHeartbeatListResponse {
         items: rows.iter().map(map_heartbeat_row).collect(),
@@ -130,7 +130,7 @@ async fn load_deployment_project_id(pool: &sqlx::PgPool, id: i64) -> Result<i64,
     .bind(id)
     .fetch_optional(pool)
     .await
-    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::internal_with(error, "failed to load deployment project id"))?
     .ok_or_else(|| {
         ApiError::not_found_with(
             "deployment_instance_not_found",
