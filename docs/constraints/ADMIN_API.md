@@ -114,8 +114,9 @@
 
 用途：
 
-- 签发前端可读取的 CSRF cookie。
+- 签发前端可读取的 CSRF cookie，并在 `X-CSRF-Token` response header 返回同一个 token。
 - 管理端写请求通过 CSRF cookie + `X-CSRF-Token` header 校验。
+- 跨域管理端应从 response header 读取 token；同域管理端仍可从 cookie 读取。
 
 ### `POST /api/auth/change-password`
 

@@ -1,3 +1,4 @@
+use axum::http::Uri;
 use std::{
     fmt,
     path::{Path, PathBuf},
@@ -9,6 +10,7 @@ const DEFAULT_STATIC_DIR: &str = "apps/web/dist";
 const DEFAULT_OPENAPI_EXPORT_PATH: &str = "docs/artifacts/openapi.json";
 const DEFAULT_INIT_DB_ON_BOOT: bool = false;
 const DEFAULT_SESSION_COOKIE_SECURE: bool = false;
+const DEFAULT_SESSION_COOKIE_SAME_SITE: CookieSameSite = CookieSameSite::Lax;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppEnv {
@@ -39,6 +41,32 @@ impl AppEnv {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CookieSameSite {
+    Lax,
+    Strict,
+    None,
+}
+
+impl CookieSameSite {
+    fn parse(field: &'static str, raw: &str) -> Result<Self, ConfigError> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "lax" => Ok(Self::Lax),
+            "strict" => Ok(Self::Strict),
+            "none" => Ok(Self::None),
+            value => Err(ConfigError::invalid_same_site(field, value)),
+        }
+    }
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Lax => "Lax",
+            Self::Strict => "Strict",
+            Self::None => "None",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppConfig {
     pub app_env: AppEnv,
@@ -46,6 +74,9 @@ pub struct AppConfig {
     pub database_url: String,
     pub init_db_on_boot: bool,
     pub session_cookie_secure: bool,
+    pub session_cookie_same_site: CookieSameSite,
+    pub cors_allowed_origins: Vec<String>,
+    pub csp_connect_src_extra: Vec<String>,
     pub init_admin_username: Option<String>,
     pub init_admin_password: Option<String>,
     pub init_users_file: Option<PathBuf>,
@@ -61,6 +92,9 @@ impl Default for AppConfig {
             database_url: DEFAULT_DATABASE_URL.to_owned(),
             init_db_on_boot: DEFAULT_INIT_DB_ON_BOOT,
             session_cookie_secure: DEFAULT_SESSION_COOKIE_SECURE,
+            session_cookie_same_site: DEFAULT_SESSION_COOKIE_SAME_SITE,
+            cors_allowed_origins: Vec::new(),
+            csp_connect_src_extra: Vec::new(),
             init_admin_username: None,
             init_admin_password: None,
             init_users_file: None,
@@ -105,6 +139,19 @@ impl AppConfig {
             config.session_cookie_secure = parse_bool("SESSION_COOKIE_SECURE", &value)?;
         }
 
+        if let Some(value) = lookup("SESSION_COOKIE_SAME_SITE") {
+            config.session_cookie_same_site =
+                CookieSameSite::parse("SESSION_COOKIE_SAME_SITE", &value)?;
+        }
+
+        if let Some(value) = lookup("CORS_ALLOWED_ORIGINS") {
+            config.cors_allowed_origins = parse_origin_list("CORS_ALLOWED_ORIGINS", &value)?;
+        }
+
+        if let Some(value) = lookup("CSP_CONNECT_SRC_EXTRA") {
+            config.csp_connect_src_extra = parse_origin_list("CSP_CONNECT_SRC_EXTRA", &value)?;
+        }
+
         if let Some(value) = lookup("INIT_ADMIN_USERNAME") {
             config.init_admin_username = non_empty(value);
         }
@@ -133,6 +180,12 @@ impl AppConfig {
             return Err(ConfigError::missing_database_url(config.app_env));
         }
 
+        if matches!(config.session_cookie_same_site, CookieSameSite::None)
+            && !config.session_cookie_secure
+        {
+            return Err(ConfigError::insecure_same_site_none());
+        }
+
         Ok(config)
     }
 
@@ -146,6 +199,20 @@ impl AppConfig {
 
     pub fn openapi_export_path(&self) -> &Path {
         &self.openapi_export_path
+    }
+
+    pub fn cors_allowed_origins(&self) -> &[String] {
+        &self.cors_allowed_origins
+    }
+
+    pub fn csp_connect_src_extra(&self) -> &[String] {
+        &self.csp_connect_src_extra
+    }
+
+    pub fn is_cors_origin_allowed(&self, origin: &str) -> bool {
+        self.cors_allowed_origins
+            .iter()
+            .any(|allowed| allowed.eq_ignore_ascii_case(origin))
     }
 }
 
@@ -176,6 +243,29 @@ impl ConfigError {
         Self {
             field,
             message: format!("unsupported {field} value: {value}"),
+        }
+    }
+
+    fn invalid_same_site(field: &'static str, value: &str) -> Self {
+        Self {
+            field,
+            message: format!("unsupported {field} value: {value}"),
+        }
+    }
+
+    fn invalid_origin(field: &'static str, value: &str) -> Self {
+        Self {
+            field,
+            message: format!(
+                "{field} entries must be explicit http(s) origins without paths, queries, or wildcards; got {value}"
+            ),
+        }
+    }
+
+    fn insecure_same_site_none() -> Self {
+        Self {
+            field: "SESSION_COOKIE_SAME_SITE",
+            message: "SESSION_COOKIE_SAME_SITE=none requires SESSION_COOKIE_SECURE=true".to_owned(),
         }
     }
 
@@ -227,9 +317,56 @@ fn parse_bool(field: &'static str, raw: &str) -> Result<bool, ConfigError> {
     }
 }
 
+fn parse_origin_list(field: &'static str, raw: &str) -> Result<Vec<String>, ConfigError> {
+    let mut origins = Vec::new();
+
+    for value in raw.split(',') {
+        let value = value.trim();
+        if value.is_empty() {
+            continue;
+        }
+
+        let origin = normalize_origin(field, value)?;
+        if !origins
+            .iter()
+            .any(|existing: &String| existing.eq_ignore_ascii_case(&origin))
+        {
+            origins.push(origin);
+        }
+    }
+
+    Ok(origins)
+}
+
+fn normalize_origin(field: &'static str, raw: &str) -> Result<String, ConfigError> {
+    if raw == "*" {
+        return Err(ConfigError::invalid_origin(field, raw));
+    }
+
+    let uri = raw
+        .parse::<Uri>()
+        .map_err(|_| ConfigError::invalid_origin(field, raw))?;
+    let scheme = uri
+        .scheme_str()
+        .filter(|scheme| matches!(*scheme, "http" | "https"))
+        .ok_or_else(|| ConfigError::invalid_origin(field, raw))?;
+    let authority = uri
+        .authority()
+        .ok_or_else(|| ConfigError::invalid_origin(field, raw))?;
+
+    if uri
+        .path_and_query()
+        .is_some_and(|path_and_query| path_and_query.as_str() != "/")
+    {
+        return Err(ConfigError::invalid_origin(field, raw));
+    }
+
+    Ok(format!("{scheme}://{authority}"))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{AppConfig, AppEnv, ConfigError, parse_bool};
+    use super::{AppConfig, AppEnv, ConfigError, CookieSameSite, parse_bool};
     use std::{
         collections::HashMap,
         io,
@@ -272,6 +409,9 @@ mod tests {
                 database_url: "postgres://127.0.0.1:5432/postgres".to_owned(),
                 init_db_on_boot: false,
                 session_cookie_secure: false,
+                session_cookie_same_site: CookieSameSite::Lax,
+                cors_allowed_origins: Vec::new(),
+                csp_connect_src_extra: Vec::new(),
                 init_admin_username: None,
                 init_admin_password: None,
                 init_users_file: None,
@@ -298,6 +438,12 @@ mod tests {
             ),
             ("INIT_DB_ON_BOOT", "true"),
             ("SESSION_COOKIE_SECURE", "true"),
+            ("SESSION_COOKIE_SAME_SITE", "strict"),
+            (
+                "CORS_ALLOWED_ORIGINS",
+                "https://admin.example.com, https://ops.example.com/",
+            ),
+            ("CSP_CONNECT_SRC_EXTRA", "https://api.example.com"),
             ("INIT_USERS_FILE", "config/bootstrap-users.yaml"),
             ("STATIC_DIR", "var/web"),
             ("OPENAPI_EXPORT_PATH", "var/openapi.json"),
@@ -313,6 +459,12 @@ mod tests {
                 database_url: "postgres://db.example/mini_conf_prod_candidate".to_owned(),
                 init_db_on_boot: true,
                 session_cookie_secure: true,
+                session_cookie_same_site: CookieSameSite::Strict,
+                cors_allowed_origins: vec![
+                    "https://admin.example.com".to_owned(),
+                    "https://ops.example.com".to_owned(),
+                ],
+                csp_connect_src_extra: vec!["https://api.example.com".to_owned()],
                 init_admin_username: None,
                 init_admin_password: None,
                 init_users_file: Some(PathBuf::from("config/bootstrap-users.yaml")),
@@ -320,6 +472,107 @@ mod tests {
                 openapi_export_path: PathBuf::from("var/openapi.json"),
             }
         );
+        Ok(())
+    }
+
+    #[test]
+    fn from_lookup_parses_session_cookie_same_site() -> TestResult {
+        for (raw, expected) in [
+            ("lax", CookieSameSite::Lax),
+            ("Strict", CookieSameSite::Strict),
+            ("NONE", CookieSameSite::None),
+        ] {
+            let config = AppConfig::from_lookup(|key| match key {
+                "SESSION_COOKIE_SECURE" => Some("true".to_owned()),
+                "SESSION_COOKIE_SAME_SITE" => Some(raw.to_owned()),
+                _ => None,
+            })?;
+
+            assert_eq!(config.session_cookie_same_site, expected);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn from_lookup_rejects_unknown_session_cookie_same_site() -> TestResult {
+        let error = required_err(
+            AppConfig::from_lookup(|key| match key {
+                "SESSION_COOKIE_SAME_SITE" => Some("sometimes".to_owned()),
+                _ => None,
+            }),
+            "config should reject unknown cookie same-site values",
+        )?;
+
+        assert_eq!(error.field(), "SESSION_COOKIE_SAME_SITE");
+        assert_eq!(
+            error.to_string(),
+            "SESSION_COOKIE_SAME_SITE: unsupported SESSION_COOKIE_SAME_SITE value: sometimes"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn from_lookup_requires_secure_cookies_for_same_site_none() -> TestResult {
+        let error = required_err(
+            AppConfig::from_lookup(|key| match key {
+                "SESSION_COOKIE_SAME_SITE" => Some("none".to_owned()),
+                _ => None,
+            }),
+            "same-site none should require secure cookies",
+        )?;
+
+        assert_eq!(error.field(), "SESSION_COOKIE_SAME_SITE");
+        assert_eq!(
+            error.to_string(),
+            "SESSION_COOKIE_SAME_SITE: SESSION_COOKIE_SAME_SITE=none requires SESSION_COOKIE_SECURE=true"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn from_lookup_normalizes_origin_lists() -> TestResult {
+        let config = AppConfig::from_lookup(|key| match key {
+            "CORS_ALLOWED_ORIGINS" => Some(
+                " https://ADMIN.example.com/ , https://admin.example.com, http://localhost:5173 "
+                    .to_owned(),
+            ),
+            _ => None,
+        })?;
+
+        assert_eq!(
+            config.cors_allowed_origins,
+            vec![
+                "https://ADMIN.example.com".to_owned(),
+                "http://localhost:5173".to_owned(),
+            ]
+        );
+        assert!(config.is_cors_origin_allowed("https://admin.example.com"));
+        Ok(())
+    }
+
+    #[test]
+    fn from_lookup_rejects_wildcard_and_path_origins() -> TestResult {
+        for raw in [
+            "*",
+            "https://admin.example.com/app",
+            "ftp://admin.example.com",
+        ] {
+            let error = required_err(
+                AppConfig::from_lookup(|key| match key {
+                    "CORS_ALLOWED_ORIGINS" => Some(raw.to_owned()),
+                    _ => None,
+                }),
+                "config should reject invalid CORS origins",
+            )?;
+
+            assert_eq!(error.field(), "CORS_ALLOWED_ORIGINS");
+            assert!(
+                error
+                    .to_string()
+                    .contains("entries must be explicit http(s) origins"),
+                "unexpected error for {raw}: {error}"
+            );
+        }
         Ok(())
     }
 
@@ -581,6 +834,9 @@ mod tests {
             std::env::set_var("DATABASE_URL", "postgres://override/mini_conf_test");
             std::env::set_var("INIT_DB_ON_BOOT", "1");
             std::env::set_var("SESSION_COOKIE_SECURE", "1");
+            std::env::set_var("SESSION_COOKIE_SAME_SITE", "none");
+            std::env::set_var("CORS_ALLOWED_ORIGINS", "https://admin.example.com");
+            std::env::set_var("CSP_CONNECT_SRC_EXTRA", "https://api.example.com");
             std::env::set_var("STATIC_DIR", "tmp/static");
             std::env::set_var("OPENAPI_EXPORT_PATH", "tmp/openapi.json");
         }
@@ -594,6 +850,9 @@ mod tests {
             std::env::remove_var("DATABASE_URL");
             std::env::remove_var("INIT_DB_ON_BOOT");
             std::env::remove_var("SESSION_COOKIE_SECURE");
+            std::env::remove_var("SESSION_COOKIE_SAME_SITE");
+            std::env::remove_var("CORS_ALLOWED_ORIGINS");
+            std::env::remove_var("CSP_CONNECT_SRC_EXTRA");
             std::env::remove_var("STATIC_DIR");
             std::env::remove_var("OPENAPI_EXPORT_PATH");
         }
@@ -606,6 +865,9 @@ mod tests {
                 database_url: "postgres://override/mini_conf_test".to_owned(),
                 init_db_on_boot: true,
                 session_cookie_secure: true,
+                session_cookie_same_site: CookieSameSite::None,
+                cors_allowed_origins: vec!["https://admin.example.com".to_owned()],
+                csp_connect_src_extra: vec!["https://api.example.com".to_owned()],
                 init_admin_username: None,
                 init_admin_password: None,
                 init_users_file: None,

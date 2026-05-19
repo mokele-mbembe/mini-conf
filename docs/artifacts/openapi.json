@@ -1052,13 +1052,19 @@
         "operationId": "get_csrf",
         "responses": {
           "204": {
-            "description": "CSRF cookie issued",
+            "description": "CSRF token issued",
             "headers": {
               "set-cookie": {
                 "schema": {
                   "type": "string"
                 },
                 "description": "Readable CSRF cookie"
+              },
+              "x-csrf-token": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "CSRF token for cross-origin clients"
               }
             }
           },

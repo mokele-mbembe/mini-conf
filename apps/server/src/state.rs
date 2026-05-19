@@ -50,7 +50,7 @@ impl AppState {
 #[cfg(test)]
 mod tests {
     use super::AppState;
-    use crate::config::{AppConfig, AppEnv};
+    use crate::config::{AppConfig, AppEnv, CookieSameSite};
     use infra::AppIdentity;
     use std::path::PathBuf;
 
@@ -84,6 +84,9 @@ mod tests {
                 database_url: "postgres://127.0.0.1:5432/postgres".to_owned(),
                 init_db_on_boot: false,
                 session_cookie_secure: false,
+                session_cookie_same_site: CookieSameSite::Lax,
+                cors_allowed_origins: Vec::new(),
+                csp_connect_src_extra: Vec::new(),
                 init_admin_username: None,
                 init_admin_password: None,
                 init_users_file: None,

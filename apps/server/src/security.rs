@@ -15,7 +15,7 @@ pub const OPEN_API_RATE_WINDOW_SECS: u64 = 60;
 
 const OPEN_API_RATE_WINDOW: Duration = Duration::from_secs(OPEN_API_RATE_WINDOW_SECS);
 
-const SECURITY_HEADERS: [(&str, &str); 8] = [
+const SECURITY_HEADERS: [(&str, &str); 7] = [
     ("x-content-type-options", "nosniff"),
     ("x-frame-options", "DENY"),
     ("referrer-policy", "no-referrer"),
@@ -26,16 +26,14 @@ const SECURITY_HEADERS: [(&str, &str); 8] = [
     ("cross-origin-opener-policy", "same-origin"),
     ("cross-origin-resource-policy", "same-origin"),
     ("x-permitted-cross-domain-policies", "none"),
-    (
-        "content-security-policy",
-        "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'",
-    ),
 ];
 
 const STRICT_TRANSPORT_SECURITY: (&str, &str) = (
     "strict-transport-security",
     "max-age=31536000; includeSubDomains",
 );
+const CONTENT_SECURITY_POLICY: &str = "content-security-policy";
+const CONTENT_SECURITY_POLICY_BASE: &str = "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'";
 
 #[derive(Debug, Default)]
 pub struct LoginThrottle {
@@ -180,12 +178,26 @@ pub fn has_bearer_token(headers: &HeaderMap) -> bool {
     bearer_token(headers).is_some()
 }
 
-pub fn apply_security_headers(headers: &mut HeaderMap, include_hsts: bool) {
+pub fn apply_security_headers(
+    headers: &mut HeaderMap,
+    include_hsts: bool,
+    csp_connect_src_extra: &[String],
+) {
     for (name, value) in SECURITY_HEADERS {
         headers.insert(
             HeaderName::from_static(name),
             HeaderValue::from_static(value),
         );
+    }
+
+    let policy = content_security_policy(csp_connect_src_extra);
+    match HeaderValue::from_str(&policy) {
+        Ok(value) => {
+            headers.insert(HeaderName::from_static(CONTENT_SECURITY_POLICY), value);
+        }
+        Err(error) => {
+            tracing::error!(?error, "failed to build content security policy header");
+        }
     }
 
     if include_hsts {
@@ -194,6 +206,18 @@ pub fn apply_security_headers(headers: &mut HeaderMap, include_hsts: bool) {
             HeaderValue::from_static(STRICT_TRANSPORT_SECURITY.1),
         );
     }
+}
+
+fn content_security_policy(csp_connect_src_extra: &[String]) -> String {
+    if csp_connect_src_extra.is_empty() {
+        return CONTENT_SECURITY_POLICY_BASE.to_owned();
+    }
+
+    format!(
+        "{} {}",
+        CONTENT_SECURITY_POLICY_BASE,
+        csp_connect_src_extra.join(" ")
+    )
 }
 
 fn prune_login_failures(entry: &mut LoginThrottleEntry, now: Instant) {
@@ -277,7 +301,7 @@ mod tests {
     fn security_headers_are_applied() {
         let mut headers = HeaderMap::new();
 
-        apply_security_headers(&mut headers, false);
+        apply_security_headers(&mut headers, false, &[]);
 
         assert_eq!(
             headers.get("x-content-type-options"),
@@ -297,10 +321,24 @@ mod tests {
     }
 
     #[test]
+    fn security_headers_include_configured_connect_sources() {
+        let mut headers = HeaderMap::new();
+
+        apply_security_headers(&mut headers, false, &["https://api.example.com".to_owned()]);
+
+        assert_eq!(
+            headers.get("content-security-policy"),
+            Some(&HeaderValue::from_static(
+                "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.example.com"
+            ))
+        );
+    }
+
+    #[test]
     fn hsts_header_is_optional() {
         let mut headers = HeaderMap::new();
 
-        apply_security_headers(&mut headers, true);
+        apply_security_headers(&mut headers, true, &[]);
 
         assert_eq!(
             headers.get("strict-transport-security"),

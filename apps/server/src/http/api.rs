@@ -17,11 +17,16 @@ pub(crate) mod releases;
 pub(crate) mod saved_versions;
 pub(crate) mod setup;
 
-use crate::{auth::csrf_token, error::ApiError, state::AppState};
+use crate::{
+    auth::{CSRF_HEADER_NAME, csrf_token},
+    config::AppConfig,
+    error::ApiError,
+    state::AppState,
+};
 use axum::{
     Router,
     extract::{Request, State},
-    http::{Method, header},
+    http::{HeaderMap, Method, header},
     middleware::{self, Next},
     response::Response,
 };
@@ -54,12 +59,15 @@ pub fn router(state: AppState) -> Router<AppState> {
         ));
 
     let gated_open_routes = open::router(state.clone()).route_layer(
-        middleware::from_fn_with_state(state, require_completed_setup),
+        middleware::from_fn_with_state(state.clone(), require_completed_setup),
     );
 
     setup_free_routes
         .merge(gated_session_routes)
-        .route_layer(middleware::from_fn(require_csrf_protection))
+        .route_layer(middleware::from_fn_with_state(
+            state,
+            require_csrf_protection,
+        ))
         .merge(gated_open_routes)
 }
 
@@ -96,13 +104,19 @@ async fn require_completed_setup(
     Ok(next.run(request).await)
 }
 
-async fn require_csrf_protection(request: Request, next: Next) -> Result<Response, ApiError> {
+async fn require_csrf_protection(
+    State(state): State<AppState>,
+    request: Request,
+    next: Next,
+) -> Result<Response, ApiError> {
     if matches!(
         *request.method(),
         Method::GET | Method::HEAD | Method::OPTIONS | Method::TRACE
     ) {
         return Ok(next.run(request).await);
     }
+
+    require_allowed_origin(state.config(), request.headers())?;
 
     let cookie_header = request
         .headers()
@@ -114,7 +128,7 @@ async fn require_csrf_protection(request: Request, next: Next) -> Result<Respons
 
     let actual_token = request
         .headers()
-        .get("x-csrf-token")
+        .get(CSRF_HEADER_NAME)
         .and_then(|value| value.to_str().ok())
         .map(str::trim)
         .filter(|value| !value.is_empty())
@@ -128,4 +142,56 @@ async fn require_csrf_protection(request: Request, next: Next) -> Result<Respons
     }
 
     Ok(next.run(request).await)
+}
+
+fn require_allowed_origin(config: &AppConfig, headers: &HeaderMap) -> Result<(), ApiError> {
+    let Some(origin) = header_value(headers, header::ORIGIN) else {
+        return Ok(());
+    };
+
+    if config.is_cors_origin_allowed(origin) || is_same_origin(config, headers, origin) {
+        return Ok(());
+    }
+
+    Err(ApiError::forbidden(
+        "origin_not_allowed",
+        "Request origin is not allowed",
+    ))
+}
+
+fn is_same_origin(config: &AppConfig, headers: &HeaderMap, origin: &str) -> bool {
+    let Some(host) = first_header_segment(headers, "x-forwarded-host")
+        .or_else(|| header_value(headers, header::HOST))
+    else {
+        return false;
+    };
+    let scheme = first_header_segment(headers, "x-forwarded-proto").unwrap_or(
+        if config.session_cookie_secure {
+            "https"
+        } else {
+            "http"
+        },
+    );
+    let expected = format!("{scheme}://{host}");
+
+    origin.eq_ignore_ascii_case(&expected)
+}
+
+fn first_header_segment<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
+    header_value(headers, name)?
+        .split(',')
+        .next()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+}
+
+fn header_value<K>(headers: &HeaderMap, name: K) -> Option<&str>
+where
+    K: axum::http::header::AsHeaderName,
+{
+    headers
+        .get(name)
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
 }

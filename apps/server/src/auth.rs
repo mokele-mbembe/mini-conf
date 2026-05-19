@@ -1,4 +1,4 @@
-use crate::error::ApiError;
+use crate::{config::CookieSameSite, error::ApiError};
 use argon2::{
     Argon2, PasswordHash, PasswordHasher, PasswordVerifier,
     password_hash::{SaltString, rand_core::OsRng},
@@ -11,6 +11,7 @@ use uuid::Uuid;
 
 const ADMIN_SESSION_COOKIE: &str = "mini_conf_session";
 const ADMIN_CSRF_COOKIE: &str = "mini_conf_csrf";
+pub const CSRF_HEADER_NAME: &str = "x-csrf-token";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AuthenticatedDeployment {
@@ -147,44 +148,65 @@ pub fn deployment_token_preview(token: &str) -> String {
     }
 }
 
-pub fn session_cookie_header(token: &str, secure: bool) -> Result<HeaderValue, ApiError> {
+pub fn session_cookie_header(
+    token: &str,
+    secure: bool,
+    same_site: CookieSameSite,
+) -> Result<HeaderValue, ApiError> {
     let cookie = Cookie::build((ADMIN_SESSION_COOKIE, token.to_owned()))
         .path("/")
         .http_only(true)
         .secure(secure)
-        .same_site(SameSite::Lax)
+        .same_site(cookie_same_site(same_site))
         .build();
 
     HeaderValue::from_str(&cookie.encoded().to_string())
         .map_err(|error| ApiError::internal_with(error, "failed to build session cookie header"))
 }
 
-pub fn clear_session_cookie_header(secure: bool) -> Result<HeaderValue, ApiError> {
+pub fn clear_session_cookie_header(
+    secure: bool,
+    same_site: CookieSameSite,
+) -> Result<HeaderValue, ApiError> {
     let secure_attr = if secure { "; Secure" } else { "" };
+    let same_site = same_site.as_str();
     HeaderValue::from_str(&format!(
-        "{ADMIN_SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax{secure_attr}; Max-Age=0"
+        "{ADMIN_SESSION_COOKIE}=; Path=/; HttpOnly; SameSite={same_site}{secure_attr}; Max-Age=0"
     ))
     .map_err(|error| ApiError::internal_with(error, "failed to build clear session cookie header"))
 }
 
-pub fn csrf_cookie_header(token: &str, secure: bool) -> Result<HeaderValue, ApiError> {
+pub fn csrf_cookie_header(
+    token: &str,
+    secure: bool,
+    same_site: CookieSameSite,
+) -> Result<HeaderValue, ApiError> {
     let cookie = Cookie::build((ADMIN_CSRF_COOKIE, token.to_owned()))
         .path("/")
         .http_only(false)
         .secure(secure)
-        .same_site(SameSite::Lax)
+        .same_site(cookie_same_site(same_site))
         .build();
 
     HeaderValue::from_str(&cookie.encoded().to_string())
         .map_err(|error| ApiError::internal_with(error, "failed to build csrf cookie header"))
 }
 
-pub fn clear_csrf_cookie_header(secure: bool) -> Result<HeaderValue, ApiError> {
+pub fn clear_csrf_cookie_header(
+    secure: bool,
+    same_site: CookieSameSite,
+) -> Result<HeaderValue, ApiError> {
     let secure_attr = if secure { "; Secure" } else { "" };
+    let same_site = same_site.as_str();
     HeaderValue::from_str(&format!(
-        "{ADMIN_CSRF_COOKIE}=; Path=/; SameSite=Lax{secure_attr}; Max-Age=0"
+        "{ADMIN_CSRF_COOKIE}=; Path=/; SameSite={same_site}{secure_attr}; Max-Age=0"
     ))
     .map_err(|error| ApiError::internal_with(error, "failed to build clear csrf cookie header"))
+}
+
+pub fn csrf_header_value(token: &str) -> Result<HeaderValue, ApiError> {
+    HeaderValue::from_str(token)
+        .map_err(|error| ApiError::internal_with(error, "failed to build csrf token header"))
 }
 
 pub fn csrf_token(cookie_header: Option<&str>) -> Option<&str> {
@@ -295,6 +317,14 @@ fn hex_char(value: u8) -> char {
     HEX[(value & 0x0f) as usize] as char
 }
 
+fn cookie_same_site(same_site: CookieSameSite) -> SameSite {
+    match same_site {
+        CookieSameSite::Lax => SameSite::Lax,
+        CookieSameSite::Strict => SameSite::Strict,
+        CookieSameSite::None => SameSite::None,
+    }
+}
+
 fn bearer_token(headers: &HeaderMap) -> Result<&str, ApiError> {
     let value = headers
         .get(header::AUTHORIZATION)
@@ -321,9 +351,10 @@ fn bearer_token(headers: &HeaderMap) -> Result<&str, ApiError> {
 mod tests {
     use super::{
         bearer_token, clear_csrf_cookie_header, clear_session_cookie_header, csrf_cookie_header,
-        csrf_token, deployment_token_preview, generate_csrf_token, generate_deployment_token,
-        hash_bearer_token, session_cookie_header,
+        csrf_header_value, csrf_token, deployment_token_preview, generate_csrf_token,
+        generate_deployment_token, hash_bearer_token, session_cookie_header,
     };
+    use crate::config::CookieSameSite;
     use axum::http::{HeaderMap, HeaderValue, header};
 
     type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
@@ -409,7 +440,7 @@ mod tests {
 
     #[test]
     fn session_cookie_header_sets_expected_security_attributes() -> TestResult {
-        let value = session_cookie_header("session-token", true)?;
+        let value = session_cookie_header("session-token", true, CookieSameSite::Lax)?;
         let cookie = value.to_str()?;
 
         assert!(cookie.contains("mini_conf_session=session-token"));
@@ -422,7 +453,7 @@ mod tests {
 
     #[test]
     fn clear_session_cookie_header_expires_session_cookie() -> TestResult {
-        let value = clear_session_cookie_header(true)?;
+        let value = clear_session_cookie_header(true, CookieSameSite::Lax)?;
         let cookie = value.to_str()?;
 
         assert!(cookie.contains("mini_conf_session="));
@@ -436,7 +467,7 @@ mod tests {
 
     #[test]
     fn csrf_cookie_header_sets_expected_attributes() -> TestResult {
-        let value = csrf_cookie_header("csrf-token", true)?;
+        let value = csrf_cookie_header("csrf-token", true, CookieSameSite::Lax)?;
         let cookie = value.to_str()?;
 
         assert!(cookie.contains("mini_conf_csrf=csrf-token"));
@@ -449,7 +480,7 @@ mod tests {
 
     #[test]
     fn clear_csrf_cookie_header_expires_cookie() -> TestResult {
-        let value = clear_csrf_cookie_header(true)?;
+        let value = clear_csrf_cookie_header(true, CookieSameSite::Lax)?;
         let cookie = value.to_str()?;
 
         assert!(cookie.contains("mini_conf_csrf="));
@@ -458,6 +489,22 @@ mod tests {
         assert!(cookie.contains("SameSite=Lax"));
         assert!(cookie.contains("Max-Age=0"));
         Ok(())
+    }
+
+    #[test]
+    fn cookie_headers_support_same_site_none() -> TestResult {
+        let session = session_cookie_header("session-token", true, CookieSameSite::None)?;
+        let csrf = csrf_cookie_header("csrf-token", true, CookieSameSite::None)?;
+
+        assert!(session.to_str()?.contains("SameSite=None"));
+        assert!(csrf.to_str()?.contains("SameSite=None"));
+        Ok(())
+    }
+
+    #[test]
+    fn csrf_header_value_rejects_invalid_header_content() {
+        assert!(csrf_header_value("valid-csrf-token").is_ok());
+        assert!(csrf_header_value("invalid\ncsrf-token").is_err());
     }
 
     #[test]

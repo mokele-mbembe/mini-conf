@@ -2,7 +2,7 @@ mod support;
 
 use axum::{
     body::Body,
-    http::{Request, StatusCode, header},
+    http::{Method, Request, StatusCode, header},
 };
 use infra::AppIdentity;
 use server::{
@@ -149,5 +149,148 @@ async fn production_responses_include_reviewed_security_headers() -> TestResult 
         ))
     );
 
+    Ok(())
+}
+
+#[tokio::test]
+async fn cors_is_disabled_when_no_origins_are_configured() -> TestResult {
+    let app = app_without_database(AppConfig::default());
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::OPTIONS)
+                .uri("/api/auth/login")
+                .header(header::ORIGIN, "https://admin.example.com")
+                .header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
+                .header(
+                    header::ACCESS_CONTROL_REQUEST_HEADERS,
+                    "content-type,x-csrf-token",
+                )
+                .body(Body::empty())?,
+        )
+        .await?;
+
+    assert!(
+        response
+            .headers()
+            .get(header::ACCESS_CONTROL_ALLOW_ORIGIN)
+            .is_none()
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn cors_allows_configured_credentialed_admin_origin() -> TestResult {
+    let app = app_without_database(AppConfig {
+        cors_allowed_origins: vec!["https://admin.example.com".to_owned()],
+        ..AppConfig::default()
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::OPTIONS)
+                .uri("/api/auth/login")
+                .header(header::ORIGIN, "https://admin.example.com")
+                .header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
+                .header(
+                    header::ACCESS_CONTROL_REQUEST_HEADERS,
+                    "content-type,x-csrf-token",
+                )
+                .body(Body::empty())?,
+        )
+        .await?;
+
+    assert_eq!(
+        response.headers().get(header::ACCESS_CONTROL_ALLOW_ORIGIN),
+        Some(&header::HeaderValue::from_static(
+            "https://admin.example.com"
+        ))
+    );
+    assert_eq!(
+        response
+            .headers()
+            .get(header::ACCESS_CONTROL_ALLOW_CREDENTIALS),
+        Some(&header::HeaderValue::from_static("true"))
+    );
+    assert!(
+        response
+            .headers()
+            .get(header::ACCESS_CONTROL_ALLOW_HEADERS)
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| value.contains("x-csrf-token"))
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn unsafe_admin_requests_reject_untrusted_origins() -> TestResult {
+    let app = app_without_database(AppConfig::default());
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/auth/login")
+                .header(header::HOST, "mini-conf.example.com")
+                .header(header::ORIGIN, "https://evil.example.com")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"username":"admin","password":"admin123456"}"#,
+                ))?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    let payload: ErrorResponse = support::read_json(response).await?;
+    assert_eq!(payload.code, "origin_not_allowed");
+    Ok(())
+}
+
+#[tokio::test]
+async fn unsafe_admin_requests_allow_configured_cross_origins() -> TestResult {
+    let app = app_without_database(AppConfig {
+        cors_allowed_origins: vec!["https://admin.example.com".to_owned()],
+        ..AppConfig::default()
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/auth/login")
+                .header(header::HOST, "mini-conf.example.com")
+                .header(header::ORIGIN, "https://admin.example.com")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"username":"admin","password":"admin123456"}"#,
+                ))?,
+        )
+        .await?;
+
+    assert_ne!(response.status(), StatusCode::FORBIDDEN);
+    Ok(())
+}
+
+#[tokio::test]
+async fn unsafe_admin_requests_allow_same_origin() -> TestResult {
+    let app = app_without_database(AppConfig::default());
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/auth/login")
+                .header(header::HOST, "mini-conf.example.com")
+                .header(header::ORIGIN, "http://mini-conf.example.com")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"username":"admin","password":"admin123456"}"#,
+                ))?,
+        )
+        .await?;
+
+    assert_ne!(response.status(), StatusCode::FORBIDDEN);
     Ok(())
 }

@@ -191,6 +191,37 @@ fn cookie_value(response: &axum::response::Response, name: &str) -> TestResult<S
 }
 
 #[tokio::test]
+async fn csrf_endpoint_exposes_token_header_for_cross_origin_clients() -> TestResult {
+    let Some((app, pool, database_url, schema)) = setup_app().await? else {
+        return Ok(());
+    };
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/auth/csrf")
+                .body(Body::empty())?,
+        )
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    let csrf_cookie = cookie_value(&response, "mini_conf_csrf")?;
+    let cookie_token = csrf_cookie
+        .strip_prefix("mini_conf_csrf=")
+        .ok_or_else(|| std::io::Error::other("csrf cookie should have expected prefix"))?;
+    let header_token = response
+        .headers()
+        .get("x-csrf-token")
+        .and_then(|value| value.to_str().ok())
+        .ok_or_else(|| std::io::Error::other("csrf response should include token header"))?;
+
+    assert_eq!(header_token, cookie_token);
+
+    teardown(&database_url, &schema, pool).await
+}
+
+#[tokio::test]
 async fn login_sets_session_cookie_and_returns_user_payload() -> TestResult {
     let Some((app, pool, database_url, schema)) = setup_app().await? else {
         return Ok(());
@@ -200,7 +231,17 @@ async fn login_sets_session_cookie_and_returns_user_payload() -> TestResult {
 
     assert_eq!(response.status(), StatusCode::OK);
     assert!(response.headers().contains_key(header::SET_COOKIE));
-    assert!(cookie_value(&response, "mini_conf_csrf").is_ok());
+    let csrf_cookie = cookie_value(&response, "mini_conf_csrf")?;
+    let csrf_token = csrf_cookie
+        .strip_prefix("mini_conf_csrf=")
+        .ok_or_else(|| std::io::Error::other("csrf cookie should have expected prefix"))?;
+    assert_eq!(
+        response
+            .headers()
+            .get("x-csrf-token")
+            .and_then(|value| value.to_str().ok()),
+        Some(csrf_token)
+    );
 
     let payload: serde_json::Value = read_json(response).await?;
     assert_eq!(payload["user"]["username"], "admin");

@@ -1,7 +1,25 @@
 import { ApiRequestError } from "./error";
 import type { ApiError } from "./error";
 
-const BASE_URL = "/api";
+const CSRF_COOKIE_NAME = "mini_conf_csrf";
+const CSRF_HEADER_NAME = "X-CSRF-Token";
+const BASE_URL = normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL ?? "/api");
+
+let csrfToken: string | null = null;
+
+function normalizeBaseUrl(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "/") {
+    return "";
+  }
+
+  return trimmed.replace(/\/+$/, "");
+}
+
+function buildUrl(path: string): string {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${BASE_URL}${normalizedPath}`;
+}
 
 function isUnsafeMethod(method: string | undefined): boolean {
   return ["POST", "PUT", "PATCH", "DELETE"].includes(
@@ -38,7 +56,7 @@ async function parseErrorResponse(res: Response): Promise<ApiRequestError> {
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const url = `${BASE_URL}${path}`;
+  const url = buildUrl(path);
 
   const headers: Record<string, string> = {
     Accept: "application/json",
@@ -50,9 +68,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   if (isUnsafeMethod(options.method)) {
-    const csrfToken = readCookie("mini_conf_csrf");
-    if (csrfToken) {
-      headers["X-CSRF-Token"] = csrfToken;
+    const token = csrfToken ?? readCookie(CSRF_COOKIE_NAME);
+    if (token) {
+      headers[CSRF_HEADER_NAME] = token;
     }
   }
 
@@ -61,7 +79,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     res = await fetch(url, {
       ...options,
       headers,
-      credentials: "same-origin",
+      credentials: "include",
     });
   } catch {
     throw new ApiRequestError(0, {
@@ -69,6 +87,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       message: "Network request failed",
     });
   }
+
+  updateCsrfToken(res);
 
   if (res.status === 204) {
     return undefined as T;
@@ -79,6 +99,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   return (await res.json()) as T;
+}
+
+function updateCsrfToken(res: Response): void {
+  const token = res.headers.get(CSRF_HEADER_NAME)?.trim();
+  if (token) {
+    csrfToken = token;
+  }
 }
 
 export const client = {

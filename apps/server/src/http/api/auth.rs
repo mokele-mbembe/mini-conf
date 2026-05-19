@@ -1,10 +1,10 @@
 use crate::{
     audit::{AuditLogEntry, write_audit_log, write_audit_log_best_effort},
     auth::{
-        authenticate_admin_session, clear_csrf_cookie_header, clear_session_cookie_header,
-        csrf_cookie_header, csrf_token, generate_csrf_token, generate_session_token,
-        hash_bearer_token, hash_password, revoke_admin_session, session_cookie_header,
-        validate_password_strength, verify_password,
+        CSRF_HEADER_NAME, authenticate_admin_session, clear_csrf_cookie_header,
+        clear_session_cookie_header, csrf_cookie_header, csrf_header_value, csrf_token,
+        generate_csrf_token, generate_session_token, hash_bearer_token, hash_password,
+        revoke_admin_session, session_cookie_header, validate_password_strength, verify_password,
     },
     error::ApiError,
     security::login_throttle_key,
@@ -59,7 +59,7 @@ pub fn router() -> Router<AppState> {
     path = "/api/auth/csrf",
     tag = "auth",
     responses(
-        (status = 204, description = "CSRF cookie issued", headers(("set-cookie" = String, description = "Readable CSRF cookie"))),
+        (status = 204, description = "CSRF token issued", headers(("set-cookie" = String, description = "Readable CSRF cookie"), ("x-csrf-token" = String, description = "CSRF token for cross-origin clients"))),
         (status = 503, description = "Database bootstrap disabled", body = crate::error::ErrorResponse),
         (status = 500, description = "Internal server error", body = crate::error::ErrorResponse),
     )
@@ -72,11 +72,9 @@ pub(crate) async fn get_csrf(State(state): State<AppState>) -> Result<Response, 
         ));
     }
 
+    let csrf_token = generate_csrf_token();
     let mut response = StatusCode::NO_CONTENT.into_response();
-    response.headers_mut().append(
-        header::SET_COOKIE,
-        csrf_cookie_header(&generate_csrf_token(), state.config().session_cookie_secure)?,
-    );
+    append_csrf_token(&mut response, &csrf_token, &state)?;
     Ok(response)
 }
 
@@ -234,12 +232,13 @@ pub(crate) async fn login(
     .into_response();
     response.headers_mut().append(
         header::SET_COOKIE,
-        session_cookie_header(&session_token, state.config().session_cookie_secure)?,
+        session_cookie_header(
+            &session_token,
+            state.config().session_cookie_secure,
+            state.config().session_cookie_same_site,
+        )?,
     );
-    response.headers_mut().append(
-        header::SET_COOKIE,
-        csrf_cookie_header(&csrf_token, state.config().session_cookie_secure)?,
-    );
+    append_csrf_token(&mut response, &csrf_token, &state)?;
     Ok(response)
 }
 
@@ -287,10 +286,7 @@ pub(crate) async fn me(
         auth_mode: "session".to_owned(),
     })
     .into_response();
-    response.headers_mut().append(
-        header::SET_COOKIE,
-        csrf_cookie_header(&csrf, state.config().session_cookie_secure)?,
-    );
+    append_csrf_token(&mut response, &csrf, &state)?;
     Ok(response)
 }
 
@@ -424,10 +420,7 @@ pub(crate) async fn change_password(
         auth_mode: "session".to_owned(),
     })
     .into_response();
-    response.headers_mut().append(
-        header::SET_COOKIE,
-        csrf_cookie_header(&csrf, state.config().session_cookie_secure)?,
-    );
+    append_csrf_token(&mut response, &csrf, &state)?;
     Ok(response)
 }
 
@@ -465,13 +458,38 @@ pub(crate) async fn logout(
     let mut response = StatusCode::NO_CONTENT.into_response();
     response.headers_mut().append(
         header::SET_COOKIE,
-        clear_session_cookie_header(state.config().session_cookie_secure)?,
+        clear_session_cookie_header(
+            state.config().session_cookie_secure,
+            state.config().session_cookie_same_site,
+        )?,
     );
     response.headers_mut().append(
         header::SET_COOKIE,
-        clear_csrf_cookie_header(state.config().session_cookie_secure)?,
+        clear_csrf_cookie_header(
+            state.config().session_cookie_secure,
+            state.config().session_cookie_same_site,
+        )?,
     );
     Ok(response)
+}
+
+fn append_csrf_token(
+    response: &mut Response,
+    csrf_token: &str,
+    state: &AppState,
+) -> Result<(), ApiError> {
+    response.headers_mut().append(
+        header::SET_COOKIE,
+        csrf_cookie_header(
+            csrf_token,
+            state.config().session_cookie_secure,
+            state.config().session_cookie_same_site,
+        )?,
+    );
+    response
+        .headers_mut()
+        .insert(CSRF_HEADER_NAME, csrf_header_value(csrf_token)?);
+    Ok(())
 }
 
 impl LoginRequest {
@@ -528,7 +546,7 @@ fn require_login_csrf(headers: &HeaderMap) -> Result<(), ApiError> {
         .ok_or_else(|| ApiError::forbidden("csrf_token_missing", "Missing CSRF token cookie"))?;
 
     let actual_token = headers
-        .get("x-csrf-token")
+        .get(CSRF_HEADER_NAME)
         .and_then(|value| value.to_str().ok())
         .map(str::trim)
         .filter(|value| !value.is_empty())
