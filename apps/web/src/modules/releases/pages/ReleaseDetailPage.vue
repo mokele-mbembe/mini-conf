@@ -176,12 +176,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, defineAsyncComponent, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useProjectContext } from "@/modules/projects/composables/useProjectContext";
 import ProjectTabs from "@/modules/projects/components/ProjectTabs.vue";
-import ConfigCodeEditor from "@/modules/config-workspace/components/ConfigCodeEditor.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import LoadingState from "@/shared/states/LoadingState.vue";
 import ErrorState from "@/shared/states/ErrorState.vue";
@@ -202,6 +201,9 @@ import { useI18nText } from "@/shared/i18n";
 const route = useRoute();
 const router = useRouter();
 const { t } = useI18nText();
+const ConfigCodeEditor = defineAsyncComponent(
+  () => import("@/modules/config-workspace/components/ConfigCodeEditor.vue"),
+);
 
 const {
   project,

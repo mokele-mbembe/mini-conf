@@ -1,5 +1,6 @@
 import { ApiRequestError } from "./error";
 import type { ApiError } from "./error";
+import { now, recordApiTiming } from "@/app/performance";
 
 const CSRF_COOKIE_NAME = "mini_conf_csrf";
 const CSRF_HEADER_NAME = "X-CSRF-Token";
@@ -57,6 +58,8 @@ async function parseErrorResponse(res: Response): Promise<ApiRequestError> {
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const url = buildUrl(path);
+  const method = (options.method ?? "GET").toUpperCase();
+  const startedAt = now();
 
   const headers: Record<string, string> = {
     Accept: "application/json",
@@ -82,6 +85,14 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       credentials: "include",
     });
   } catch {
+    recordApiTiming({
+      method,
+      path,
+      status: 0,
+      ok: false,
+      startedAt,
+      endedAt: now(),
+    });
     throw new ApiRequestError(0, {
       code: "network_error",
       message: "Network request failed",
@@ -90,15 +101,26 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   updateCsrfToken(res);
 
-  if (res.status === 204) {
-    return undefined as T;
-  }
+  try {
+    if (res.status === 204) {
+      return undefined as T;
+    }
 
-  if (!res.ok) {
-    throw await parseErrorResponse(res);
-  }
+    if (!res.ok) {
+      throw await parseErrorResponse(res);
+    }
 
-  return (await res.json()) as T;
+    return (await res.json()) as T;
+  } finally {
+    recordApiTiming({
+      method,
+      path,
+      status: res.status,
+      ok: res.ok,
+      startedAt,
+      endedAt: now(),
+    });
+  }
 }
 
 function updateCsrfToken(res: Response): void {

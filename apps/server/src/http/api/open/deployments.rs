@@ -13,6 +13,7 @@ use axum::{
 use schema::open::{ConfigBundleItem, ConfigBundleResponse, ResolveDeployment};
 use serde::Deserialize;
 use sqlx::Row;
+use std::time::Instant;
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct ConfigBundleQuery {
@@ -67,52 +68,68 @@ pub(crate) async fn get_config_bundle(
     Query(query): Query<ConfigBundleQuery>,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
-    let query = query.validate()?;
+    let started_at = Instant::now();
+    let result = async {
+        let query = query.validate()?;
 
-    if deployment_key.trim().is_empty() {
-        return Err(ApiError::bad_request(
-            "invalid_request",
-            "missing required path parameter: deployment_key",
-        ));
-    }
+        if deployment_key.trim().is_empty() {
+            return Err(ApiError::bad_request(
+                "invalid_request",
+                "missing required path parameter: deployment_key",
+            ));
+        }
 
-    let Some(pool) = state.db_pool() else {
-        return Err(ApiError::service_unavailable(
-            "database_unavailable",
-            "Database bootstrap is disabled",
-        ));
-    };
-    let auth = authenticate_open_request(pool, &headers).await?;
+        let Some(pool) = state.db_pool() else {
+            return Err(ApiError::service_unavailable(
+                "database_unavailable",
+                "Database bootstrap is disabled",
+            ));
+        };
+        let auth = authenticate_open_request(pool, &headers).await?;
 
-    let deployment = find_deployment(pool, &query.project, &query.environment, &deployment_key)
-        .await?
-        .ok_or_else(|| {
-            ApiError::not_found_with("deployment_not_found", "deployment instance not found")
-        })?;
-    ensure_deployment_access(auth, deployment.deployment_id)?;
+        let deployment = find_deployment(pool, &query.project, &query.environment, &deployment_key)
+            .await?
+            .ok_or_else(|| {
+                ApiError::not_found_with("deployment_not_found", "deployment instance not found")
+            })?;
+        ensure_deployment_access(auth, deployment.deployment_id)?;
 
-    let configs = find_current_bundle(pool, deployment.deployment_id)
-        .await?
-        .into_iter()
-        .map(|row| ConfigBundleItem {
-            config: row.get("config"),
-            revision: row.get("revision"),
-            content_hash: row.get("content_hash"),
-            format: row.get("format"),
-            content: row.get("content"),
+        let configs: Vec<ConfigBundleItem> = find_current_bundle(pool, deployment.deployment_id)
+            .await?
+            .into_iter()
+            .map(|row| ConfigBundleItem {
+                config: row.get("config"),
+                revision: row.get("revision"),
+                content_hash: row.get("content_hash"),
+                format: row.get("format"),
+                content: row.get("content"),
+            })
+            .collect();
+        state.metrics().record_business_observation(
+            "open_config_bundle",
+            "config_count",
+            configs.len() as f64,
+        );
+
+        Ok(Json(ConfigBundleResponse {
+            project: query.project,
+            environment: query.environment,
+            deployment: ResolveDeployment {
+                key: deployment_key,
+                name: deployment.deployment_name,
+            },
+            configs,
         })
-        .collect();
+        .into_response())
+    }
+    .await;
 
-    Ok(Json(ConfigBundleResponse {
-        project: query.project,
-        environment: query.environment,
-        deployment: ResolveDeployment {
-            key: deployment_key,
-            name: deployment.deployment_name,
-        },
-        configs,
-    })
-    .into_response())
+    state.metrics().record_business_operation(
+        "open_config_bundle",
+        if result.is_ok() { "ok" } else { "error" },
+        started_at.elapsed(),
+    );
+    result
 }
 
 impl ConfigBundleQuery {

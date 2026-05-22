@@ -184,13 +184,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, watch } from "vue";
+import { computed, defineAsyncComponent, onMounted, watch } from "vue";
 import { Close } from "@element-plus/icons-vue";
 import { useRoute, useRouter } from "vue-router";
 import { useProjectContext } from "@/modules/projects/composables/useProjectContext";
 import ProjectTabs from "@/modules/projects/components/ProjectTabs.vue";
 import ConfigFileSwitcher from "@/modules/config-workspace/components/ConfigFileSwitcher.vue";
-import ConfigCodeEditor from "@/modules/config-workspace/components/ConfigCodeEditor.vue";
 import ConfigWorkspaceLayout from "@/modules/config-workspace/components/ConfigWorkspaceLayout.vue";
 import DraftCloneSourceDialog from "@/modules/drafts/components/DraftCloneSourceDialog.vue";
 import DraftSavedVersionsPanel from "@/modules/drafts/components/DraftSavedVersionsPanel.vue";
@@ -215,6 +214,9 @@ import { useI18nText } from "@/shared/i18n";
 const route = useRoute();
 const router = useRouter();
 const { t } = useI18nText();
+const ConfigCodeEditor = defineAsyncComponent(
+  () => import("@/modules/config-workspace/components/ConfigCodeEditor.vue"),
+);
 
 const props = withDefaults(
   defineProps<{

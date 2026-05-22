@@ -8,12 +8,13 @@ use crate::{
 };
 use axum::{
     Router,
-    extract::{Request, State},
+    extract::{MatchedPath, Request, State},
     http::{HeaderName, HeaderValue, Method, header},
     middleware::{self, Next},
     response::Response,
     routing::get_service,
 };
+use std::time::Instant;
 use tower_http::{
     cors::{AllowOrigin, CorsLayer},
     services::{ServeDir, ServeFile},
@@ -25,9 +26,14 @@ pub fn router(state: AppState) -> Router {
     let api_router = apply_cors(api::router(state.clone()), state.config());
 
     let router = Router::new()
+        .merge(crate::metrics::router())
         .merge(crate::openapi::router())
         .nest("/api", api_router)
         .with_state(state.clone())
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            record_http_metrics,
+        ))
         .layer(TraceLayer::new_for_http())
         .layer(middleware::from_fn_with_state(state, add_security_headers));
 
@@ -42,6 +48,28 @@ pub fn router(state: AppState) -> Router {
     } else {
         router.fallback(|| async { ApiError::not_found() })
     }
+}
+
+async fn record_http_metrics(
+    State(state): State<AppState>,
+    request: Request,
+    next: Next,
+) -> Response {
+    let method = request.method().as_str().to_owned();
+    let route = request
+        .extensions()
+        .get::<MatchedPath>()
+        .map(|matched_path| matched_path.as_str().to_owned())
+        .unwrap_or_else(|| route_label(request.uri().path()));
+    let started_at = Instant::now();
+
+    let response = next.run(request).await;
+
+    state
+        .metrics()
+        .record_http_request(&method, &route, response.status(), started_at.elapsed());
+
+    response
 }
 
 async fn add_security_headers(
@@ -102,4 +130,40 @@ fn apply_cors(router: Router<AppState>, config: &AppConfig) -> Router<AppState> 
             ])
             .expose_headers([header::ETAG, HeaderName::from_static(CSRF_HEADER_NAME)]),
     )
+}
+
+fn route_label(path: &str) -> String {
+    let normalized = path
+        .split('/')
+        .map(|segment| {
+            if segment.is_empty() {
+                ""
+            } else if segment.chars().all(|ch| ch.is_ascii_digit()) {
+                "{id}"
+            } else {
+                segment
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("/");
+
+    if normalized.is_empty() {
+        "/".to_owned()
+    } else {
+        normalized
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::route_label;
+
+    #[test]
+    fn route_label_normalizes_numeric_segments() {
+        assert_eq!(
+            route_label("/api/projects/42/deployments/7/preview"),
+            "/api/projects/{id}/deployments/{id}/preview"
+        );
+        assert_eq!(route_label("/metrics"), "/metrics");
+    }
 }

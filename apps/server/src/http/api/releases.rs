@@ -17,6 +17,7 @@ use schema::release::{
 };
 use serde::Deserialize;
 use sqlx::{Row, types::Json as SqlxJson};
+use std::time::Instant;
 use tracing::error;
 
 #[derive(Debug, Deserialize)]
@@ -162,175 +163,187 @@ pub(crate) async fn publish_release(
     headers: HeaderMap,
     payload: Result<Json<PublishReleaseRequest>, JsonRejection>,
 ) -> Result<(StatusCode, Json<ReleaseSummary>), ApiError> {
-    let Json(payload) =
-        payload.map_err(|_| ApiError::bad_request("invalid_request", "invalid request body"))?;
-    let payload = payload.validate()?;
+    let started_at = Instant::now();
+    let result = async {
+        let Json(payload) =
+            payload.map_err(|_| ApiError::bad_request("invalid_request", "invalid request body"))?;
+        let payload = payload.validate()?;
 
-    let Some(pool) = state.db_pool() else {
-        return Err(ApiError::service_unavailable(
-            "database_unavailable",
-            "Database bootstrap is disabled",
-        ));
-    };
+        let Some(pool) = state.db_pool() else {
+            return Err(ApiError::service_unavailable(
+                "database_unavailable",
+                "Database bootstrap is disabled",
+            ));
+        };
 
-    let auth = authenticate_user(pool, &headers).await?;
-    require_project_role(
-        pool,
-        auth.user_id,
-        payload.project_id,
-        ProjectRole::Editor,
-        "project_not_found",
-        "project not found",
-    )
-    .await?;
-
-    let context = load_publish_context(
-        pool,
-        payload.project_id,
-        payload.deployment_instance_id,
-        payload.config_file_id,
-    )
-    .await?;
-    let draft =
-        load_draft_for_publish(pool, payload.deployment_instance_id, payload.config_file_id)
-            .await?;
-    if context.is_template {
-        return Err(ApiError::conflict(
-            "deployment_instance_template_publish_forbidden",
-            "template deployment instances cannot publish releases",
-        ));
-    }
-    if context.deleted_at.is_some() {
-        return Err(ApiError::conflict(
-            "deployment_instance_deleted",
-            "deployment instance has been deleted",
-        ));
-    }
-    if context.is_archived {
-        return Err(ApiError::conflict(
-            "deployment_instance_archived",
-            "deployment instance is archived",
-        ));
-    }
-    ensure_required_configs_present(pool, payload.project_id, payload.deployment_instance_id)
-        .await?;
-    if draft.format != context.format {
-        return Err(ApiError::unprocessable_entity(
-            "release_publish_failed",
-            "draft format no longer matches config file",
-        ));
-    }
-    validate_content(&context.format, &draft.content)?;
-    let previous_release =
-        find_latest_release(pool, payload.deployment_instance_id, payload.config_file_id).await?;
-    let diff_summary = build_diff_summary(
-        previous_release
-            .as_ref()
-            .map(|release| release.content.as_str()),
-        &draft.content,
-    );
-    let revision = next_revision(pool).await?;
-
-    let mut tx = pool.begin().await.map_err(|error| {
-        error!(
-            ?error,
-            project_id = payload.project_id,
-            deployment_instance_id = payload.deployment_instance_id,
-            config_file_id = payload.config_file_id,
-            "failed to start release publish transaction"
-        );
-        ApiError::internal()
-    })?;
-    let row = sqlx::query(
-        r#"
-        INSERT INTO releases (
-            project_id,
-            config_file_id,
-            deployment_instance_id,
-            revision,
-            content,
-            content_hash,
-            format,
-            change_summary,
-            diff_summary,
-            apply_mode,
-            published_by
+        let auth = authenticate_user(pool, &headers).await?;
+        require_project_role(
+            pool,
+            auth.user_id,
+            payload.project_id,
+            ProjectRole::Editor,
+            "project_not_found",
+            "project not found",
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'soft', $10)
-        RETURNING
-            id,
-            project_id,
-            deployment_instance_id,
-            config_file_id,
-            revision,
-            btrim(content_hash) AS content_hash,
-            format,
-            change_summary,
-            apply_mode,
-            published_by,
-            to_char(published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS published_at
-        "#,
-    )
-    .bind(payload.project_id)
-    .bind(payload.config_file_id)
-    .bind(payload.deployment_instance_id)
-    .bind(revision)
-    .bind(draft.content)
-    .bind(draft.content_hash)
-    .bind(draft.format)
-    .bind(payload.change_summary)
-    .bind(SqlxJson(diff_summary))
-    .bind(auth.user_id)
-    .fetch_one(&mut *tx)
-    .await
-    .map_err(|error| {
-        error!(
-            ?error,
-            project_id = payload.project_id,
-            deployment_instance_id = payload.deployment_instance_id,
-            config_file_id = payload.config_file_id,
-            "failed to insert published release"
-        );
-        ApiError::internal()
-    })?;
+        .await?;
 
-    let summary = map_release_row(&row);
-    write_audit_log(
-        &mut *tx,
-        AuditLogEntry {
-            project_id: Some(summary.project_id),
-            user_id: Some(auth.user_id),
-            action: "release.published",
-            resource_type: "release",
-            resource_id: summary.id.to_string(),
-            detail: Some(serde_json::json!({
-                "deployment_instance_id": summary.deployment_instance_id,
-                "config_file_id": summary.config_file_id,
-                "revision": summary.revision,
-            })),
-        },
-    )
-    .await
-    .map_err(|error| {
-        error!(
-            ?error,
-            release_id = summary.id,
-            project_id = summary.project_id,
-            "failed to write release publish audit log"
+        let context = load_publish_context(
+            pool,
+            payload.project_id,
+            payload.deployment_instance_id,
+            payload.config_file_id,
+        )
+        .await?;
+        let draft =
+            load_draft_for_publish(pool, payload.deployment_instance_id, payload.config_file_id)
+                .await?;
+        if context.is_template {
+            return Err(ApiError::conflict(
+                "deployment_instance_template_publish_forbidden",
+                "template deployment instances cannot publish releases",
+            ));
+        }
+        if context.deleted_at.is_some() {
+            return Err(ApiError::conflict(
+                "deployment_instance_deleted",
+                "deployment instance has been deleted",
+            ));
+        }
+        if context.is_archived {
+            return Err(ApiError::conflict(
+                "deployment_instance_archived",
+                "deployment instance is archived",
+            ));
+        }
+        ensure_required_configs_present(pool, payload.project_id, payload.deployment_instance_id)
+            .await?;
+        if draft.format != context.format {
+            return Err(ApiError::unprocessable_entity(
+                "release_publish_failed",
+                "draft format no longer matches config file",
+            ));
+        }
+        validate_content(&context.format, &draft.content)?;
+        let previous_release =
+            find_latest_release(pool, payload.deployment_instance_id, payload.config_file_id)
+                .await?;
+        let diff_summary = build_diff_summary(
+            previous_release
+                .as_ref()
+                .map(|release| release.content.as_str()),
+            &draft.content,
         );
-        error
-    })?;
-    tx.commit().await.map_err(|error| {
-        error!(
-            ?error,
-            release_id = summary.id,
-            project_id = summary.project_id,
-            "failed to commit release publish transaction"
-        );
-        ApiError::internal()
-    })?;
+        let revision = next_revision(pool).await?;
 
-    Ok((StatusCode::CREATED, Json(summary)))
+        let mut tx = pool.begin().await.map_err(|error| {
+            error!(
+                ?error,
+                project_id = payload.project_id,
+                deployment_instance_id = payload.deployment_instance_id,
+                config_file_id = payload.config_file_id,
+                "failed to start release publish transaction"
+            );
+            ApiError::internal()
+        })?;
+        let row = sqlx::query(
+            r#"
+            INSERT INTO releases (
+                project_id,
+                config_file_id,
+                deployment_instance_id,
+                revision,
+                content,
+                content_hash,
+                format,
+                change_summary,
+                diff_summary,
+                apply_mode,
+                published_by
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'soft', $10)
+            RETURNING
+                id,
+                project_id,
+                deployment_instance_id,
+                config_file_id,
+                revision,
+                btrim(content_hash) AS content_hash,
+                format,
+                change_summary,
+                apply_mode,
+                published_by,
+                to_char(published_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS published_at
+            "#,
+        )
+        .bind(payload.project_id)
+        .bind(payload.config_file_id)
+        .bind(payload.deployment_instance_id)
+        .bind(revision)
+        .bind(draft.content)
+        .bind(draft.content_hash)
+        .bind(draft.format)
+        .bind(payload.change_summary)
+        .bind(SqlxJson(diff_summary))
+        .bind(auth.user_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|error| {
+            error!(
+                ?error,
+                project_id = payload.project_id,
+                deployment_instance_id = payload.deployment_instance_id,
+                config_file_id = payload.config_file_id,
+                "failed to insert published release"
+            );
+            ApiError::internal()
+        })?;
+
+        let summary = map_release_row(&row);
+        write_audit_log(
+            &mut *tx,
+            AuditLogEntry {
+                project_id: Some(summary.project_id),
+                user_id: Some(auth.user_id),
+                action: "release.published",
+                resource_type: "release",
+                resource_id: summary.id.to_string(),
+                detail: Some(serde_json::json!({
+                    "deployment_instance_id": summary.deployment_instance_id,
+                    "config_file_id": summary.config_file_id,
+                    "revision": summary.revision,
+                })),
+            },
+        )
+        .await
+        .map_err(|error| {
+            error!(
+                ?error,
+                release_id = summary.id,
+                project_id = summary.project_id,
+                "failed to write release publish audit log"
+            );
+            error
+        })?;
+        tx.commit().await.map_err(|error| {
+            error!(
+                ?error,
+                release_id = summary.id,
+                project_id = summary.project_id,
+                "failed to commit release publish transaction"
+            );
+            ApiError::internal()
+        })?;
+
+        Ok((StatusCode::CREATED, Json(summary)))
+    }
+    .await;
+
+    state.metrics().record_business_operation(
+        "release_publish",
+        if result.is_ok() { "ok" } else { "error" },
+        started_at.elapsed(),
+    );
+    result
 }
 
 #[utoipa::path(

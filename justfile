@@ -242,6 +242,18 @@ perf-smoke:
 perf-ci:
   @PERF_ENFORCE=1 bash scripts/perf-smoke.sh
 
+perf-web-smoke:
+  @bash scripts/web-perf-smoke.sh
+
+perf-bundle-budget:
+  @bash scripts/web-bundle-budget.sh
+
+perf-db-slow-queries:
+  @bash scripts/perf-db-slow-queries.sh
+
+perf-summary:
+  @bash scripts/perf-summary.sh
+
 release-package:
   @bash scripts/release-package.sh
 

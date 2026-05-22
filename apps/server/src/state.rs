@@ -1,5 +1,6 @@
 use crate::{
     config::AppConfig,
+    metrics::AppMetrics,
     security::{LoginThrottle, OpenApiRateLimiter},
 };
 use infra::AppIdentity;
@@ -13,6 +14,7 @@ pub struct AppState {
     db_pool: Option<PgPool>,
     login_throttle: Arc<LoginThrottle>,
     open_api_rate_limiter: Arc<OpenApiRateLimiter>,
+    metrics: Arc<AppMetrics>,
 }
 
 impl AppState {
@@ -23,6 +25,7 @@ impl AppState {
             db_pool,
             login_throttle: Arc::new(LoginThrottle::new()),
             open_api_rate_limiter: Arc::new(OpenApiRateLimiter::new()),
+            metrics: Arc::new(AppMetrics::new()),
         }
     }
 
@@ -44,6 +47,10 @@ impl AppState {
 
     pub fn open_api_rate_limiter(&self) -> &OpenApiRateLimiter {
         self.open_api_rate_limiter.as_ref()
+    }
+
+    pub fn metrics(&self) -> &AppMetrics {
+        self.metrics.as_ref()
     }
 }
 
@@ -120,6 +127,22 @@ mod tests {
                 .open_api_rate_limiter()
                 .ensure_request_allowed("ip:unknown")
                 .is_ok()
+        );
+    }
+
+    #[test]
+    fn exposes_metrics_registry() {
+        let state = AppState::new(
+            AppIdentity::new("mini-conf-server", "0.1.0"),
+            AppConfig::default(),
+            None,
+        );
+
+        assert!(
+            state
+                .metrics()
+                .render_prometheus(None)
+                .contains("mini_conf_process_uptime_seconds")
         );
     }
 }

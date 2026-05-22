@@ -5,6 +5,7 @@ pub mod bootstrap;
 pub mod config;
 pub mod error;
 mod http;
+pub mod metrics;
 pub mod openapi;
 pub mod security;
 pub mod state;

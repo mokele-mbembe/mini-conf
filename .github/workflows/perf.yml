@@ -8,6 +8,29 @@ on:
 jobs:
   perf-smoke:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dataset: [S, M]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+      TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+      PERF_SMOKE_DATASET: ${{ matrix.dataset }}
+      PERF_SMOKE_RESULT_FILE: target/perf/smoke-${{ matrix.dataset }}.json
+      PERF_DB_SLOW_QUERIES_RESULT_FILE: target/perf/db-slow-queries-${{ matrix.dataset }}.json
+      PERF_SUMMARY_RESULT_FILE: target/perf/summary-${{ matrix.dataset }}.md
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -15,12 +38,162 @@ jobs:
       - name: Install just
         uses: extractions/setup-just@v4
 
-      - name: Run perf scaffold
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run perf smoke
         run: just perf-ci
 
+      - name: Capture DB slow query report
+        if: ${{ always() }}
+        run: just perf-db-slow-queries
+
+      - name: Build perf summary
+        if: ${{ always() }}
+        run: just perf-summary
+
+      - name: Append perf summary
+        if: ${{ always() && hashFiles('target/perf/summary-*.md') != '' }}
+        run: cat "target/perf/summary-${{ matrix.dataset }}.md" >> "${GITHUB_STEP_SUMMARY}"
+
       - name: Upload perf report
-        if: ${{ always() && hashFiles('target/perf/smoke.json') != '' }}
+        if: ${{ always() && hashFiles('target/perf/smoke-*.json') != '' }}
         uses: actions/upload-artifact@v6
         with:
-          name: perf-smoke-report
-          path: target/perf/smoke.json
+          name: perf-smoke-${{ matrix.dataset }}-report
+          path: target/perf/smoke-${{ matrix.dataset }}.json
+
+      - name: Upload DB slow query report
+        if: ${{ always() && hashFiles('target/perf/db-slow-queries-*.json') != '' }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: db-slow-query-${{ matrix.dataset }}-report
+          path: target/perf/db-slow-queries-${{ matrix.dataset }}.json
+
+      - name: Upload perf summary
+        if: ${{ always() && hashFiles('target/perf/summary-*.md') != '' }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: perf-summary-${{ matrix.dataset }}
+          path: target/perf/summary-${{ matrix.dataset }}.md
+
+  web-perf-smoke:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+      TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+      PERF_WEB_MAX_ROUTE_MS: 250
+      PERF_WEB_MAX_API_MS: 150
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install just
+        uses: extractions/setup-just@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm --dir apps/web exec playwright install --with-deps chromium
+
+      - name: Run web perf smoke
+        run: just perf-web-smoke
+
+      - name: Build perf summary
+        if: ${{ always() }}
+        run: just perf-summary
+
+      - name: Append perf summary
+        if: ${{ always() && hashFiles('target/perf/summary.md') != '' }}
+        run: cat target/perf/summary.md >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload web perf report
+        if: ${{ always() && hashFiles('target/perf/web-route.json') != '' }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: web-perf-report
+          path: target/perf/web-route.json
+
+      - name: Upload web perf summary
+        if: ${{ always() && hashFiles('target/perf/summary.md') != '' }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: web-perf-summary
+          path: target/perf/summary.md
+
+  bundle-budget:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install just
+        uses: extractions/setup-just@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run bundle budget
+        run: just perf-bundle-budget
+
+      - name: Build perf summary
+        if: ${{ always() }}
+        run: just perf-summary
+
+      - name: Append perf summary
+        if: ${{ always() && hashFiles('target/perf/summary.md') != '' }}
+        run: cat target/perf/summary.md >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload bundle budget report
+        if: ${{ always() && hashFiles('target/perf/bundle-budget.json') != '' }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: bundle-budget-report
+          path: target/perf/bundle-budget.json
+
+      - name: Upload bundle budget summary
+        if: ${{ always() && hashFiles('target/perf/summary.md') != '' }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: bundle-budget-summary
+          path: target/perf/summary.md

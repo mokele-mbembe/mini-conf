@@ -69,6 +69,7 @@ if [[ ! "${schema}" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
 fi
 
 scoped_database_url="$(append_search_path "${TEST_DATABASE_URL}" "${schema}")"
+playwright_args=("$@")
 
 work_dir="$(mktemp -d)"
 server_log="${work_dir}/server.log"
@@ -168,6 +169,17 @@ if ! curl --silent --show-error --fail "${base_url}/" >/dev/null 2>&1; then
   exit 1
 fi
 
+if [[ "${#playwright_args[@]}" -eq 0 ]]; then
+  mapfile -t playwright_args < <(
+    find apps/web/e2e \
+      -maxdepth 1 \
+      -type f \
+      -name '*.spec.ts' \
+      ! -name 'performance.spec.ts' \
+      -printf 'e2e/%f\n' | sort
+  )
+fi
+
 E2E_MANAGED_SERVER=1 \
   E2E_ADMIN_USERNAME="${admin_username}" \
   E2E_ADMIN_PASSWORD="${admin_password}" \
@@ -177,4 +189,4 @@ E2E_MANAGED_SERVER=1 \
   E2E_ADMIN_USERNAME="${admin_username}" \
   E2E_ADMIN_PASSWORD="${admin_password}" \
   PLAYWRIGHT_BASE_URL="${base_url}" \
-  env -u NO_COLOR pnpm --dir apps/web exec playwright test --config playwright.config.ts "$@"
+  env -u NO_COLOR pnpm --dir apps/web exec playwright test --config playwright.config.ts "${playwright_args[@]}"

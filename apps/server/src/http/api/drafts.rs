@@ -15,6 +15,7 @@ use schema::draft::{DraftCloneResponse, DraftResponse};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use sqlx::Row;
+use std::time::Instant;
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct UpdateDraftRequest {
@@ -274,220 +275,231 @@ pub(crate) async fn put_draft(
     headers: HeaderMap,
     payload: Result<Json<UpdateDraftRequest>, JsonRejection>,
 ) -> Result<Json<DraftResponse>, ApiError> {
-    let Json(payload) =
-        payload.map_err(|_| ApiError::bad_request("invalid_request", "invalid request body"))?;
-    let payload = payload.validate()?;
+    let started_at = Instant::now();
+    let result = async {
+        let Json(payload) = payload
+            .map_err(|_| ApiError::bad_request("invalid_request", "invalid request body"))?;
+        let payload = payload.validate()?;
 
-    let Some(pool) = state.db_pool() else {
-        return Err(ApiError::service_unavailable(
-            "database_unavailable",
-            "Database bootstrap is disabled",
-        ));
-    };
-
-    let auth = authenticate_user(pool, &headers).await?;
-
-    let context = load_draft_context(pool, deployment_id, config_file_id).await?;
-    require_project_role(
-        pool,
-        auth.user_id,
-        context.project_id,
-        ProjectRole::Editor,
-        "deployment_instance_not_found",
-        "deployment instance not found",
-    )
-    .await?;
-    ensure_deployment_writable_for_draft(&context)?;
-    validate_draft_payload(&payload, &context)?;
-
-    let mut tx = pool
-        .begin()
-        .await
-        .map_err(|error| ApiError::internal_with(error, "failed to save draft"))?;
-    let row = if let Some(existing) = sqlx::query(
-        r#"
-        SELECT version
-        FROM drafts
-        WHERE deployment_instance_id = $1
-          AND config_file_id = $2
-        LIMIT 1
-        "#,
-    )
-    .bind(deployment_id)
-    .bind(config_file_id)
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(|error| ApiError::internal_with(error, "failed to save draft"))?
-    {
-        let current_version: i64 = existing.get("version");
-        if payload.base_version != Some(current_version) {
-            return Err(ApiError::conflict(
-                "draft_version_conflict",
-                "draft version conflict",
+        let Some(pool) = state.db_pool() else {
+            return Err(ApiError::service_unavailable(
+                "database_unavailable",
+                "Database bootstrap is disabled",
             ));
-        }
+        };
 
-        sqlx::query(
+        let auth = authenticate_user(pool, &headers).await?;
+
+        let context = load_draft_context(pool, deployment_id, config_file_id).await?;
+        require_project_role(
+            pool,
+            auth.user_id,
+            context.project_id,
+            ProjectRole::Editor,
+            "deployment_instance_not_found",
+            "deployment instance not found",
+        )
+        .await?;
+        ensure_deployment_writable_for_draft(&context)?;
+        validate_draft_payload(&payload, &context)?;
+
+        let mut tx = pool
+            .begin()
+            .await
+            .map_err(|error| ApiError::internal_with(error, "failed to save draft"))?;
+        let row = if let Some(existing) = sqlx::query(
             r#"
-            UPDATE drafts
-            SET
-                content = $3,
-                content_hash = $4,
-                format = $5,
-                version = version + 1,
-                editor_user_id = $6,
-                updated_at = NOW()
+            SELECT version
+            FROM drafts
             WHERE deployment_instance_id = $1
               AND config_file_id = $2
-            RETURNING
-                deployment_instance_id,
-                config_file_id,
-                format,
-                content,
-                version,
-                to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at
+            LIMIT 1
             "#,
         )
         .bind(deployment_id)
         .bind(config_file_id)
-        .bind(&payload.content)
-        .bind(hash_content(&payload.content))
-        .bind(&payload.format)
-        .bind(auth.user_id)
-        .fetch_one(&mut *tx)
+        .fetch_optional(&mut *tx)
         .await
         .map_err(|error| ApiError::internal_with(error, "failed to save draft"))?
-    } else {
-        if payload.base_version.is_some_and(|version| version != 0) {
-            return Err(ApiError::conflict(
-                "draft_version_conflict",
-                "draft version conflict",
-            ));
-        }
+        {
+            let current_version: i64 = existing.get("version");
+            if payload.base_version != Some(current_version) {
+                return Err(ApiError::conflict(
+                    "draft_version_conflict",
+                    "draft version conflict",
+                ));
+            }
 
-        sqlx::query(
-            r#"
-            INSERT INTO drafts (
-                project_id,
-                config_file_id,
-                deployment_instance_id,
-                content,
-                content_hash,
-                format,
-                version,
-                editor_user_id
+            sqlx::query(
+                r#"
+                UPDATE drafts
+                SET
+                    content = $3,
+                    content_hash = $4,
+                    format = $5,
+                    version = version + 1,
+                    editor_user_id = $6,
+                    updated_at = NOW()
+                WHERE deployment_instance_id = $1
+                  AND config_file_id = $2
+                RETURNING
+                    deployment_instance_id,
+                    config_file_id,
+                    format,
+                    content,
+                    version,
+                    to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at
+                "#,
             )
-            VALUES ($1, $2, $3, $4, $5, $6, 1, $7)
-            RETURNING
-                deployment_instance_id,
-                config_file_id,
-                format,
-                content,
-                version,
-                to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at
-            "#,
-        )
-        .bind(context.project_id)
-        .bind(config_file_id)
-        .bind(deployment_id)
-        .bind(&payload.content)
-        .bind(hash_content(&payload.content))
-        .bind(&payload.format)
-        .bind(auth.user_id)
-        .fetch_one(&mut *tx)
-        .await
-        .map_err(|error| ApiError::internal_with(error, "failed to save draft"))?
-    };
+            .bind(deployment_id)
+            .bind(config_file_id)
+            .bind(&payload.content)
+            .bind(hash_content(&payload.content))
+            .bind(&payload.format)
+            .bind(auth.user_id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|error| ApiError::internal_with(error, "failed to save draft"))?
+        } else {
+            if payload.base_version.is_some_and(|version| version != 0) {
+                return Err(ApiError::conflict(
+                    "draft_version_conflict",
+                    "draft version conflict",
+                ));
+            }
 
-    let summary = map_draft_row(row);
-    write_audit_log(
-        &mut *tx,
-        AuditLogEntry {
-            project_id: Some(context.project_id),
-            user_id: Some(auth.user_id),
-            action: "draft.saved",
-            resource_type: "draft",
-            resource_id: format!("{deployment_id}:{config_file_id}"),
-            detail: Some(serde_json::json!({
-                "deployment_instance_id": deployment_id,
-                "config_file_id": config_file_id,
-                "changed_fields": ["format", "base_version"]
-            })),
-        },
-    )
-    .await?;
-
-    let new_hash = hash_content(&payload.content);
-    let latest_hash: Option<String> = sqlx::query_scalar(
-        r#"
-        SELECT content_hash
-        FROM draft_saved_versions
-        WHERE deployment_instance_id = $1
-          AND config_file_id = $2
-          AND deleted_at IS NULL
-        ORDER BY created_at DESC, id DESC
-        LIMIT 1
-        "#,
-    )
-    .bind(deployment_id)
-    .bind(config_file_id)
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(|error| ApiError::internal_with(error, "failed to save draft"))?;
-
-    if latest_hash.as_deref() != Some(&new_hash) {
-        let sv_id: i64 = sqlx::query_scalar(
-            r#"
-            INSERT INTO draft_saved_versions (
-                project_id,
-                deployment_instance_id,
-                config_file_id,
-                title,
-                content,
-                content_hash,
-                format,
-                source_draft_version,
-                created_by
+            sqlx::query(
+                r#"
+                INSERT INTO drafts (
+                    project_id,
+                    config_file_id,
+                    deployment_instance_id,
+                    content,
+                    content_hash,
+                    format,
+                    version,
+                    editor_user_id
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, 1, $7)
+                RETURNING
+                    deployment_instance_id,
+                    config_file_id,
+                    format,
+                    content,
+                    version,
+                    to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at
+                "#,
             )
-            VALUES ($1, $2, $3, to_char(NOW() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI'), $4, $5, $6, $7, $8)
-            RETURNING id
-            "#,
-        )
-        .bind(context.project_id)
-        .bind(deployment_id)
-        .bind(config_file_id)
-        .bind(&payload.content)
-        .bind(&new_hash)
-        .bind(&payload.format)
-        .bind(summary.version)
-        .bind(auth.user_id)
-        .fetch_one(&mut *tx)
-        .await
-        .map_err(|error| ApiError::internal_with(error, "failed to save draft"))?;
+            .bind(context.project_id)
+            .bind(config_file_id)
+            .bind(deployment_id)
+            .bind(&payload.content)
+            .bind(hash_content(&payload.content))
+            .bind(&payload.format)
+            .bind(auth.user_id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|error| ApiError::internal_with(error, "failed to save draft"))?
+        };
 
+        let summary = map_draft_row(row);
         write_audit_log(
             &mut *tx,
             AuditLogEntry {
                 project_id: Some(context.project_id),
                 user_id: Some(auth.user_id),
-                action: "saved_version.created",
-                resource_type: "saved_version",
-                resource_id: sv_id.to_string(),
+                action: "draft.saved",
+                resource_type: "draft",
+                resource_id: format!("{deployment_id}:{config_file_id}"),
                 detail: Some(serde_json::json!({
                     "deployment_instance_id": deployment_id,
                     "config_file_id": config_file_id,
-                    "source_draft_version": summary.version,
+                    "changed_fields": ["format", "base_version"]
                 })),
             },
         )
         .await?;
-    }
 
-    tx.commit()
+        let new_hash = hash_content(&payload.content);
+        let latest_hash: Option<String> = sqlx::query_scalar(
+            r#"
+            SELECT content_hash
+            FROM draft_saved_versions
+            WHERE deployment_instance_id = $1
+              AND config_file_id = $2
+              AND deleted_at IS NULL
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(deployment_id)
+        .bind(config_file_id)
+        .fetch_optional(&mut *tx)
         .await
         .map_err(|error| ApiError::internal_with(error, "failed to save draft"))?;
 
-    Ok(Json(summary))
+        if latest_hash.as_deref() != Some(&new_hash) {
+            let sv_id: i64 = sqlx::query_scalar(
+                r#"
+                INSERT INTO draft_saved_versions (
+                    project_id,
+                    deployment_instance_id,
+                    config_file_id,
+                    title,
+                    content,
+                    content_hash,
+                    format,
+                    source_draft_version,
+                    created_by
+                )
+                VALUES ($1, $2, $3, to_char(NOW() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI'), $4, $5, $6, $7, $8)
+                RETURNING id
+                "#,
+            )
+            .bind(context.project_id)
+            .bind(deployment_id)
+            .bind(config_file_id)
+            .bind(&payload.content)
+            .bind(&new_hash)
+            .bind(&payload.format)
+            .bind(summary.version)
+            .bind(auth.user_id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|error| ApiError::internal_with(error, "failed to save draft"))?;
+
+            write_audit_log(
+                &mut *tx,
+                AuditLogEntry {
+                    project_id: Some(context.project_id),
+                    user_id: Some(auth.user_id),
+                    action: "saved_version.created",
+                    resource_type: "saved_version",
+                    resource_id: sv_id.to_string(),
+                    detail: Some(serde_json::json!({
+                        "deployment_instance_id": deployment_id,
+                        "config_file_id": config_file_id,
+                        "source_draft_version": summary.version,
+                    })),
+                },
+            )
+            .await?;
+        }
+
+        tx.commit()
+            .await
+            .map_err(|error| ApiError::internal_with(error, "failed to save draft"))?;
+
+        Ok(Json(summary))
+    }
+    .await;
+
+    state.metrics().record_business_operation(
+        "draft_save",
+        if result.is_ok() { "ok" } else { "error" },
+        started_at.elapsed(),
+    );
+    result
 }
 
 #[utoipa::path(
