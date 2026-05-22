@@ -12,6 +12,7 @@
 - 前端生产态 perf smoke 使用 `apps/web/dist` 与 Playwright 读取浏览器内 route/API timing
 - 前端 bundle budget 检查构建体积回归
 - CI 定时 `Perf` workflow 上传后端 S/M 数据集 smoke、前端 smoke、bundle budget、DB 慢查询报告与 Markdown 汇总
+- 基线采集入口聚合多轮样本，并生成阈值建议
 
 ## 2. 后端运行态观测
 
@@ -238,7 +239,72 @@ BUNDLE_BUDGET_BUILD=0 just perf-bundle-budget
 
 说明：生产或专用性能环境应在 PostgreSQL 配置中启用 `shared_preload_libraries=pg_stat_statements`，否则该报告只能记录不可用原因。
 
-## 7. CI
+## 7. 基线采集与阈值校准
+
+入口：
+
+- `just perf-baseline`
+- `just perf-baseline-local`
+
+真实执行脚本：
+
+- `scripts/perf-baseline.sh`
+
+默认行为：
+
+1. 对后端 `S`、`M` 数据集各采集 3 轮 `perf-smoke`
+2. 对前端生产态 route/API 采集 1 轮 `perf-web-smoke`
+3. 采集 1 轮 bundle gzip 体积
+4. 采集 1 轮 DB 慢查询报告
+5. 聚合结果并写入 `target/perf/baseline`
+
+输出：
+
+- `target/perf/baseline/summary.json`
+- `target/perf/baseline/summary.md`
+- `target/perf/baseline/threshold-suggestions.env`
+
+默认阈值建议规则：
+
+- 后端：`max(100ms, 观测 measured p95 max * 2.5)` 后向上取整到 10ms
+- 前端 route：`max(250ms, 观测 max route * 2.5)` 后向上取整到 10ms
+- 前端 API：`max(100ms, 观测 max API * 2.5)` 后向上取整到 10ms
+- Bundle：`观测 gzip 体积 * 1.15` 后向上取整到 10KB
+
+这些建议值不是自动提交到 CI 的强制阈值。推荐流程是：
+
+1. 在同一台机器或同一类 CI runner 上连续采集 3 到 5 次 baseline
+2. 对比 `summary.md` 中的 max 和 mean
+3. 如果波动稳定，再把 `threshold-suggestions.env` 中的值同步到 CI/env
+4. 如果偶发抖动明显，先定位慢查询、首屏加载或 runner 资源波动，再放宽阈值
+
+常用参数：
+
+```bash
+PERF_BASELINE_DATASETS="S M" \
+PERF_BASELINE_REPETITIONS=5 \
+PERF_BASELINE_WEB_REPETITIONS=3 \
+just perf-baseline-local
+```
+
+只采集后端：
+
+```bash
+PERF_BASELINE_RUN_WEB=0 \
+PERF_BASELINE_RUN_BUNDLE=0 \
+PERF_BASELINE_RUN_DB_SLOW_QUERIES=0 \
+just perf-baseline-local
+```
+
+包含 `L` 数据集：
+
+```bash
+PERF_BASELINE_DATASETS="S M L" just perf-baseline-local
+```
+
+`L` 数据集会插入约 100000 条 release，适合夜间或专用性能环境，不建议放入普通 PR CI。
+
+## 8. CI
 
 定时与手动 workflow：
 
@@ -262,6 +328,12 @@ BUNDLE_BUDGET_BUILD=0 just perf-bundle-budget
 
 - `target/perf/bundle-budget.json`
 
+手动触发 `Perf` workflow 时会额外运行 baseline calibration，并上传：
+
+- `target/perf/baseline/summary.json`
+- `target/perf/baseline/summary.md`
+- `target/perf/baseline/threshold-suggestions.env`
+
 每个 perf job 会额外运行：
 
 - `just perf-summary`
@@ -276,7 +348,7 @@ BUNDLE_BUDGET_BUILD=0 just perf-bundle-budget
 
 - `just perf-smoke`
 
-## 8. 下一阶段
+## 9. 下一阶段
 
 Phase 5 建议：
 

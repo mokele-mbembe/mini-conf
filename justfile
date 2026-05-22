@@ -254,6 +254,12 @@ perf-db-slow-queries:
 perf-summary:
   @bash scripts/perf-summary.sh
 
+perf-baseline:
+  @bash scripts/perf-baseline.sh
+
+perf-baseline-local:
+  @if [ -f Cargo.toml ]; then source scripts/local-db-env.sh && just perf-baseline; else echo "Skipping perf baseline: Cargo.toml not found"; fi
+
 release-package:
   @bash scripts/release-package.sh
 
