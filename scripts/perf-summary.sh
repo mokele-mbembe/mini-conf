@@ -3,8 +3,32 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-perf_dir="${PERF_SUMMARY_DIR:-${repo_root}/target/perf}"
-result_file="${PERF_SUMMARY_RESULT_FILE:-${perf_dir}/summary.md}"
+
+resolve_path() {
+  case "$1" in
+    /*) printf '%s\n' "$1" ;;
+    *) printf '%s/%s\n' "${repo_root}" "$1" ;;
+  esac
+}
+
+default_perf_dir="${repo_root}/target/perf"
+configured_perf_dir="${PERF_SUMMARY_DIR:-}"
+configured_result_file="${PERF_SUMMARY_RESULT_FILE:-}"
+
+if [[ -n "${configured_result_file}" ]]; then
+  result_file="$(resolve_path "${configured_result_file}")"
+else
+  perf_dir_for_result="${configured_perf_dir:-${default_perf_dir}}"
+  result_file="$(resolve_path "${perf_dir_for_result}")/summary.md"
+fi
+
+if [[ -n "${configured_perf_dir}" ]]; then
+  perf_dir="$(resolve_path "${configured_perf_dir}")"
+elif [[ -n "${configured_result_file}" ]]; then
+  perf_dir="$(dirname "${result_file}")"
+else
+  perf_dir="${default_perf_dir}"
+fi
 
 if ! command -v python3 >/dev/null 2>&1; then
   echo "python3 is required for performance summary" >&2
@@ -99,17 +123,29 @@ if bundle_report:
         "",
     ])
 
-db_report = load(perf_dir / "db-slow-queries.json")
-if db_report:
+db_files = sorted(perf_dir.glob("db-slow-queries*.json"))
+if db_files:
     lines.extend([
         "## DB Slow Queries",
         "",
-        f"- available: `{str(db_report.get('available', False)).lower()}`",
+        "| file | available | captured queries | reason |",
+        "| --- | ---: | ---: | --- |",
     ])
-    if db_report.get("available"):
-        lines.append(f"- captured queries: `{len(db_report.get('queries', []))}`")
-    else:
-        lines.append(f"- reason: {db_report.get('reason', '-')}")
+    for path in db_files:
+        report = load(path)
+        if not report:
+            continue
+        available = report.get("available", False)
+        captured = len(report.get("queries", [])) if available else "-"
+        reason = "-" if available else report.get("reason", "-")
+        lines.append(
+            "| {file} | {available} | {captured} | {reason} |".format(
+                file=path.name,
+                available=str(available).lower(),
+                captured=captured,
+                reason=reason,
+            )
+        )
     lines.append("")
 
 if len(lines) == 2:
