@@ -2,7 +2,7 @@
 
 ## 1. 当前阶段
 
-`mini-conf` 已进入 Phase 4 性能门禁阶段。
+`mini-conf` 已进入 Phase 5 运行态观测与趋势阶段。
 
 当前目标不是给出最终容量承诺，而是建立可重复的本地、CI 与数据集矩阵入口：
 
@@ -13,6 +13,8 @@
 - 前端 bundle budget 检查构建体积回归
 - CI 定时 `Perf` workflow 上传后端 S/M 数据集 smoke、前端 smoke、bundle budget、DB 慢查询报告与 Markdown 汇总
 - 基线采集入口聚合多轮样本，并生成阈值建议
+- 生产观测提供 Prometheus scrape、alert rules 与 Grafana dashboard 起点
+- 夜间 `L` 数据集趋势采集用于观察大数据量下的后端性能漂移
 
 ## 2. 后端运行态观测
 
@@ -35,7 +37,15 @@ HTTP duration 维度：
 - `route`：优先使用 Axum matched path，避免动态 ID、部署 key 造成高基数指标
 - `status`
 
-现阶段是进程内轻量 histogram，适合确认请求耗时分布与回归趋势。后续生产部署建议接入 Prometheus/Grafana，并补充慢查询、业务热点指标。
+现阶段是进程内轻量 histogram，适合确认请求耗时分布与回归趋势。生产部署可从以下配置起步：
+
+- `deploy/observability/prometheus.yml`
+- `deploy/observability/rules/mini-conf-alerts.yml`
+- `deploy/observability/grafana/dashboards/mini-conf-overview.json`
+
+部署说明见：
+
+- `docs/runbooks/OBSERVABILITY.md`
 
 业务 duration 维度：
 
@@ -123,7 +133,7 @@ just perf-smoke
 - 每个接口的 `min_ms`、`p50_ms`、`p95_ms`、`p99_ms`、`max_ms`
 - `error_count`、`error_rate`
 
-CI 中 `Perf` workflow 会按数据集矩阵运行：
+CI 中 `Perf` workflow 的 weekly gate 会按数据集矩阵运行：
 
 - `S`
 - `M`
@@ -315,13 +325,20 @@ PERF_BASELINE_DATASETS="S M L" just perf-baseline-local
 
 `L` 数据集会插入约 100000 条 release，适合夜间或专用性能环境，不建议放入普通 PR CI。
 
+GitHub `Perf` workflow 已单独加入夜间 `L` 数据集趋势任务：
+
+- 定时：`0 2 * * *`
+- 数据集：`PERF_SMOKE_DATASET=L`
+- 输出：`perf-trend-l` artifact
+- 目的：观察趋势，不作为普通 CI gate
+
 ## 8. CI
 
 定时与手动 workflow：
 
 - `.github/workflows/perf.yml`
 
-该 workflow 启动 PostgreSQL，运行 `just perf-ci`，并上传：
+weekly schedule `0 3 * * 1` 与手动触发会启动 PostgreSQL，运行 `just perf-ci`，并上传：
 
 - `target/perf/smoke-S.json`
 - `target/perf/smoke-M.json`
@@ -345,6 +362,14 @@ PERF_BASELINE_DATASETS="S M L" just perf-baseline-local
 - `target/perf/baseline/summary.md`
 - `target/perf/baseline/threshold-suggestions.env`
 
+nightly schedule `0 2 * * *` 会运行 `L` 数据集趋势采集，并上传：
+
+- `target/perf/trend-l/smoke-L.json`
+- `target/perf/trend-l/db-slow-queries-L.json`
+- `target/perf/trend-l/summary-L.md`
+
+手动触发时可通过 `run_l_trend` 输入额外运行该任务。
+
 每个 perf job 会额外运行：
 
 - `just perf-summary`
@@ -363,10 +388,10 @@ PERF_BASELINE_DATASETS="S M L" just perf-baseline-local
 
 ## 9. 下一阶段
 
-Phase 5 建议：
+Phase 5 后续建议：
 
-1. 将 `/metrics` 接入实际 Prometheus/Grafana，沉淀 dashboard 和告警阈值
-2. 为 `PERF_SMOKE_DATASET=L` 建立夜间趋势对比，而不是只看单次阈值
-3. 将业务热点指标细化到发布、草稿保存、bundle size、权限失败率等维度
+1. 将 `deploy/observability` 接入真实生产 Prometheus/Grafana，并用 7 到 14 天流量校准告警阈值
+2. 定期下载 `perf-trend-l` artifact，对 `measured_ms`、RSS 和慢查询做趋势对比
+3. 将业务热点指标继续细化到权限失败率、发布 diff 规模、草稿内容大小等维度
 4. 对 Element Plus 做更激进的页面级隔离，降低 `vendor-element-plus`
 5. 对 CodeMirror 做编辑器路径预加载策略，平衡首屏和首次打开编辑器体验

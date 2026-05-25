@@ -5,6 +5,7 @@
 当前生产交付主路径：
 
 - [PRODUCTION_BINARY.md](./PRODUCTION_BINARY.md)
+- [OBSERVABILITY.md](./OBSERVABILITY.md)
 
 发布包由仓库内命令生成：
 

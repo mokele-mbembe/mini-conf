@@ -1,0 +1,95 @@
+groups:
+  - name: mini-conf-runtime
+    rules:
+      - alert: MiniConfMetricsTargetDown
+        expr: up{job="mini-conf"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "mini-conf metrics target is down"
+          description: "Prometheus cannot scrape the mini-conf /metrics endpoint for more than 2 minutes."
+
+      - alert: MiniConfDatabaseDisconnected
+        expr: mini_conf_db_pool_connected == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "mini-conf database pool is disconnected"
+          description: "The application reports no connected PostgreSQL pool."
+
+      - alert: MiniConfHighHttpP95
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le, method, route) (
+              rate(mini_conf_http_request_duration_ms_bucket[5m])
+            )
+          ) > 250
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "mini-conf HTTP p95 latency is high"
+          description: "HTTP p95 latency for {{ $labels.method }} {{ $labels.route }} is above 250ms for 10 minutes."
+
+      - alert: MiniConfOpenApiHighP95
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le, route) (
+              rate(mini_conf_http_request_duration_ms_bucket{route=~"/api/open/.*"}[5m])
+            )
+          ) > 100
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "mini-conf Open API p95 latency is high"
+          description: "Open API p95 latency for {{ $labels.route }} is above 100ms for 10 minutes."
+
+      - alert: MiniConfHighHttp5xxRate
+        expr: |
+          (
+            sum(rate(mini_conf_http_request_duration_ms_count{status=~"5.."}[5m]))
+            /
+            clamp_min(sum(rate(mini_conf_http_request_duration_ms_count[5m])), 1)
+          ) > 0.01
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "mini-conf HTTP 5xx rate is high"
+          description: "More than 1% of requests are returning 5xx for 10 minutes."
+
+      - alert: MiniConfBusinessOperationHighP95
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le, operation) (
+              rate(mini_conf_business_operation_duration_ms_bucket{outcome="ok"}[5m])
+            )
+          ) > 250
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "mini-conf business operation p95 latency is high"
+          description: "Business operation {{ $labels.operation }} p95 latency is above 250ms for 10 minutes."
+
+      - alert: MiniConfDbPoolUtilizationHigh
+        expr: |
+          (
+            mini_conf_db_pool_connections{state="total"}
+            - ignoring(state) mini_conf_db_pool_connections{state="idle"}
+          )
+          /
+          clamp_min(mini_conf_db_pool_connections{state="total"}, 1)
+          > 0.8
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "mini-conf PostgreSQL pool utilization is high"
+          description: "The application PostgreSQL pool is more than 80% busy for 10 minutes."
