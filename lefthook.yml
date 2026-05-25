@@ -19,4 +19,4 @@ pre-push:
     test:
       run: bash -lc 'source scripts/load-dev-env.sh; just test'
     perf-smoke:
-      run: bash -lc 'source scripts/load-dev-env.sh; just perf-smoke'
+      run: bash -lc 'source scripts/local-db-env.sh; just perf-smoke'
