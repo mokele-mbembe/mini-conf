@@ -9,7 +9,7 @@ const RESULT_FILE =
   process.env.PERF_WEB_RESULT_FILE ??
   resolve(process.cwd(), "../../target/perf/web-route.json");
 const MAX_ROUTE_MS = Number(process.env.PERF_WEB_MAX_ROUTE_MS ?? "250");
-const MAX_API_MS = Number(process.env.PERF_WEB_MAX_API_MS ?? "150");
+const MAX_API_MS = Number(process.env.PERF_WEB_MAX_API_MS ?? "100");
 
 interface PerfEntry {
   kind: "api" | "route";

@@ -5,9 +5,9 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 dist_dir="${repo_root}/apps/web/dist"
 result_file="${BUNDLE_BUDGET_RESULT_FILE:-${repo_root}/target/perf/bundle-budget.json}"
-max_js_gzip_kb="${BUNDLE_BUDGET_MAX_JS_GZIP_KB:-450}"
-max_css_gzip_kb="${BUNDLE_BUDGET_MAX_CSS_GZIP_KB:-80}"
-max_total_gzip_kb="${BUNDLE_BUDGET_MAX_TOTAL_GZIP_KB:-800}"
+max_js_gzip_kb="${BUNDLE_BUDGET_MAX_JS_GZIP_KB:-280}"
+max_css_gzip_kb="${BUNDLE_BUDGET_MAX_CSS_GZIP_KB:-30}"
+max_total_gzip_kb="${BUNDLE_BUDGET_MAX_TOTAL_GZIP_KB:-690}"
 build_before_check="${BUNDLE_BUDGET_BUILD:-1}"
 
 if ! command -v pnpm >/dev/null 2>&1; then

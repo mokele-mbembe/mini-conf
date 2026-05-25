@@ -128,11 +128,11 @@ CI 中 `Perf` workflow 会按数据集矩阵运行：
 - `S`
 - `M`
 
-CI enforcement 使用 `PERF_ENFORCE=1`，当前默认阈值仍是：
+CI enforcement 使用 `PERF_ENFORCE=1`，当前默认阈值已按 2026-05-25 GitHub Actions baseline 校准为：
 
-- `PERF_SMOKE_MAX_MS=250`
+- `PERF_SMOKE_MAX_MS=100`
 
-这个阈值仍是保护性 smoke 阈值，不是最终性能 SLO。
+这个阈值仍是保护性 smoke gate，不是最终性能 SLO。
 
 ## 4. 前端生产态 Perf Smoke
 
@@ -166,7 +166,7 @@ CI enforcement 使用 `PERF_ENFORCE=1`，当前默认阈值仍是：
 默认阈值：
 
 - `PERF_WEB_MAX_ROUTE_MS=250`
-- `PERF_WEB_MAX_API_MS=150`
+- `PERF_WEB_MAX_API_MS=100`
 
 超过阈值时 Playwright 用例失败，并在 `target/perf/web-route.json` 中写入 `violations`。
 
@@ -196,9 +196,9 @@ window.__MINI_CONF_PERF__?.snapshot();
 
 默认 budget：
 
-- `BUNDLE_BUDGET_MAX_JS_GZIP_KB=450`
-- `BUNDLE_BUDGET_MAX_CSS_GZIP_KB=80`
-- `BUNDLE_BUDGET_MAX_TOTAL_GZIP_KB=800`
+- `BUNDLE_BUDGET_MAX_JS_GZIP_KB=280`
+- `BUNDLE_BUDGET_MAX_CSS_GZIP_KB=30`
+- `BUNDLE_BUDGET_MAX_TOTAL_GZIP_KB=690`
 
 如果已经有最新构建，可跳过 build：
 
@@ -271,11 +271,22 @@ BUNDLE_BUDGET_BUILD=0 just perf-bundle-budget
 - 前端 API：`max(100ms, 观测 max API * 2.5)` 后向上取整到 10ms
 - Bundle：`观测 gzip 体积 * 1.15` 后向上取整到 10KB
 
-这些建议值不是自动提交到 CI 的强制阈值。推荐流程是：
+2026-05-25 的 GitHub Actions baseline calibration run `26377759811` 产出的建议值已同步为当前默认/CI gate：
+
+```bash
+PERF_SMOKE_MAX_MS=100
+PERF_WEB_MAX_ROUTE_MS=250
+PERF_WEB_MAX_API_MS=100
+BUNDLE_BUDGET_MAX_JS_GZIP_KB=280
+BUNDLE_BUDGET_MAX_CSS_GZIP_KB=30
+BUNDLE_BUDGET_MAX_TOTAL_GZIP_KB=690
+```
+
+这些建议值不会由脚本自动提交。后续重新校准推荐流程是：
 
 1. 在同一台机器或同一类 CI runner 上连续采集 3 到 5 次 baseline
 2. 对比 `summary.md` 中的 max 和 mean
-3. 如果波动稳定，再把 `threshold-suggestions.env` 中的值同步到 CI/env
+3. 如果波动稳定，再把 `threshold-suggestions.env` 中的值同步到脚本默认值和 CI/env
 4. 如果偶发抖动明显，先定位慢查询、首屏加载或 runner 资源波动，再放宽阈值
 
 常用参数：
@@ -347,6 +358,8 @@ PERF_BASELINE_DATASETS="S M L" just perf-baseline-local
 普通 CI 仍运行：
 
 - `just perf-smoke`
+
+普通 CI 使用 `PERF_SMOKE_MAX_MS=100` 作为后端 smoke gate。
 
 ## 9. 下一阶段
 

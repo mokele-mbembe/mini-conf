@@ -28,6 +28,7 @@ jobs:
       DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
       TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
       PERF_SMOKE_DATASET: ${{ matrix.dataset }}
+      PERF_SMOKE_MAX_MS: 100
       PERF_SMOKE_RESULT_FILE: target/perf/smoke-${{ matrix.dataset }}.json
       PERF_DB_SLOW_QUERIES_RESULT_FILE: target/perf/db-slow-queries-${{ matrix.dataset }}.json
       PERF_SUMMARY_RESULT_FILE: target/perf/summary-${{ matrix.dataset }}.md
@@ -98,7 +99,7 @@ jobs:
       DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
       TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
       PERF_WEB_MAX_ROUTE_MS: 250
-      PERF_WEB_MAX_API_MS: 150
+      PERF_WEB_MAX_API_MS: 100
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -154,6 +155,10 @@ jobs:
 
   bundle-budget:
     runs-on: ubuntu-latest
+    env:
+      BUNDLE_BUDGET_MAX_JS_GZIP_KB: 280
+      BUNDLE_BUDGET_MAX_CSS_GZIP_KB: 30
+      BUNDLE_BUDGET_MAX_TOTAL_GZIP_KB: 690
     steps:
       - name: Checkout
         uses: actions/checkout@v6

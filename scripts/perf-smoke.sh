@@ -2,7 +2,7 @@
 set -euo pipefail
 
 metric_name="config_resolve_smoke_ms"
-baseline_ms="${PERF_SMOKE_MAX_MS:-250}"
+baseline_ms="${PERF_SMOKE_MAX_MS:-100}"
 result_file="${PERF_SMOKE_RESULT_FILE:-target/perf/smoke.json}"
 mkdir -p "$(dirname "${result_file}")"
 

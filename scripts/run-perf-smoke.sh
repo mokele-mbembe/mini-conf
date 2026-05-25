@@ -366,7 +366,7 @@ run_endpoint "metrics" "GET" "${base_url}/metrics"
 server_rss_kb="$(ps -o rss= -p "${server_pid}")"
 server_rss_kb="${server_rss_kb//[[:space:]]/}"
 
-python3 - "${samples_file}" "${result_file}" "${iterations}" "${warmup_iterations}" "${PERF_SMOKE_MAX_MS:-250}" "${server_rss_kb:-0}" "${dataset}" "${project_count}" "${config_count}" "${deployment_count}" <<'PY'
+python3 - "${samples_file}" "${result_file}" "${iterations}" "${warmup_iterations}" "${PERF_SMOKE_MAX_MS:-100}" "${server_rss_kb:-0}" "${dataset}" "${project_count}" "${config_count}" "${deployment_count}" <<'PY'
 import json
 import math
 import sys
